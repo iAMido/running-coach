@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ProjectCard } from '@/components/ui/project-card';
+import { ProjectCard, Brain, Code2, Database, Mic, TestTube, BarChart3 } from '@/components/ui/project-card';
 import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 
@@ -10,37 +10,43 @@ const featuredProjects = [
     title: 'AI-Powered Code Assistant',
     description: 'Building intelligent development tools that accelerate software creation with context-aware AI suggestions.',
     tags: ['AI/ML', 'Developer Tools'],
-    thumbnail: undefined,
+    icon: Brain,
+    gradient: 'pink' as const,
   },
   {
     title: 'Real-time Data Pipeline',
     description: 'Scalable data infrastructure processing millions of events per second with sub-millisecond latency.',
     tags: ['Backend', 'Infrastructure'],
-    thumbnail: undefined,
+    icon: Database,
+    gradient: 'blue' as const,
   },
   {
     title: 'ML Model Orchestration',
     description: 'End-to-end machine learning pipeline for training, deploying, and monitoring production ML models.',
     tags: ['MLOps', 'Cloud'],
-    thumbnail: undefined,
+    icon: Code2,
+    gradient: 'orange' as const,
   },
   {
     title: 'Voice AI Platform',
     description: 'Natural language processing system enabling conversational AI experiences across multiple channels.',
     tags: ['NLP', 'Voice AI'],
-    thumbnail: undefined,
+    icon: Mic,
+    gradient: 'purple' as const,
   },
   {
     title: 'Automated Testing Suite',
     description: 'Comprehensive testing framework with AI-driven test generation and intelligent coverage analysis.',
     tags: ['Testing', 'Automation'],
-    thumbnail: undefined,
+    icon: TestTube,
+    gradient: 'teal' as const,
   },
   {
     title: 'Developer Analytics',
     description: 'Insights platform tracking developer productivity metrics and codebase health indicators.',
     tags: ['Analytics', 'DevOps'],
-    thumbnail: undefined,
+    icon: BarChart3,
+    gradient: 'brand' as const,
   },
 ];
 
@@ -109,7 +115,8 @@ export function FeaturedWorkSection() {
                 title={project.title}
                 description={project.description}
                 tags={project.tags}
-                thumbnail={project.thumbnail}
+                icon={project.icon}
+                gradient={project.gradient}
               />
             </motion.div>
           ))}
