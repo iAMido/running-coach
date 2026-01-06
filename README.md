@@ -1,8 +1,9 @@
-# Next.js + Bun Boilerplate
+# YUV.AI Portfolio & Next.js Boilerplate
 
 <div align="center">
 
 ![Next.js](https://img.shields.io/badge/Next.js-16.1.1-black?style=for-the-badge&logo=next.js)
+![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react)
 ![Bun](https://img.shields.io/badge/Bun-Runtime-orange?style=for-the-badge&logo=bun)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=for-the-badge&logo=typescript)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-38bdf8?style=for-the-badge&logo=tailwind-css)
@@ -11,13 +12,11 @@
 [![npm version](https://img.shields.io/npm/v/create-yuv-bun-app?style=for-the-badge&logo=npm&label=create-yuv-bun-app)](https://www.npmjs.com/package/create-yuv-bun-app)
 [![npm downloads](https://img.shields.io/npm/dm/create-yuv-bun-app?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/create-yuv-bun-app)
 
-### A production-ready boilerplate to ship your next project 30x faster
+### Ship Your Next Project 30x Faster
 
-**This is a starting point, not a finished product. Clone it, customize it, make it yours.**
+A production-ready, feature-packed Next.js boilerplate with stunning glassmorphism design, built-in blog system with Text-to-Speech, and everything you need to launch your next web app.
 
 **Install in seconds:** `bun create yuv-bun-app my-project`
-
-> 💡 **Looking for Clerk authentication instead?** Check out [`create-yuv-app`](https://www.npmjs.com/package/create-yuv-app) — the same stack with Clerk instead of NextAuth.
 
 [Live Demo](https://nextjs-bun-starter.vercel.app) | [npm Package](https://www.npmjs.com/package/create-yuv-bun-app) | [Report Bug](https://github.com/hoodini/nextjs-bun-starter/issues)
 
@@ -27,7 +26,7 @@
 
 ---
 
-## 📸 Homepage Preview
+## Homepage Preview
 
 <div align="center">
   <img src="./public/homepage-demo.png" alt="Homepage Demo" width="800">
@@ -35,41 +34,83 @@
 
 ---
 
-## What Is This?
+## What Makes This Special?
 
-This is a **boilerplate** — a pre-configured starting point for your Next.js projects. Instead of spending hours setting up authentication, dark mode, UI components, and tooling, you get all of that out of the box.
+This isn't just another boilerplate. It's a **fully-featured portfolio and web app starter** with carefully crafted features that typically take weeks to implement:
 
-**Use it to build:**
-- SaaS applications
-- Landing pages
-- Web applications
-- Admin dashboards
-- Portfolios
-- MVPs and prototypes
-
-**Then customize it for your specific needs.** The whole point is to give you a foundation so you can focus on building your unique product.
+- **Stunning Glassmorphism Design** - Modern, Apple-inspired UI with animated gradient orbs
+- **Built-in Blog System** - With Text-to-Speech, reading progress, and Spotify-style audio player
+- **Comprehensive Mobile Support** - Every pixel is responsive
+- **Dark/Light Mode** - System-aware theming that just works
+- **Authentication Ready** - Google OAuth with protected routes out of the box
 
 ---
 
-## Why This Stack?
+## Features Overview
 
-Every technology in this boilerplate was chosen deliberately. Here's the reasoning:
+### Core Stack
+| Feature | Description |
+|---------|-------------|
+| **Next.js 16** | Latest App Router, React Server Components, streaming & Suspense |
+| **React 19** | Newest React with improved performance and features |
+| **Bun Runtime** | 30x faster package installation, native TypeScript |
+| **TypeScript 5** | Full type safety with strict mode |
 
-| Technology | Why We Use It |
-|------------|---------------|
-| **Bun** | 30x faster package installs, native TypeScript support, built-in bundler. Drop-in npm replacement. |
-| **Next.js 16** | App Router, React Server Components, React 19 — the most production-ready React framework. |
-| **Shadcn/ui** | Beautiful, accessible components you own. Not a dependency — copy-paste code you can modify freely. |
-| **Tailwind CSS 4** | Utility-first styling with OKLch colors. Build any design directly in markup. |
-| **Google Auth** | Pre-configured OAuth with NextAuth.js. Session management and protected routes work out of the box. |
-| **Lucide Icons** | 1000+ consistent, beautiful icons. Tree-shakeable, so you only ship what you use. |
-| **Dark Mode** | System-aware theme switching with next-themes. Works on first load. |
+### UI & Design System
+| Feature | Description |
+|---------|-------------|
+| **Glassmorphism Design** | Frosted glass effects, backdrop blur, and modern aesthetics |
+| **Shadcn/ui Components** | Beautiful, accessible components you own and customize |
+| **Tailwind CSS 4** | Latest utility-first CSS with OKLch colors |
+| **Framer Motion** | Smooth animations and micro-interactions |
+| **Animated Gradient Orbs** | Dynamic background effects with radial gradients |
+| **Lucide Icons** | 1000+ beautiful, tree-shakeable icons |
+| **Geist Font** | Clean, modern typography by Vercel |
+| **Dark/Light Mode** | System-aware theme switching with next-themes |
+
+### Blog System (Apple-Style)
+| Feature | Description |
+|---------|-------------|
+| **Glassmorphism Cards** | Beautiful article previews with hover effects |
+| **Reading Progress Bar** | Fixed progress indicator as you scroll |
+| **Text-to-Speech (TTS)** | Listen to articles with browser speech synthesis |
+| **Spotify-Style Audio Player** | Play/pause, speed control, voice selection |
+| **Voice Selection** | Choose from available system voices |
+| **Playback Speed Control** | 0.5x to 2x speed adjustment |
+| **Category Tags** | Color-coded article categories |
+| **Reading Time Estimates** | Automatic calculation based on content |
+| **Mobile-Optimized Typography** | Responsive prose styling |
+
+### Navigation & UX
+| Feature | Description |
+|---------|-------------|
+| **Floating Glass Navbar** | Centered, pill-shaped navigation with blur effect |
+| **Mobile Hamburger Menu** | Full-featured dropdown for mobile devices |
+| **Scroll-to-Top Button** | Animated button appears on scroll |
+| **Smooth Scroll Navigation** | Anchor links with smooth scrolling |
+| **Copy-to-Clipboard** | One-click command copying with feedback |
+
+### Authentication
+| Feature | Description |
+|---------|-------------|
+| **NextAuth.js** | Industry-standard authentication |
+| **Google OAuth** | Pre-configured and ready to use |
+| **Protected Routes** | Secure profile page implementation |
+| **Session Management** | Server and client session handling |
+| **User Avatar Dropdown** | Profile menu with sign-out option |
+
+### Developer Experience
+| Feature | Description |
+|---------|-------------|
+| **React Hook Form** | Performant form handling |
+| **Zod Validation** | Type-safe schema validation |
+| **ESLint 9** | Latest linting configuration |
+| **Turbopack** | Lightning-fast hot reload |
+| **TypeScript Strict Mode** | Maximum type safety |
 
 ---
 
 ## Bun vs npm: The Performance Difference
-
-Bun is a drop-in replacement for npm. Same commands, same packages, just faster:
 
 | Metric | npm | Bun | Improvement |
 |--------|-----|-----|-------------|
@@ -105,11 +146,9 @@ pnpm create yuv-bun-app my-project  # Also works
 yarn create yuv-bun-app my-project  # Also works
 ```
 
-> **📦 About the Package Names**  
-> - **`create-yuv-bun-app`** → This boilerplate (Next.js + Bun + NextAuth/Google OAuth)
-> - **`create-yuv-app`** → Alternative version (Next.js + Clerk authentication)
-> 
-> Choose the one that fits your authentication needs!
+> **About the Package Names**
+> - **`create-yuv-bun-app`** - This boilerplate (Next.js + Bun + NextAuth/Google OAuth)
+> - **`create-yuv-app`** - Alternative version (Next.js + Clerk authentication)
 
 ### Manual Installation
 
@@ -134,8 +173,8 @@ bun run dev
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project or select existing
-3. Navigate to **APIs & Services → Credentials**
-4. Click **Create Credentials → OAuth client ID**
+3. Navigate to **APIs & Services > Credentials**
+4. Click **Create Credentials > OAuth client ID**
 5. Select **Web application**
 6. Add authorized redirect URI: `http://localhost:3000/api/auth/callback/google`
 7. Copy credentials to `.env.local`:
@@ -149,9 +188,53 @@ NEXTAUTH_URL=http://localhost:3000
 
 ---
 
-## Customization Guide
+## Project Structure
 
-**This boilerplate is meant to be customized.** Here's what you should change:
+```
+my-project/
+├── app/
+│   ├── api/auth/[...nextauth]/   # Auth API routes
+│   ├── blog/                      # Blog system
+│   │   ├── [slug]/page.tsx       # Individual article pages
+│   │   ├── layout.tsx            # Blog layout
+│   │   └── page.tsx              # Blog listing page
+│   ├── profile/                   # Protected profile page
+│   ├── globals.css                # Global styles & theme
+│   ├── layout.tsx                 # Root layout
+│   ├── page.tsx                   # Homepage
+│   └── providers.tsx              # Theme & Session providers
+├── components/
+│   ├── blog/
+│   │   └── article-content.tsx   # Article with TTS player
+│   ├── layout/
+│   │   ├── navbar.tsx            # Floating glass navbar
+│   │   └── footer.tsx            # Site footer
+│   ├── sections/                  # Page sections
+│   │   ├── boilerplate-hero.tsx  # Hero with gradient orbs
+│   │   ├── why-this-stack.tsx    # Features showcase
+│   │   ├── bun-comparison.tsx    # Bun vs npm comparison
+│   │   ├── quick-start.tsx       # Getting started guide
+│   │   ├── customize-section.tsx # Customization guide
+│   │   ├── stack-section.tsx     # Tech stack display
+│   │   └── cta-section.tsx       # Call to action
+│   └── ui/                        # Shadcn components
+│       ├── glass-card.tsx        # Glassmorphism card
+│       ├── scroll-to-top.tsx     # Scroll button
+│       ├── mode-toggle.tsx       # Theme toggle
+│       └── ...                   # Other UI components
+├── lib/
+│   ├── blog.ts                   # Blog posts data
+│   └── utils.ts                  # Utility functions
+├── public/
+│   ├── round-avatar.svg          # Logo/favicon
+│   └── homepage-demo.png         # README preview image
+├── .env.example                   # Environment template
+└── package.json                   # Dependencies
+```
+
+---
+
+## Customization Guide
 
 ### 1. Branding & Colors
 Edit `app/globals.css` to update the color scheme:
@@ -161,10 +244,21 @@ Edit `app/globals.css` to update the color scheme:
 }
 ```
 
-### 2. Page Content
-Replace the landing page sections in `app/page.tsx` with your own content. All sections are modular.
+### 2. Add Blog Posts
+Edit `lib/blog.ts` to add your own articles with TTS support:
+```typescript
+const posts: BlogPost[] = [
+  {
+    slug: 'my-article',
+    title: 'My Article Title',
+    content: 'Plain text for TTS...',
+    contentHtml: '<p>HTML for rendering...</p>',
+    // ...
+  }
+];
+```
 
-### 3. Authentication
+### 3. Authentication Providers
 Add more providers in `app/api/auth/[...nextauth]/route.ts`:
 ```typescript
 import GithubProvider from "next-auth/providers/github"
@@ -178,13 +272,7 @@ providers: [
 ]
 ```
 
-### 4. Database (Optional)
-This boilerplate doesn't include a database by default. We recommend:
-- **Prisma + PostgreSQL** for traditional apps
-- **Supabase** for serverless with built-in auth
-- **Drizzle + Turso** for edge deployments
-
-### 5. Add More UI Components
+### 4. Add More UI Components
 ```bash
 bunx shadcn@latest add dialog
 bunx shadcn@latest add toast
@@ -193,66 +281,13 @@ bunx shadcn@latest add table
 
 ---
 
-## AI-Assisted Customization Prompt
-
-Copy this prompt into Claude, ChatGPT, or your favorite AI to get personalized help:
-
-```
-I'm building a [describe your app: SaaS, landing page, dashboard, etc.].
-
-I'm using the Next.js + Bun boilerplate. Help me customize it:
-
-1. App Name: [Your App Name]
-2. Primary Purpose: [What does your app do?]
-3. Target Users: [Who is this for?]
-4. Key Features Needed:
-   - [Feature 1]
-   - [Feature 2]
-   - [Feature 3]
-5. Color Scheme: [Primary color hex or describe the vibe]
-6. Authentication: [Google only / Add GitHub / Email-password]
-7. Database: [None / Prisma + PostgreSQL / Supabase]
-
-Please help me:
-- Update the landing page content
-- Modify the color scheme in globals.css
-- Add any additional components I need
-- Set up the database schema if needed
-```
-
----
-
-## Project Structure
-
-```
-my-project/
-├── app/
-│   ├── api/auth/[...nextauth]/   # Auth API routes
-│   ├── profile/                   # Protected profile page
-│   ├── globals.css                # Global styles & theme
-│   ├── layout.tsx                 # Root layout
-│   ├── page.tsx                   # Homepage (replace this!)
-│   └── providers.tsx              # Theme & Session providers
-├── components/
-│   ├── layout/                    # Navbar, Footer
-│   ├── sections/                  # Page sections
-│   └── ui/                        # Shadcn components
-├── lib/
-│   └── utils.ts                   # Utility functions
-├── .env.example                   # Environment template
-└── package.json                   # Dependencies
-```
-
----
-
 ## Available Scripts
 
 ```bash
-bun run dev      # Start development server
+bun run dev      # Start development server (Turbopack)
 bun run build    # Create production build
 bun run start    # Start production server
 bun run lint     # Run ESLint
-bun test         # Run tests (Bun's built-in test runner)
 ```
 
 ---
@@ -282,32 +317,70 @@ Works on any platform that supports Node.js:
 
 ---
 
-## Features Included
+## Feature Checklist
 
 ### Core
 - [x] Next.js 16 with App Router
 - [x] React 19
-- [x] TypeScript (strict mode)
+- [x] TypeScript 5 (strict mode)
 - [x] Bun runtime
 
-### UI
+### UI & Design
+- [x] Glassmorphism design system
 - [x] Shadcn/ui components
 - [x] Tailwind CSS 4
+- [x] Framer Motion animations
+- [x] Animated gradient orbs
+- [x] Floating glass navbar
 - [x] Lucide Icons
 - [x] Dark/Light mode
 - [x] Responsive design
 - [x] Geist font
 
-### Auth
+### Blog System
+- [x] Apple-style blog layout
+- [x] Glassmorphism article cards
+- [x] Reading progress bar
+- [x] Text-to-Speech (TTS)
+- [x] Spotify-style audio player
+- [x] Voice selection
+- [x] Playback speed control
+- [x] Category tags
+- [x] Reading time estimates
+
+### Authentication
 - [x] NextAuth.js
 - [x] Google OAuth
 - [x] Protected routes
 - [x] Session management
+- [x] User profile page
+
+### UX Features
+- [x] Scroll-to-top button
+- [x] Copy-to-clipboard
+- [x] Smooth scroll navigation
+- [x] Mobile hamburger menu
 
 ### DX
 - [x] React Hook Form + Zod
-- [x] ESLint configured
+- [x] ESLint 9 configured
 - [x] Fast refresh with Turbopack
+
+---
+
+## Recent Updates
+
+| Version | Feature |
+|---------|---------|
+| Latest | Comprehensive mobile responsiveness overhaul |
+| | Custom favicon and navbar logo |
+| | Spotify-style TTS audio player |
+| | Apple-style blog system with progress bar |
+| | Enhanced gradient glow orbs |
+| | Glassmorphism styling across all cards |
+| | Floating glass navbar |
+| | Scroll-to-top button |
+| | Theme toggle with dark/light mode |
 
 ---
 
@@ -333,15 +406,19 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 <div align="center">
 
-<img src="https://cdn.hailuoai.video/moss/prod/2026-01-01-02/user/multi_chat_file/1767204442417679023-304191379171532808_1767204439.jpg" alt="Yuval Avidani" width="100" style="border-radius: 50%">
+<img src="https://cdn.hailuoai.video/moss/prod/2026-01-01-02/user/multi_chat_file/1767204442417679023-304191379171532808_1767204439.jpg" alt="Yuval Avidani" width="120" style="border-radius: 50%">
 
 **Yuval Avidani**
 
 AWS AI Superstar | GitHub Star | Founder of YUV.AI
 
-[![Website](https://img.shields.io/badge/Website-yuv.ai-blue?style=flat-square)](https://yuv.ai)
-[![GitHub](https://img.shields.io/badge/GitHub-hoodini-black?style=flat-square&logo=github)](https://github.com/hoodini)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-yuval--avidani-0077b5?style=flat-square&logo=linkedin)](https://www.linkedin.com/in/%F0%9F%8E%97%EF%B8%8Fyuval-avidani-87081474/)
+Building next-generation AI solutions and empowering developers to create transformative experiences.
+
+[![Website](https://img.shields.io/badge/Website-yuv.ai-FF4D8E?style=for-the-badge)](https://yuv.ai)
+[![GitHub](https://img.shields.io/badge/GitHub-hoodini-black?style=for-the-badge&logo=github)](https://github.com/hoodini)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0077b5?style=for-the-badge&logo=linkedin)](https://www.linkedin.com/in/%F0%9F%8E%97%EF%B8%8Fyuval-avidani-87081474/)
+[![Twitter](https://img.shields.io/badge/Twitter-Follow-1DA1F2?style=for-the-badge&logo=twitter)](https://twitter.com/yuvai)
+[![Email](https://img.shields.io/badge/Email-info@yuv.ai-FF9100?style=for-the-badge)](mailto:info@yuv.ai)
 
 </div>
 
@@ -349,7 +426,7 @@ AWS AI Superstar | GitHub Star | Founder of YUV.AI
 
 <div align="center">
 
-**Built with care by [Yuval Avidani](https://yuv.ai)**
+**Built with passion by [Yuval Avidani](https://yuv.ai)**
 
 If this helped you ship faster, consider [starring the repo](https://github.com/hoodini/nextjs-bun-starter)
 
