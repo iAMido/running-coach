@@ -159,13 +159,27 @@ The following Shadcn/ui components are already installed and ready to use:
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### ⚡ One-Line Installation (Recommended)
 
-- **Bun** installed on your machine ([Install Bun](https://bun.sh/docs/installation))
-- **Git** for version control
-- **Google Cloud Console** account (for OAuth)
+```bash
+bun create yuv-app my-project
+```
 
-### Installation
+That's it! Everything is automatically set up for you. 🎉
+
+**Alternative package managers:**
+
+```bash
+# With npm
+npm create yuv-app my-project
+
+# With pnpm
+pnpm create yuv-app my-project
+```
+
+### Manual Installation
+
+If you prefer to clone manually:
 
 #### 1. Install Bun
 
@@ -196,7 +210,13 @@ bun install
 
 This takes about **1-2 seconds** (compared to 30-45 seconds with npm)!
 
-#### 4. Configure Environment Variables
+---
+
+### 🔐 Configure Authentication (Required)
+
+Whether you used the one-line installer or cloned manually, you need to set up Google OAuth:
+
+#### 1. Configure Environment Variables
 
 Copy the example environment file:
 
@@ -221,7 +241,7 @@ NEXTAUTH_URL=http://localhost:3000
 openssl rand -base64 32
 ```
 
-#### 5. Set Up Google OAuth
+#### 2. Set Up Google OAuth
 
 1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project or select an existing one
@@ -233,7 +253,7 @@ openssl rand -base64 32
    - **Authorized redirect URIs:** `http://localhost:3000/api/auth/callback/google`
 7. Copy the **Client ID** and **Client Secret** to your `.env.local` file
 
-#### 6. Start Development Server
+#### 3. Start Development Server
 
 ```bash
 bun run dev
