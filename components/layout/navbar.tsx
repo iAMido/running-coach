@@ -94,8 +94,17 @@ export function Navbar() {
   };
 
   return (
-    <header className="fixed top-5 left-1/2 -translate-x-1/2 z-50 w-full max-w-4xl px-4">
-      <nav className="glass shadow-glass rounded-full px-6 py-3 flex items-center justify-between">
+    <header className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-3xl px-4">
+      <nav
+        className="rounded-full px-6 py-3 flex items-center justify-between"
+        style={{
+          background: 'var(--nav-bg, rgba(255, 255, 255, 0.7))',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          border: '1px solid var(--nav-border, rgba(255, 255, 255, 0.3))',
+          boxShadow: 'var(--nav-shadow, 0 8px 32px rgba(0, 0, 0, 0.08))',
+        }}
+      >
         {/* Logo */}
         <button onClick={scrollToTop} className="flex items-center gap-2 shrink-0 cursor-pointer">
           <PhoenixLogo className="w-7 h-7" />
