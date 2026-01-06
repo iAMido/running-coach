@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter, usePathname } from 'next/navigation';
 import { useSession, signIn, signOut } from 'next-auth/react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,10 +16,10 @@ import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
 
 const navLinks = [
-  { href: '#about', label: 'About' },
-  { href: '#projects', label: 'Projects' },
+  { href: '/#about', label: 'About' },
+  { href: '/#projects', label: 'Projects' },
   { href: '/blog', label: 'Blog' },
-  { href: '#contact', label: 'Contact' },
+  { href: '/#contact', label: 'Contact' },
 ];
 
 function PhoenixLogo({ className = "w-8 h-8" }: { className?: string }) {
@@ -85,12 +85,20 @@ function ThemeToggle() {
 
 export function Navbar() {
   const { data: session } = useSession();
+  const router = useRouter();
+  const pathname = usePathname();
 
-  const scrollToTop = () => {
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth',
-    });
+  const handleLogoClick = () => {
+    if (pathname === '/') {
+      // Already on homepage, just scroll to top
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth',
+      });
+    } else {
+      // Navigate to homepage
+      router.push('/');
+    }
   };
 
   return (
@@ -106,7 +114,7 @@ export function Navbar() {
         }}
       >
         {/* Logo */}
-        <button onClick={scrollToTop} className="flex items-center gap-2 shrink-0 cursor-pointer">
+        <button onClick={handleLogoClick} className="flex items-center gap-2 shrink-0 cursor-pointer">
           <PhoenixLogo className="w-7 h-7" />
           <span className="text-lg font-semibold text-foreground tracking-tight">
             YUV.AI
