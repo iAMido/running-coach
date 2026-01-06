@@ -17,6 +17,10 @@
 
 [Demo](https://nextjs-bun-starter.vercel.app) • [npm Package](https://www.npmjs.com/package/create-yuv-app) • [Report Bug](https://github.com/hoodini/nextjs-bun-starter/issues)
 
+### Tech Stack
+
+<img src="https://cdn.hailuoai.video/moss/prod/2026-01-06-18/user/multi_chat_file/1767693880950248428-304191379171532808_1767693879.jpg" alt="Tech Stack - Next.js, Bun, TypeScript, Tailwind CSS, Shadcn/ui" width="100%">
+
 </div>
 
 ---

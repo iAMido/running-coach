@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
         hostname: 'media.licdn.com',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'cdn.hailuoai.video',
+        pathname: '/**',
+      },
     ],
   },
 };
