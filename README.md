@@ -27,6 +27,14 @@
 
 ---
 
+## 📸 Homepage Preview
+
+<div align="center">
+  <img src="./public/homepage-demo.png" alt="Homepage Demo" width="800">
+</div>
+
+---
+
 ## What Is This?
 
 This is a **boilerplate** — a pre-configured starting point for your Next.js projects. Instead of spending hours setting up authentication, dark mode, UI components, and tooling, you get all of that out of the box.
