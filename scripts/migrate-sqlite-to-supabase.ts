@@ -2,14 +2,31 @@
  * Migration script: SQLite to Supabase
  *
  * Usage:
- * 1. Install better-sqlite3: bun add -d better-sqlite3 @types/better-sqlite3
- * 2. Set environment variables in .env.local
- * 3. Run: bunx tsx scripts/migrate-sqlite-to-supabase.ts
+ * 1. Set environment variables in .env.local
+ * 2. Run with Bun: bun run scripts/migrate-sqlite-to-supabase.ts
  */
 
-import Database from 'better-sqlite3';
+import { Database } from 'bun:sqlite';
 import { createClient } from '@supabase/supabase-js';
+import * as fs from 'fs';
 import * as path from 'path';
+
+// Load .env.local manually
+const envPath = path.join(process.cwd(), '.env.local');
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, 'utf-8');
+  for (const line of envContent.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      const eqIndex = trimmed.indexOf('=');
+      if (eqIndex > 0) {
+        const key = trimmed.substring(0, eqIndex);
+        const value = trimmed.substring(eqIndex + 1);
+        process.env[key] = value;
+      }
+    }
+  }
+}
 
 // Configuration
 const SQLITE_PATH = 'C:\\Users\\ido\\RunningCoach\\master_running_data.db';
@@ -29,13 +46,13 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 async function migrate() {
   console.log('Starting migration from SQLite to Supabase...\n');
 
-  // Open SQLite database
+  // Open SQLite database using Bun's built-in SQLite
   const db = new Database(SQLITE_PATH, { readonly: true });
 
   try {
     // 1. Migrate runs
     console.log('Migrating runs...');
-    const runs = db.prepare('SELECT * FROM runs').all() as Record<string, unknown>[];
+    const runs = db.query('SELECT * FROM runs').all() as Record<string, unknown>[];
     console.log(`  Found ${runs.length} runs`);
 
     for (const run of runs) {
@@ -45,12 +62,12 @@ async function migrate() {
         date: run.date as string,
         distance_km: run.distance_km as number,
         duration_min: run.duration_min as number,
-        duration_sec: run.duration_sec as number,
-        avg_hr: run.avg_hr as number,
-        max_hr: run.max_hr as number,
+        duration_sec: Math.round(run.duration_sec as number || 0),
+        avg_hr: Math.round(run.avg_hr as number || 0) || null,
+        max_hr: Math.round(run.max_hr as number || 0) || null,
         avg_pace_min_km: run.avg_pace_min_km as number,
         avg_pace_str: run.avg_pace_str as string,
-        calories: run.calories as number,
+        calories: Math.round(run.calories as number || 0) || null,
         run_type: run.run_type as string,
         workout_name: run.workout_name as string,
         coach_notes: run.coach_notes as string,
@@ -72,7 +89,7 @@ async function migrate() {
 
     // 2. Migrate athlete profile
     console.log('Migrating athlete profile...');
-    const profileRows = db.prepare('SELECT key, value FROM athlete_profile').all() as { key: string; value: string }[];
+    const profileRows = db.query('SELECT key, value FROM athlete_profile').all() as { key: string; value: string }[];
     const profile: Record<string, string> = {};
     for (const row of profileRows) {
       profile[row.key] = row.value;
@@ -108,7 +125,7 @@ async function migrate() {
     // 3. Migrate training plans
     console.log('Migrating training plans...');
     try {
-      const plans = db.prepare('SELECT * FROM training_plans').all() as Record<string, unknown>[];
+      const plans = db.query('SELECT * FROM training_plans').all() as Record<string, unknown>[];
       console.log(`  Found ${plans.length} training plans`);
 
       for (const plan of plans) {
@@ -143,7 +160,7 @@ async function migrate() {
     // 4. Migrate run feedback
     console.log('Migrating run feedback...');
     try {
-      const feedback = db.prepare('SELECT * FROM run_feedback').all() as Record<string, unknown>[];
+      const feedback = db.query('SELECT * FROM run_feedback').all() as Record<string, unknown>[];
       console.log(`  Found ${feedback.length} feedback entries`);
 
       for (const fb of feedback) {
@@ -168,7 +185,7 @@ async function migrate() {
     // 5. Migrate weekly summaries
     console.log('Migrating weekly summaries...');
     try {
-      const summaries = db.prepare('SELECT * FROM weekly_summaries').all() as Record<string, unknown>[];
+      const summaries = db.query('SELECT * FROM weekly_summaries').all() as Record<string, unknown>[];
       console.log(`  Found ${summaries.length} weekly summaries`);
 
       for (const summary of summaries) {
@@ -195,7 +212,7 @@ async function migrate() {
     // 6. Migrate workout library
     console.log('Migrating workout library...');
     try {
-      const workouts = db.prepare('SELECT * FROM workout_library').all() as Record<string, unknown>[];
+      const workouts = db.query('SELECT * FROM workout_library').all() as Record<string, unknown>[];
       console.log(`  Found ${workouts.length} workout types`);
 
       for (const workout of workouts) {

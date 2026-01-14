@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton';
 import { Activity, Timer, TrendingUp, Calendar } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { DashboardStats } from '@/lib/db/types';
+import type { DashboardStats, Run } from '@/lib/db/types';
 
 function StatsCard({
   title,
@@ -47,16 +47,28 @@ function StatsCard({
 export default function CoachDashboard() {
   const { data: session } = useSession();
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [recentRuns, setRecentRuns] = useState<Run[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // TODO: Fetch real stats from API once Supabase is connected
-    const fetchStats = async () => {
+    const fetchData = async () => {
       try {
-        // Simulated delay for now
-        await new Promise(resolve => setTimeout(resolve, 500));
+        const [statsRes, runsRes] = await Promise.all([
+          fetch('/api/coach/stats'),
+          fetch('/api/coach/runs?days=14&limit=10'),
+        ]);
 
-        // Mock data until Supabase is configured
+        if (statsRes.ok) {
+          const statsData = await statsRes.json();
+          setStats(statsData);
+        }
+
+        if (runsRes.ok) {
+          const runsData = await runsRes.json();
+          setRecentRuns(runsData.runs || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch data:', error);
         setStats({
           totalRuns: 0,
           totalDistanceKm: 0,
@@ -64,14 +76,12 @@ export default function CoachDashboard() {
           thisWeekRuns: 0,
           activePlan: null,
         });
-      } catch (error) {
-        console.error('Failed to fetch stats:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchStats();
+    fetchData();
   }, []);
 
   return (
@@ -129,6 +139,31 @@ export default function CoachDashboard() {
             <div className="space-y-2">
               {[...Array(5)].map((_, i) => (
                 <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : recentRuns.length > 0 ? (
+            <div className="space-y-3">
+              {recentRuns.map((run) => (
+                <div
+                  key={run.id}
+                  className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-full bg-primary/10">
+                      <Activity className="w-4 h-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-medium">{run.workout_name || run.run_type || 'Run'}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(run.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-medium">{run.distance_km?.toFixed(1)} km</p>
+                    <p className="text-sm text-muted-foreground">{run.avg_pace_str || '-'}</p>
+                  </div>
+                </div>
               ))}
             </div>
           ) : (

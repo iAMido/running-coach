@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { supabase } from '@/lib/db/supabase';
 
 // Default user for development when auth is not configured
-const DEV_USER_ID = 'dev@localhost';
+const DEV_USER_ID = 'idomosseri@gmail.com';
 
 export async function GET() {
   const session = await getServerSession();
