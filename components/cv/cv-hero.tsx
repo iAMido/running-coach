@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { Mail, Phone, MapPin, Linkedin, Github, Twitter } from "lucide-react"
 import { cvData } from "@/lib/cv-data"
 
@@ -9,13 +10,24 @@ export function CVHero() {
   return (
     <section className="cv-section py-12 md:py-20">
       <div className="space-y-6">
-        <div>
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-slate-900 dark:text-white mb-2">
-            {personal.name}
-          </h1>
-          <p className="text-xl md:text-2xl text-blue-600 dark:text-blue-400 font-medium">
-            {personal.title}
-          </p>
+        <div className="flex flex-col md:flex-row md:items-center gap-6">
+          <div className="relative w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden border-4 border-blue-100 dark:border-blue-900/30 shadow-lg flex-shrink-0">
+            <Image
+              src="/round-avatar.svg"
+              alt={personal.name}
+              fill
+              className="object-cover"
+              priority
+            />
+          </div>
+          <div>
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-slate-900 dark:text-white mb-2">
+              {personal.name}
+            </h1>
+            <p className="text-xl md:text-2xl text-blue-600 dark:text-blue-400 font-medium">
+              {personal.title}
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-col gap-3 text-slate-600 dark:text-slate-300">
