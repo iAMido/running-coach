@@ -1,433 +1,211 @@
-# YUV.AI Portfolio & Next.js Boilerplate
+# Ido Mosseri - Personal Portfolio & CV
 
-<div align="center">
+Personal portfolio website featuring an interactive CV, professional blog, and project showcase. Built with Next.js 16, Bun, and TypeScript.
 
 ![Next.js](https://img.shields.io/badge/Next.js-16.1.1-black?style=for-the-badge&logo=next.js)
 ![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react)
 ![Bun](https://img.shields.io/badge/Bun-Runtime-orange?style=for-the-badge&logo=bun)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=for-the-badge&logo=typescript)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-38bdf8?style=for-the-badge&logo=tailwind-css)
-![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
-[![npm version](https://img.shields.io/npm/v/create-yuv-bun-app?style=for-the-badge&logo=npm&label=create-yuv-bun-app)](https://www.npmjs.com/package/create-yuv-bun-app)
-[![npm downloads](https://img.shields.io/npm/dm/create-yuv-bun-app?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/create-yuv-bun-app)
+## Features
 
-### Ship Your Next Project 30x Faster
+### Interactive CV
+- **Anchor-based navigation** - Smooth scroll to About, Skills, Experience, Education, and Contact sections
+- **Responsive design** - Two-column layout on desktop, single-column on mobile
+- **Fixed sidebar** - Profile image and quick stats (desktop only)
+- **Mobile-friendly** - Fixed header with hamburger menu
+- **Download CV** - Direct PDF download functionality
+- **Dark/Light mode** - Theme toggle with system preference detection
+- **Print-optimized** - Clean print styles for CV generation
 
-A production-ready, feature-packed Next.js boilerplate with stunning glassmorphism design, built-in blog system with Text-to-Speech, and everything you need to launch your next web app.
+### Professional Blog
+- **Blog system** with Text-to-Speech (TTS) player
+- **Reading progress bar** - Track article progress as you scroll
+- **Spotify-style audio player** - Listen to articles with playback controls
+- **Voice selection** - Choose from available system voices
+- **Speed control** - Adjust playback speed (0.5x - 2x)
+- **Category tags** - Color-coded article categories
+- **Reading time estimates** - Automatic calculation
 
-**Install in seconds:** `bun create yuv-bun-app my-project`
-
-[Live Demo](https://nextjs-bun-starter.vercel.app) | [npm Package](https://www.npmjs.com/package/create-yuv-bun-app) | [Report Bug](https://github.com/hoodini/nextjs-bun-starter/issues)
-
-<img src="https://cdn.hailuoai.video/moss/prod/2026-01-06-18/user/multi_chat_file/1767693880950248428-304191379171532808_1767693879.jpg" alt="Tech Stack - Next.js, Bun, TypeScript, Tailwind CSS, Shadcn/ui" width="400">
-
-</div>
-
----
-
-## Homepage Preview
-
-<div align="center">
-  <img src="./public/homepage-demo.png" alt="Homepage Demo" width="800">
-</div>
-
----
-
-## What Makes This Special?
-
-This isn't just another boilerplate. It's a **fully-featured portfolio and web app starter** with carefully crafted features that typically take weeks to implement:
-
-- **Stunning Glassmorphism Design** - Modern, Apple-inspired UI with animated gradient orbs
-- **Built-in Blog System** - With Text-to-Speech, reading progress, and Spotify-style audio player
-- **Comprehensive Mobile Support** - Every pixel is responsive
-- **Dark/Light Mode** - System-aware theming that just works
-- **Authentication Ready** - Google OAuth with protected routes out of the box
-
----
-
-## Features Overview
-
-### Core Stack
-| Feature | Description |
-|---------|-------------|
-| **Next.js 16** | Latest App Router, React Server Components, streaming & Suspense |
-| **React 19** | Newest React with improved performance and features |
-| **Bun Runtime** | 30x faster package installation, native TypeScript |
-| **TypeScript 5** | Full type safety with strict mode |
-
-### UI & Design System
-| Feature | Description |
-|---------|-------------|
-| **Glassmorphism Design** | Frosted glass effects, backdrop blur, and modern aesthetics |
-| **Shadcn/ui Components** | Beautiful, accessible components you own and customize |
-| **Tailwind CSS 4** | Latest utility-first CSS with OKLch colors |
-| **Framer Motion** | Smooth animations and micro-interactions |
-| **Animated Gradient Orbs** | Dynamic background effects with radial gradients |
-| **Lucide Icons** | 1000+ beautiful, tree-shakeable icons |
-| **Geist Font** | Clean, modern typography by Vercel |
-| **Dark/Light Mode** | System-aware theme switching with next-themes |
-
-### Blog System (Apple-Style)
-| Feature | Description |
-|---------|-------------|
-| **Glassmorphism Cards** | Beautiful article previews with hover effects |
-| **Reading Progress Bar** | Fixed progress indicator as you scroll |
-| **Text-to-Speech (TTS)** | Listen to articles with browser speech synthesis |
-| **Spotify-Style Audio Player** | Play/pause, speed control, voice selection |
-| **Voice Selection** | Choose from available system voices |
-| **Playback Speed Control** | 0.5x to 2x speed adjustment |
-| **Category Tags** | Color-coded article categories |
-| **Reading Time Estimates** | Automatic calculation based on content |
-| **Mobile-Optimized Typography** | Responsive prose styling |
-
-### Navigation & UX
-| Feature | Description |
-|---------|-------------|
-| **Floating Glass Navbar** | Centered, pill-shaped navigation with blur effect |
-| **Mobile Hamburger Menu** | Full-featured dropdown for mobile devices |
-| **Scroll-to-Top Button** | Animated button appears on scroll |
-| **Smooth Scroll Navigation** | Anchor links with smooth scrolling |
-| **Copy-to-Clipboard** | One-click command copying with feedback |
-
-### Authentication
-| Feature | Description |
-|---------|-------------|
-| **NextAuth.js** | Industry-standard authentication |
-| **Google OAuth** | Pre-configured and ready to use |
-| **Protected Routes** | Secure profile page implementation |
-| **Session Management** | Server and client session handling |
-| **User Avatar Dropdown** | Profile menu with sign-out option |
-
-### Developer Experience
-| Feature | Description |
-|---------|-------------|
-| **React Hook Form** | Performant form handling |
-| **Zod Validation** | Type-safe schema validation |
-| **ESLint 9** | Latest linting configuration |
-| **Turbopack** | Lightning-fast hot reload |
-| **TypeScript Strict Mode** | Maximum type safety |
-
----
-
-## Bun vs npm: The Performance Difference
-
-| Metric | npm | Bun | Improvement |
-|--------|-----|-----|-------------|
-| Package Installation | ~45 seconds | ~1.5 seconds | **30x faster** |
-| Disk Space | ~500MB | ~200MB | **60% smaller** |
-| Script Execution | ~150ms startup | ~25ms startup | **6x faster** |
-
-### Command Comparison
-
-```bash
-# Same commands, just replace 'npm' with 'bun'
-npm install       → bun install
-npm run dev       → bun run dev
-npm run build     → bun run build
-npx tsx file.ts   → bun file.ts    # TypeScript runs directly!
-```
-
----
+### Technical Features
+- **Next.js 16** - Latest App Router with React Server Components
+- **React 19** - Newest React features and performance improvements
+- **Bun runtime** - 30x faster package installation
+- **TypeScript 5** - Full type safety with strict mode
+- **Tailwind CSS 4** - Modern utility-first styling
+- **Shadcn/ui** - Beautiful, accessible components
+- **NextAuth.js** - Google OAuth authentication
+- **Framer Motion** - Smooth animations
+- **Dark/Light mode** - System-aware theme switching
 
 ## Quick Start
 
-### One-Line Installation (Recommended)
+### Prerequisites
+- [Bun](https://bun.sh/) installed (or Node.js 18+)
+- Git
+
+### Installation
 
 ```bash
-bun create yuv-bun-app my-project
-```
+# Clone the repository
+git clone https://github.com/iAMido/my-site.git
+cd my-site
 
-Works with any package manager:
-```bash
-bun create yuv-bun-app my-project   # Recommended
-npm create yuv-bun-app my-project   # Also works
-pnpm create yuv-bun-app my-project  # Also works
-yarn create yuv-bun-app my-project  # Also works
-```
-
-> **About the Package Names**
-> - **`create-yuv-bun-app`** - This boilerplate (Next.js + Bun + NextAuth/Google OAuth)
-> - **`create-yuv-app`** - Alternative version (Next.js + Clerk authentication)
-
-### Manual Installation
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/hoodini/nextjs-bun-starter.git my-project
-cd my-project
-
-# 2. Install dependencies (~1.5 seconds with Bun!)
+# Install dependencies
 bun install
 
-# 3. Set up environment variables
+# Set up environment variables
 cp .env.example .env.local
 
-# 4. Configure Google OAuth (see below)
-
-# 5. Start development
+# Start development server
 bun run dev
 ```
 
-### Configure Google OAuth
+Visit `http://localhost:3000` to see your portfolio.
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing
-3. Navigate to **APIs & Services > Credentials**
-4. Click **Create Credentials > OAuth client ID**
-5. Select **Web application**
-6. Add authorized redirect URI: `http://localhost:3000/api/auth/callback/google`
-7. Copy credentials to `.env.local`:
+### Environment Variables
+
+Create a `.env.local` file with:
 
 ```env
-GOOGLE_CLIENT_ID=your-client-id
-GOOGLE_CLIENT_SECRET=your-client-secret
-NEXTAUTH_SECRET=generate-with-openssl-rand-base64-32
+NEXTAUTH_SECRET=your-secret-here  # Generate with: bunx openssl rand -base64 32
 NEXTAUTH_URL=http://localhost:3000
+
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
 ```
 
----
+### Google OAuth Setup (Optional)
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create OAuth client ID (Web application)
+3. Add authorized redirect URI: `http://localhost:3000/api/auth/callback/google`
+4. Copy credentials to `.env.local`
 
 ## Project Structure
 
 ```
-my-project/
+my-site/
 ├── app/
-│   ├── api/auth/[...nextauth]/   # Auth API routes
+│   ├── page.tsx                   # CV homepage
 │   ├── blog/                      # Blog system
-│   │   ├── [slug]/page.tsx       # Individual article pages
-│   │   ├── layout.tsx            # Blog layout
-│   │   └── page.tsx              # Blog listing page
 │   ├── profile/                   # Protected profile page
-│   ├── globals.css                # Global styles & theme
-│   ├── layout.tsx                 # Root layout
-│   ├── page.tsx                   # Homepage
-│   └── providers.tsx              # Theme & Session providers
+│   └── api/auth/[...nextauth]/    # Authentication
 ├── components/
-│   ├── blog/
-│   │   └── article-content.tsx   # Article with TTS player
-│   ├── layout/
-│   │   ├── navbar.tsx            # Floating glass navbar
-│   │   └── footer.tsx            # Site footer
-│   ├── sections/                  # Page sections
-│   │   ├── boilerplate-hero.tsx  # Hero with gradient orbs
-│   │   ├── why-this-stack.tsx    # Features showcase
-│   │   ├── bun-comparison.tsx    # Bun vs npm comparison
-│   │   ├── quick-start.tsx       # Getting started guide
-│   │   ├── customize-section.tsx # Customization guide
-│   │   ├── stack-section.tsx     # Tech stack display
-│   │   └── cta-section.tsx       # Call to action
-│   └── ui/                        # Shadcn components
-│       ├── glass-card.tsx        # Glassmorphism card
-│       ├── scroll-to-top.tsx     # Scroll button
-│       ├── mode-toggle.tsx       # Theme toggle
-│       └── ...                   # Other UI components
+│   ├── cv/                        # CV components
+│   │   ├── cv-navigation.tsx      # Anchor navigation
+│   │   ├── cv-hero.tsx            # Hero section
+│   │   ├── cv-about.tsx           # About section
+│   │   ├── cv-skills.tsx          # Skills grid
+│   │   ├── cv-experience.tsx      # Work history
+│   │   ├── cv-education.tsx       # Education timeline
+│   │   ├── cv-contact.tsx         # Contact info
+│   │   └── cv-sidebar.tsx         # Profile sidebar
+│   ├── blog/                      # Blog components
+│   ├── layout/                    # Layout components
+│   └── ui/                        # Shadcn/ui components
 ├── lib/
-│   ├── blog.ts                   # Blog posts data
-│   └── utils.ts                  # Utility functions
-├── public/
-│   ├── round-avatar.svg          # Logo/favicon
-│   └── homepage-demo.png         # README preview image
-├── .env.example                   # Environment template
-└── package.json                   # Dependencies
+│   ├── cv-data.ts                 # CV content data
+│   ├── blog.ts                    # Blog posts data
+│   └── utils.ts                   # Utility functions
+└── public/
+    └── cv.pdf                     # Downloadable CV
 ```
 
----
+## Customization
 
-## Customization Guide
+### Update CV Content
 
-### 1. Branding & Colors
-Edit `app/globals.css` to update the color scheme:
-```css
-@theme {
-  --color-primary: oklch(0.7 0.2 340);  /* Your brand color */
+Edit `lib/cv-data.ts` to update your personal information:
+
+```typescript
+export const cvData: CVData = {
+  personal: {
+    name: "Your Name",
+    title: "Your Title",
+    // ...
+  },
+  // Update about, skills, experience, education, contact
 }
 ```
 
-### 2. Add Blog Posts
-Edit `lib/blog.ts` to add your own articles with TTS support:
+### Add Blog Posts
+
+Edit `lib/blog.ts` to add new articles:
+
 ```typescript
-const posts: BlogPost[] = [
-  {
-    slug: 'my-article',
-    title: 'My Article Title',
-    content: 'Plain text for TTS...',
-    contentHtml: '<p>HTML for rendering...</p>',
-    // ...
-  }
-];
+{
+  slug: 'my-article',
+  title: 'My Article Title',
+  content: 'Plain text for TTS...',
+  contentHtml: '<p>HTML content...</p>',
+  category: 'Engineering',
+  // ...
+}
 ```
 
-### 3. Authentication Providers
-Add more providers in `app/api/auth/[...nextauth]/route.ts`:
-```typescript
-import GithubProvider from "next-auth/providers/github"
+### Customize Colors
 
-providers: [
-  GoogleProvider({ ... }),
-  GithubProvider({
-    clientId: process.env.GITHUB_ID!,
-    clientSecret: process.env.GITHUB_SECRET!,
-  }),
-]
+Edit `app/globals.css` to change the color scheme:
+
+```css
+:root {
+  --cv-blue: #2563EB;      /* Primary color */
+  --cv-green: #10B981;     /* Accent color */
+  --cv-slate: #64748B;     /* Secondary color */
+}
 ```
-
-### 4. Add More UI Components
-```bash
-bunx shadcn@latest add dialog
-bunx shadcn@latest add toast
-bunx shadcn@latest add table
-```
-
----
 
 ## Available Scripts
 
 ```bash
-bun run dev      # Start development server (Turbopack)
+bun run dev      # Start development server
 bun run build    # Create production build
 bun run start    # Start production server
 bun run lint     # Run ESLint
 ```
 
----
-
 ## Deployment
 
 ### Vercel (Recommended)
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/hoodini/nextjs-bun-starter)
-
 1. Push to GitHub
-2. Import in Vercel
-3. Add environment variables:
-   - `GOOGLE_CLIENT_ID`
-   - `GOOGLE_CLIENT_SECRET`
-   - `NEXTAUTH_SECRET`
-   - `NEXTAUTH_URL` (your production URL)
-4. Update Google OAuth redirect URI for production
+2. Import project in [Vercel](https://vercel.com)
+3. Add environment variables
+4. Deploy
 
 ### Other Platforms
 
-Works on any platform that supports Node.js:
+Works on any platform that supports Next.js:
 - Netlify
 - Railway
 - Render
 - Docker
 
----
+## Technologies Used
 
-## Feature Checklist
+- **Framework**: Next.js 16.1.1
+- **Runtime**: Bun
+- **Language**: TypeScript 5
+- **Styling**: Tailwind CSS 4
+- **UI Components**: Shadcn/ui
+- **Icons**: Lucide React
+- **Authentication**: NextAuth.js
+- **Animations**: Framer Motion
+- **Forms**: React Hook Form + Zod
 
-### Core
-- [x] Next.js 16 with App Router
-- [x] React 19
-- [x] TypeScript 5 (strict mode)
-- [x] Bun runtime
+## About
 
-### UI & Design
-- [x] Glassmorphism design system
-- [x] Shadcn/ui components
-- [x] Tailwind CSS 4
-- [x] Framer Motion animations
-- [x] Animated gradient orbs
-- [x] Floating glass navbar
-- [x] Lucide Icons
-- [x] Dark/Light mode
-- [x] Responsive design
-- [x] Geist font
+This is the personal portfolio website of **Ido Mosseri**, Technical SEO Lead with 10+ years of experience in technical SEO, content strategy, and web development.
 
-### Blog System
-- [x] Apple-style blog layout
-- [x] Glassmorphism article cards
-- [x] Reading progress bar
-- [x] Text-to-Speech (TTS)
-- [x] Spotify-style audio player
-- [x] Voice selection
-- [x] Playback speed control
-- [x] Category tags
-- [x] Reading time estimates
-
-### Authentication
-- [x] NextAuth.js
-- [x] Google OAuth
-- [x] Protected routes
-- [x] Session management
-- [x] User profile page
-
-### UX Features
-- [x] Scroll-to-top button
-- [x] Copy-to-clipboard
-- [x] Smooth scroll navigation
-- [x] Mobile hamburger menu
-
-### DX
-- [x] React Hook Form + Zod
-- [x] ESLint 9 configured
-- [x] Fast refresh with Turbopack
-
----
-
-## Recent Updates
-
-| Version | Feature |
-|---------|---------|
-| Latest | Comprehensive mobile responsiveness overhaul |
-| | Custom favicon and navbar logo |
-| | Spotify-style TTS audio player |
-| | Apple-style blog system with progress bar |
-| | Enhanced gradient glow orbs |
-| | Glassmorphism styling across all cards |
-| | Floating glass navbar |
-| | Scroll-to-top button |
-| | Theme toggle with dark/light mode |
-
----
-
-## Contributing
-
-Contributions welcome! Please read the [Contributing Guide](CONTRIBUTING.md).
-
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature/amazing-feature`
-3. Commit changes: `git commit -m 'Add amazing feature'`
-4. Push: `git push origin feature/amazing-feature`
-5. Open a Pull Request
-
----
+**Contact:**
+- Email: idomosseri@gmail.com
+- Phone: 050-6790792
+- Location: Kfar Saba, Israel
+- LinkedIn: [linkedin.com/in/idomosseri](https://www.linkedin.com/in/idomosseri/)
+- GitHub: [github.com/iAMido](https://github.com/iAMido)
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
-
----
-
-## About the Creator
-
-<div align="center">
-
-<img src="https://cdn.hailuoai.video/moss/prod/2026-01-01-02/user/multi_chat_file/1767204442417679023-304191379171532808_1767204439.jpg" alt="Yuval Avidani" width="120" style="border-radius: 50%">
-
-**Yuval Avidani**
-
-AWS AI Superstar | GitHub Star | Founder of YUV.AI
-
-Building next-generation AI solutions and empowering developers to create transformative experiences.
-
-[![Website](https://img.shields.io/badge/Website-yuv.ai-FF4D8E?style=for-the-badge)](https://yuv.ai)
-[![GitHub](https://img.shields.io/badge/GitHub-hoodini-black?style=for-the-badge&logo=github)](https://github.com/hoodini)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0077b5?style=for-the-badge&logo=linkedin)](https://www.linkedin.com/in/%F0%9F%8E%97%EF%B8%8Fyuval-avidani-87081474/)
-[![Twitter](https://img.shields.io/badge/Twitter-Follow-1DA1F2?style=for-the-badge&logo=twitter)](https://twitter.com/yuvai)
-[![Email](https://img.shields.io/badge/Email-info@yuv.ai-FF9100?style=for-the-badge)](mailto:info@yuv.ai)
-
-</div>
-
----
-
-<div align="center">
-
-**Built with passion by [Yuval Avidani](https://yuv.ai)**
-
-If this helped you ship faster, consider [starring the repo](https://github.com/hoodini/nextjs-bun-starter)
-
-</div>
+MIT © Ido Mosseri

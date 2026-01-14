@@ -1,0 +1,203 @@
+// CV Data Structure for Ido Mosseri
+// Extracted from vite-spa-boilerplate
+
+export interface PersonalInfo {
+  name: string
+  title: string
+  phone: string
+  email: string
+  location: string
+}
+
+export interface SocialLink {
+  name: string
+  url: string
+  icon: string
+}
+
+export interface Skill {
+  category: string
+  items: string[]
+}
+
+export interface WorkExperience {
+  position: string
+  company: string
+  duration: string
+  description: string
+}
+
+export interface Education {
+  qualification: string
+  institution: string
+  year: string
+  note?: string
+}
+
+export interface ContactInfo {
+  phone: string
+  email: string
+  location: string
+  social: SocialLink[]
+}
+
+export interface CVData {
+  personal: PersonalInfo
+  about: string
+  skills: Skill[]
+  experience: WorkExperience[]
+  education: Education[]
+  contact: ContactInfo
+}
+
+// CV Content
+export const cvData: CVData = {
+  personal: {
+    name: "Ido Mosseri",
+    title: "Technical SEO Lead",
+    phone: "050-6790792",
+    email: "idomosseri@gmail.com",
+    location: "Kfar Saba, Israel"
+  },
+
+  about: "Highly driven and result-oriented SEO Specialist with over 10 years of experience in both hands-on optimization and strategic planning. I thrive in fast-paced environments that require effective assignment prioritization with tight deadlines. My approach is business-oriented with a strong focus on conversion optimization, A/B testing, quick wins in rankings, content marketing, and RankBrain optimization. I stay current with the constant changes in search engine optimization trends, algorithms, and ranking variables, ensuring my strategies deliver maximum ROI.",
+
+  skills: [
+    {
+      category: "Technical SEO",
+      items: [
+        "Site architecture",
+        "Crawlability optimization",
+        "Structured data implementation",
+        "Meta optimization",
+        "Technical audits"
+      ]
+    },
+    {
+      category: "Content Strategy",
+      items: [
+        "Keyword research",
+        "Content planning",
+        "RankBrain optimization",
+        "Content marketing"
+      ]
+    },
+    {
+      category: "Analytics & Tools",
+      items: [
+        "Google Analytics",
+        "Search Console",
+        "SEMrush",
+        "Ahrefs",
+        "Screaming Frog"
+      ]
+    },
+    {
+      category: "Programming",
+      items: [
+        "Python automation",
+        "HTML/CSS",
+        "WordPress development",
+        "SEO tools development"
+      ]
+    },
+    {
+      category: "Link Building",
+      items: [
+        "High-quality link acquisition",
+        "Outreach campaigns",
+        "Penalty recovery",
+        "Backlink analysis"
+      ]
+    },
+    {
+      category: "Conversion Optimization",
+      items: [
+        "A/B testing",
+        "UX/UI principles",
+        "Landing page optimization",
+        "Conversion funnel analysis"
+      ]
+    }
+  ],
+
+  experience: [
+    {
+      position: "Technical SEO Lead",
+      company: "Natural Intelligence",
+      duration: "2021-Present",
+      description: "Enhanced site health through technical SEO. Conducted audits, built business cases, developed Python automation tools, educated teams."
+    },
+    {
+      position: "Head of SEO",
+      company: "SearchVision",
+      duration: "2019-2021",
+      description: "Led company-wide SEO strategy across multiple sites; managed organic growth, audits, product collaboration."
+    },
+    {
+      position: "Head of SEO",
+      company: "Bookaway.com",
+      duration: "2019-2020",
+      description: "Developed SEO roadmap, executed technical projects, collaborated on content strategy, achieved 200%+ organic traffic increase."
+    },
+    {
+      position: "Senior SEO Project Manager",
+      company: "Webpals",
+      duration: "2016-2018",
+      description: "Managed casino business unit sites, led 7-person freelance team, executed long-term strategies, specialized in penalty recovery."
+    },
+    {
+      position: "SEO Project Manager",
+      company: "GO Internet Marketing",
+      duration: "2013-2016",
+      description: "Handled on-page/off-page SEO for Israeli companies, built content marketing strategies, managed link campaigns."
+    }
+  ],
+
+  education: [
+    {
+      qualification: "Python for Data Analysts",
+      institution: "Professional Development",
+      year: "2021"
+    },
+    {
+      qualification: "UX/UI Course",
+      institution: "UXvision (Tal Florenitin)",
+      year: "2018"
+    },
+    {
+      qualification: "Internet Marketing Course",
+      institution: "HackerU (SEO, SEM, Social)",
+      year: "2013"
+    },
+    {
+      qualification: "L.L.B in Law",
+      institution: "College of Management Rishon Le'zion",
+      year: "2005-2009",
+      note: "Registered lawyer at Israeli Bar Association (2010)"
+    }
+  ],
+
+  contact: {
+    phone: "050-6790792",
+    email: "idomosseri@gmail.com",
+    location: "Kfar Saba, Israel",
+    social: [
+      {
+        name: "LinkedIn",
+        url: "https://www.linkedin.com/in/idomosseri/",
+        icon: "linkedin"
+      },
+      {
+        name: "GitHub",
+        url: "https://github.com/iAMido",
+        icon: "github"
+      },
+      {
+        name: "Twitter",
+        url: "https://twitter.com/idomosseri",
+        icon: "twitter"
+      }
+    ]
+  }
+}

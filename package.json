@@ -1,24 +1,25 @@
 {
-  "name": "yuval-avidani-portfolio",
-  "version": "0.1.0",
+  "name": "my-site",
+  "version": "1.0.0",
   "private": true,
-  "description": "Production-ready Next.js starter with Bun, Shadcn/ui, Tailwind CSS, and Google Authentication",
-  "author": "Yuval Avidani <info@yuv.ai> (https://yuv.ai)",
+  "description": "Personal portfolio and CV website with blog - Built with Next.js, Bun, and TypeScript",
+  "author": "Ido Mosseri <idomosseri@gmail.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hoodini/nextjs-bun-starter.git"
+    "url": "https://github.com/iAMido/my-site.git"
   },
   "keywords": [
+    "portfolio",
+    "cv",
+    "resume",
     "nextjs",
     "bun",
-    "boilerplate",
-    "starter-kit",
-    "shadcn-ui",
-    "tailwind",
-    "nextauth",
     "typescript",
-    "react"
+    "react",
+    "blog",
+    "seo",
+    "tailwind"
   ],
   "scripts": {
     "dev": "next dev",

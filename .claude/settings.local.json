@@ -8,7 +8,12 @@
       "Bash(bun run build:*)",
       "Bash(bun run dev)",
       "Bash(git commit:*)",
-      "Bash(bun add:*)"
+      "Bash(bun add:*)",
+      "Bash(dir:*)",
+      "Bash(cat:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }
