@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { Github, Linkedin, Twitter, Mail } from 'lucide-react';
 
 const footerLinks = [
@@ -27,16 +26,8 @@ export function Footer() {
         <div className="flex flex-col items-center gap-8">
           {/* Logo and Tagline */}
           <div className="flex flex-col items-center gap-3">
-            <Link href="/" className="flex items-center gap-3">
-              <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-blue-400/30">
-                <Image
-                  src="/round-avatar.svg"
-                  alt="Ido Mosseri"
-                  fill
-                  className="object-cover"
-                />
-              </div>
-              <span className="text-xl font-semibold text-white">Ido Mosseri</span>
+            <Link href="/" className="text-xl font-semibold text-white hover:text-blue-400 transition-colors">
+              Ido Mosseri
             </Link>
             <p className="text-white/50 text-sm">Technical SEO Lead</p>
           </div>
