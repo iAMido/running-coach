@@ -18,7 +18,8 @@ import { useEffect, useState } from 'react';
 
 const navLinks = [
   { href: '/#about', label: 'About' },
-  { href: '/#projects', label: 'Projects' },
+  { href: '/#skills', label: 'Skills' },
+  { href: '/#experience', label: 'Experience' },
   { href: '/blog', label: 'Blog' },
   { href: '/#contact', label: 'Contact' },
 ];
@@ -92,13 +93,13 @@ export function Navbar() {
         <button onClick={handleLogoClick} className="flex items-center gap-2 shrink-0 cursor-pointer">
           <Image
             src="/round-avatar.svg"
-            alt="YUV.AI Logo"
+            alt="Ido Mosseri"
             width={24}
             height={24}
             className="rounded-full md:w-7 md:h-7"
           />
           <span className="text-base md:text-lg font-semibold text-foreground tracking-tight">
-            YUV.AI
+            Ido Mosseri
           </span>
         </button>
 
@@ -124,10 +125,10 @@ export function Navbar() {
             {session?.user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="relative rounded-full ring-2 ring-transparent hover:ring-[#FF4D8E]/50 transition-all duration-200">
-                    <Avatar className="w-9 h-9 border-2 border-[#FF4D8E]/30">
+                  <button className="relative rounded-full ring-2 ring-transparent hover:ring-[#2563EB]/50 transition-all duration-200">
+                    <Avatar className="w-9 h-9 border-2 border-[#2563EB]/30">
                       <AvatarImage src={session.user.image || undefined} alt={session.user.name || 'User'} />
-                      <AvatarFallback className="bg-gradient-to-br from-[#FF4D8E] to-[#FF9100] text-white text-sm font-medium">
+                      <AvatarFallback className="bg-gradient-to-br from-[#2563EB] to-[#10B981] text-white text-sm font-medium">
                         {session.user.name?.[0]?.toUpperCase() || 'U'}
                       </AvatarFallback>
                     </Avatar>
@@ -160,9 +161,9 @@ export function Navbar() {
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <Avatar className="w-9 h-9 border-2 border-[#FF4D8E]/30 cursor-pointer hover:border-[#FF4D8E]/60 transition-colors" onClick={() => signIn('google')}>
-                <AvatarFallback className="bg-gradient-to-br from-[#FF4D8E] to-[#FF9100] text-white text-sm font-medium">
-                  YA
+              <Avatar className="w-9 h-9 border-2 border-[#2563EB]/30 cursor-pointer hover:border-[#2563EB]/60 transition-colors" onClick={() => signIn('google')}>
+                <AvatarFallback className="bg-gradient-to-br from-[#2563EB] to-[#10B981] text-white text-sm font-medium">
+                  IM
                 </AvatarFallback>
               </Avatar>
             )}
@@ -211,9 +212,9 @@ export function Navbar() {
             {session?.user ? (
               <div className="space-y-1">
                 <div className="flex items-center gap-3 px-4 py-2">
-                  <Avatar className="w-8 h-8 border-2 border-[#FF4D8E]/30">
+                  <Avatar className="w-8 h-8 border-2 border-[#2563EB]/30">
                     <AvatarImage src={session.user.image || undefined} alt={session.user.name || 'User'} />
-                    <AvatarFallback className="bg-gradient-to-br from-[#FF4D8E] to-[#FF9100] text-white text-xs font-medium">
+                    <AvatarFallback className="bg-gradient-to-br from-[#2563EB] to-[#10B981] text-white text-xs font-medium">
                       {session.user.name?.[0]?.toUpperCase() || 'U'}
                     </AvatarFallback>
                   </Avatar>
@@ -247,7 +248,7 @@ export function Navbar() {
                   signIn('google');
                   setMobileMenuOpen(false);
                 }}
-                className="w-full px-4 py-3 rounded-xl bg-[#FF4D8E] text-white font-medium hover:bg-[#FF4D8E]/90 transition-colors"
+                className="w-full px-4 py-3 rounded-xl bg-[#2563EB] text-white font-medium hover:bg-[#2563EB]/90 transition-colors"
               >
                 Sign In with Google
               </button>
