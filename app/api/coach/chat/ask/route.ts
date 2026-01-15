@@ -5,14 +5,17 @@ import { callOpenRouter } from '@/lib/ai/openrouter';
 import { buildCoachSystemPrompt } from '@/lib/ai/coach-prompts';
 import type { ChatMessage } from '@/lib/db/types';
 
+const DEV_USER_ID = 'idomosseri@gmail.com';
+
 export async function POST(request: NextRequest) {
   const session = await getServerSession();
+  const isDev = process.env.NODE_ENV === 'development';
 
-  if (!session?.user?.email) {
+  if (!session?.user?.email && !isDev) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const userId = session.user.email;
+  const userId = session?.user?.email || DEV_USER_ID;
   const apiKey = process.env.OPENROUTER_API_KEY;
 
   if (!apiKey) {

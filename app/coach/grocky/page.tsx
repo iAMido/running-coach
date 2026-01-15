@@ -29,21 +29,36 @@ export default function GrockyBalboaPage() {
     if (!input.trim() || loading) return;
 
     const userMessage: ChatMessage = { role: 'user', content: input };
-    setMessages((prev) => [...prev, userMessage]);
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setInput('');
     setLoading(true);
 
     try {
-      // TODO: Call Grok API via OpenRouter
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const response = await fetch('/api/coach/chat/grocky', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: updatedMessages }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to get response');
+      }
 
       const assistantMessage: ChatMessage = {
         role: 'assistant',
-        content: 'Yo, this is where Grocky\'s response will appear once OpenRouter is configured with Grok. I\'ll give you the straight talk about your training - no sugar coating, just science-backed advice with maybe a few Rocky references thrown in. 🥊',
+        content: data.content,
       };
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
       console.error('Failed to get response:', error);
+      const errorMessage: ChatMessage = {
+        role: 'assistant',
+        content: `Yo, hit a snag there: ${error instanceof Error ? error.message : 'Unknown error'}. Give it another shot! 🥊`,
+      };
+      setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setLoading(false);
     }
@@ -52,13 +67,22 @@ export default function GrockyBalboaPage() {
   const handlePlanReview = async () => {
     setReviewLoading(true);
     try {
-      // TODO: Call Grok plan review API
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      setPlanReview(
-        'Plan review will appear here once configured. Grocky will analyze your training plan and provide an evidence-based second opinion, challenging assumptions and offering alternative perspectives from the Norwegian Method, block periodization, and other training philosophies.'
-      );
+      const response = await fetch('/api/coach/chat/grocky', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reviewPlan: true }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to review plan');
+      }
+
+      setPlanReview(data.content);
     } catch (error) {
       console.error('Failed to review plan:', error);
+      setPlanReview(`Couldn't get the review done: ${error instanceof Error ? error.message : 'Unknown error'}. Try again! 🥊`);
     } finally {
       setReviewLoading(false);
     }

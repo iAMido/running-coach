@@ -25,21 +25,36 @@ export default function AskCoachPage() {
     if (!input.trim() || loading) return;
 
     const userMessage: ChatMessage = { role: 'user', content: input };
-    setMessages((prev) => [...prev, userMessage]);
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setInput('');
     setLoading(true);
 
     try {
-      // TODO: Call OpenRouter API
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const response = await fetch('/api/coach/chat/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: updatedMessages }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to get response');
+      }
 
       const assistantMessage: ChatMessage = {
         role: 'assistant',
-        content: 'This is where the AI coach response will appear once OpenRouter is configured. I\'ll analyze your training data and provide personalized advice based on the Run Elite Triphasic methodology.',
+        content: data.content,
       };
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
       console.error('Failed to get response:', error);
+      const errorMessage: ChatMessage = {
+        role: 'assistant',
+        content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
+      };
+      setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setLoading(false);
     }
