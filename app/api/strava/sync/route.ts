@@ -5,14 +5,17 @@ import { classifyRun } from '@/lib/utils/run-classifier';
 import { calculateTrimp } from '@/lib/utils/trimp';
 import { formatPace, calculatePace } from '@/lib/utils/pace';
 
+const DEV_USER_ID = 'idomosseri@gmail.com';
+
 export async function POST(request: NextRequest) {
   const session = await getServerSession();
+  const isDev = process.env.NODE_ENV === 'development';
 
-  if (!session?.user?.email) {
+  if (!session?.user?.email && !isDev) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const userId = session.user.email;
+  const userId = session?.user?.email || DEV_USER_ID;
   const clientId = process.env.STRAVA_CLIENT_ID;
   const clientSecret = process.env.STRAVA_CLIENT_SECRET;
 

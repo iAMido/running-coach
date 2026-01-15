@@ -5,23 +5,51 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
 import { RefreshCw, Link2, Unlink, CheckCircle, AlertCircle, Upload } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function StravaSyncPage() {
+  const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [daysBack, setDaysBack] = useState('7');
   const [syncResult, setSyncResult] = useState<{ success: boolean; count: number } | null>(null);
 
+  useEffect(() => {
+    checkStatus();
+  }, []);
+
+  const checkStatus = async () => {
+    try {
+      const response = await fetch('/api/strava/disconnect');
+      const data = await response.json();
+      setConnected(data.connected || false);
+    } catch (error) {
+      console.error('Failed to check status:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleConnect = async () => {
-    // TODO: Redirect to Strava OAuth
     window.location.href = '/api/strava/auth';
   };
 
   const handleDisconnect = async () => {
-    // TODO: Call disconnect API
-    setConnected(false);
+    setDisconnecting(true);
+    try {
+      const response = await fetch('/api/strava/disconnect', { method: 'POST' });
+      if (response.ok) {
+        setConnected(false);
+        setSyncResult(null);
+      }
+    } catch (error) {
+      console.error('Disconnect failed:', error);
+    } finally {
+      setDisconnecting(false);
+    }
   };
 
   const handleSync = async () => {
@@ -29,9 +57,19 @@ export default function StravaSyncPage() {
     setSyncResult(null);
 
     try {
-      // TODO: Call sync API
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      setSyncResult({ success: true, count: 0 });
+      const response = await fetch('/api/strava/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ daysBack: parseInt(daysBack) }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setSyncResult({ success: true, count: data.newRunsCount || 0 });
+      } else {
+        setSyncResult({ success: false, count: 0 });
+      }
     } catch (error) {
       console.error('Sync failed:', error);
       setSyncResult({ success: false, count: 0 });
@@ -63,38 +101,49 @@ export default function StravaSyncPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-lg bg-[#FC4C02] flex items-center justify-center">
-                  <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="font-medium">Strava</p>
-                  <p className="text-sm text-muted-foreground">
-                    {connected ? 'Connected' : 'Not connected'}
-                  </p>
-                </div>
-              </div>
-              <Badge variant={connected ? 'default' : 'secondary'}>
-                {connected ? 'Connected' : 'Disconnected'}
-              </Badge>
-            </div>
-
-            {connected ? (
-              <Button variant="outline" onClick={handleDisconnect} className="w-full">
-                <Unlink className="w-4 h-4 mr-2" />
-                Disconnect
-              </Button>
+            {loading ? (
+              <Skeleton className="h-20 w-full" />
             ) : (
-              <Button
-                onClick={handleConnect}
-                className="w-full bg-[#FC4C02] hover:bg-[#FC4C02]/90 text-white"
-              >
-                <Link2 className="w-4 h-4 mr-2" />
-                Connect with Strava
-              </Button>
+              <>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-lg bg-[#FC4C02] flex items-center justify-center">
+                      <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="font-medium">Strava</p>
+                      <p className="text-sm text-muted-foreground">
+                        {connected ? 'Connected' : 'Not connected'}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant={connected ? 'default' : 'secondary'}>
+                    {connected ? 'Connected' : 'Disconnected'}
+                  </Badge>
+                </div>
+
+                {connected ? (
+                  <Button
+                    variant="outline"
+                    onClick={handleDisconnect}
+                    className="w-full"
+                    disabled={disconnecting}
+                  >
+                    <Unlink className="w-4 h-4 mr-2" />
+                    {disconnecting ? 'Disconnecting...' : 'Disconnect'}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleConnect}
+                    className="w-full bg-[#FC4C02] hover:bg-[#FC4C02]/90 text-white"
+                  >
+                    <Link2 className="w-4 h-4 mr-2" />
+                    Connect with Strava
+                  </Button>
+                )}
+              </>
             )}
           </CardContent>
         </Card>

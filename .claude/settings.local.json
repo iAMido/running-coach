@@ -16,7 +16,13 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(git config:*)",
       "Bash(sqlite3:*)",
-      "Bash(bunx shadcn@latest add:*)"
+      "Bash(bunx shadcn@latest add:*)",
+      "Bash(timeout:*)",
+      "Bash(ping:*)",
+      "Bash(tasklist:*)",
+      "Bash(git reset:*)",
+      "Bash(bunx tsx:*)",
+      "Bash(bun run:*)"
     ]
   }
 }

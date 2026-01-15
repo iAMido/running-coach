@@ -4,43 +4,152 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings, User, Heart, Save } from 'lucide-react';
-import { useState } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { User, Heart, Save, CheckCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 export default function SettingsPage() {
+  const [loading, setLoading] = useState(true);
+
   // Profile state
-  const [name, setName] = useState('Ido');
-  const [age, setAge] = useState('30');
-  const [weight, setWeight] = useState('70');
-  const [restingHr, setRestingHr] = useState('51');
-  const [maxHr, setMaxHr] = useState('185');
-  const [ltHr, setLtHr] = useState('165');
-  const [goal, setGoal] = useState('Sub-2hr Half Marathon');
-  const [trainingDays, setTrainingDays] = useState('Mon, Wed, Fri, Sun');
+  const [name, setName] = useState('');
+  const [age, setAge] = useState('');
+  const [weight, setWeight] = useState('');
+  const [restingHr, setRestingHr] = useState('');
+  const [maxHr, setMaxHr] = useState('');
+  const [ltHr, setLtHr] = useState('');
+  const [goal, setGoal] = useState('');
+  const [trainingDays, setTrainingDays] = useState('');
 
   // HR Zones state
-  const [zone1, setZone1] = useState('0-120');
-  const [zone2, setZone2] = useState('120-135');
-  const [zone3, setZone3] = useState('135-150');
-  const [zone4, setZone4] = useState('150-165');
-  const [zone5, setZone5] = useState('165-175');
-  const [zone6, setZone6] = useState('175+');
+  const [zone1, setZone1] = useState('');
+  const [zone2, setZone2] = useState('');
+  const [zone3, setZone3] = useState('');
+  const [zone4, setZone4] = useState('');
+  const [zone5, setZone5] = useState('');
+  const [zone6, setZone6] = useState('');
 
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const fetchProfile = async () => {
+    try {
+      const response = await fetch('/api/coach/profile');
+      const data = await response.json();
+
+      if (data.profile) {
+        const p = data.profile;
+        setName(p.name || '');
+        setAge(p.age?.toString() || '');
+        setWeight(p.weight_kg?.toString() || '');
+        setRestingHr(p.resting_hr?.toString() || '');
+        setMaxHr(p.max_hr?.toString() || '');
+        setLtHr(p.lactate_threshold_hr?.toString() || '');
+        setGoal(p.current_goal || '');
+        setTrainingDays(p.training_days || '');
+        setZone1(p.hr_zone_z1 || '');
+        setZone2(p.hr_zone_z2 || '');
+        setZone3(p.hr_zone_z3 || '');
+        setZone4(p.hr_zone_z4 || '');
+        setZone5(p.hr_zone_z5 || '');
+        setZone6(p.hr_zone_z6 || '');
+      }
+    } catch (error) {
+      console.error('Failed to fetch profile:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSaveProfile = async () => {
     setSaving(true);
-    // TODO: Save to database
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setSaving(false);
+    setSaved(false);
+    try {
+      const response = await fetch('/api/coach/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          age: age ? parseInt(age) : null,
+          weight_kg: weight ? parseFloat(weight) : null,
+          resting_hr: restingHr ? parseInt(restingHr) : null,
+          max_hr: maxHr ? parseInt(maxHr) : null,
+          lactate_threshold_hr: ltHr ? parseInt(ltHr) : null,
+          current_goal: goal,
+          training_days: trainingDays,
+          hr_zone_z1: zone1,
+          hr_zone_z2: zone2,
+          hr_zone_z3: zone3,
+          hr_zone_z4: zone4,
+          hr_zone_z5: zone5,
+          hr_zone_z6: zone6,
+        }),
+      });
+
+      if (response.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+      }
+    } catch (error) {
+      console.error('Failed to save profile:', error);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSaveZones = async () => {
     setSaving(true);
-    // TODO: Save to database
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setSaving(false);
+    setSaved(false);
+    try {
+      const response = await fetch('/api/coach/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          age: age ? parseInt(age) : null,
+          weight_kg: weight ? parseFloat(weight) : null,
+          resting_hr: restingHr ? parseInt(restingHr) : null,
+          max_hr: maxHr ? parseInt(maxHr) : null,
+          lactate_threshold_hr: ltHr ? parseInt(ltHr) : null,
+          current_goal: goal,
+          training_days: trainingDays,
+          hr_zone_z1: zone1,
+          hr_zone_z2: zone2,
+          hr_zone_z3: zone3,
+          hr_zone_z4: zone4,
+          hr_zone_z5: zone5,
+          hr_zone_z6: zone6,
+        }),
+      });
+
+      if (response.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+      }
+    } catch (error) {
+      console.error('Failed to save zones:', error);
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+          <p className="text-muted-foreground mt-1">
+            Manage your athlete profile and preferences.
+          </p>
+        </div>
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -123,8 +232,12 @@ export default function SettingsPage() {
                 disabled={saving}
                 className="bg-gradient-to-r from-blue-500 to-green-500 text-white"
               >
-                <Save className="w-4 h-4 mr-2" />
-                {saving ? 'Saving...' : 'Save Profile'}
+                {saved ? (
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                ) : (
+                  <Save className="w-4 h-4 mr-2" />
+                )}
+                {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Profile'}
               </Button>
             </CardContent>
           </Card>
@@ -193,8 +306,12 @@ export default function SettingsPage() {
                 disabled={saving}
                 className="bg-gradient-to-r from-blue-500 to-green-500 text-white"
               >
-                <Save className="w-4 h-4 mr-2" />
-                {saving ? 'Saving...' : 'Save Zones'}
+                {saved ? (
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                ) : (
+                  <Save className="w-4 h-4 mr-2" />
+                )}
+                {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Zones'}
               </Button>
             </CardContent>
           </Card>
