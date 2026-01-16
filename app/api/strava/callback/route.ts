@@ -1,30 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
 import { supabase } from '@/lib/db/supabase';
 
-export async function POST(request: NextRequest) {
-  const session = await getServerSession();
+// Handle GET request from Strava OAuth redirect
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const code = searchParams.get('code');
+  const state = searchParams.get('state'); // Contains user email
+  const error = searchParams.get('error');
 
-  if (!session?.user?.email) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (error) {
+    return NextResponse.redirect(new URL('/coach/strava?error=' + error, request.url));
   }
 
-  const userId = session.user.email;
+  if (!code || !state) {
+    return NextResponse.redirect(new URL('/coach/strava?error=missing_params', request.url));
+  }
+
+  const userId = decodeURIComponent(state);
   const clientId = process.env.STRAVA_CLIENT_ID;
   const clientSecret = process.env.STRAVA_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    return NextResponse.json({ error: 'Strava not configured' }, { status: 500 });
+    return NextResponse.redirect(new URL('/coach/strava?error=not_configured', request.url));
   }
 
   try {
-    const body = await request.json();
-    const { code } = body;
-
-    if (!code) {
-      return NextResponse.json({ error: 'No authorization code' }, { status: 400 });
-    }
-
     // Exchange code for tokens
     const tokenResponse = await fetch('https://www.strava.com/oauth/token', {
       method: 'POST',
@@ -38,14 +38,15 @@ export async function POST(request: NextRequest) {
     });
 
     if (!tokenResponse.ok) {
-      const error = await tokenResponse.text();
-      return NextResponse.json({ error: `Token exchange failed: ${error}` }, { status: 500 });
+      const errorText = await tokenResponse.text();
+      console.error('Token exchange failed:', errorText);
+      return NextResponse.redirect(new URL('/coach/strava?error=token_exchange', request.url));
     }
 
     const tokens = await tokenResponse.json();
 
     // Save tokens to database
-    const { error } = await supabase
+    const { error: dbError } = await supabase
       .from('strava_tokens')
       .upsert({
         user_id: userId,
@@ -56,11 +57,15 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
 
-    if (error) throw error;
+    if (dbError) {
+      console.error('Database error:', dbError);
+      return NextResponse.redirect(new URL('/coach/strava?error=db_error', request.url));
+    }
 
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('Error in Strava callback:', error);
-    return NextResponse.json({ error: 'Failed to complete authorization' }, { status: 500 });
+    // Success - redirect back to Strava page
+    return NextResponse.redirect(new URL('/coach/strava?success=true', request.url));
+  } catch (err) {
+    console.error('Error in Strava callback:', err);
+    return NextResponse.redirect(new URL('/coach/strava?error=unknown', request.url));
   }
 }

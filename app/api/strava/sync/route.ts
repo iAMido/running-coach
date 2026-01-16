@@ -89,37 +89,50 @@ export async function POST(request: NextRequest) {
 
     const activities = await activitiesResponse.json();
 
+    console.log('Strava returned activities:', activities.length);
+    console.log('Activity types:', activities.map((a: { type: string; name: string; start_date: string }) =>
+      `${a.type}: ${a.name} (${a.start_date})`
+    ));
+
     // Filter for runs only
     const runs = activities.filter(
       (a: { type: string }) => a.type === 'Run' || a.type === 'VirtualRun'
     );
 
+    console.log('Filtered runs:', runs.length);
+
     let newRunsCount = 0;
 
     for (const activity of runs) {
       const filename = `strava_${activity.id}`;
+      console.log(`Checking activity ${filename} (${activity.name})`);
 
       // Check if already exists
-      const { data: existing } = await supabase
+      const { data: existing, error: checkError } = await supabase
         .from('runs')
         .select('id')
         .eq('user_id', userId)
         .eq('filename', filename)
         .single();
 
-      if (existing) continue;
+      console.log(`  Existing: ${!!existing}, Error: ${checkError?.code || 'none'}`);
+
+      if (existing) {
+        console.log(`  Skipping - already exists`);
+        continue;
+      }
 
       // Process the run
       const distanceKm = activity.distance / 1000;
       const durationMin = activity.moving_time / 60;
-      const avgHr = activity.average_heartrate || null;
-      const maxHr = activity.max_heartrate || null;
+      const avgHr = activity.average_heartrate ? Math.round(activity.average_heartrate) : null;
+      const maxHr = activity.max_heartrate ? Math.round(activity.max_heartrate) : null;
       const avgPaceMinKm = calculatePace(distanceKm, durationMin);
 
       const runType = classifyRun({
         distanceKm,
-        avgHr,
-        maxHr,
+        avgHr: avgHr ?? undefined,
+        maxHr: maxHr ?? undefined,
         durationMin,
       });
 
@@ -147,7 +160,10 @@ export async function POST(request: NextRequest) {
           data_source: 'strava_sync',
         });
 
-      if (!insertError) {
+      if (insertError) {
+        console.log(`  Insert error: ${insertError.message}`);
+      } else {
+        console.log(`  Inserted successfully!`);
         newRunsCount++;
       }
     }
