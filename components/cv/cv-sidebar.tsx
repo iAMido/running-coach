@@ -10,15 +10,23 @@ const PROFILE_IMAGE_URL = `${SUPABASE_URL}/storage/v1/object/public/assets/profi
 const CV_URL = `${SUPABASE_URL}/storage/v1/object/public/assets/Ido-Mosseri-CV.pdf`
 
 export function CVSidebar() {
-  const handleDownloadCV = () => {
-    // Create a link element and trigger download
-    const link = document.createElement('a')
-    link.href = CV_URL
-    link.download = 'Ido_Mosseri_CV.pdf'
-    link.target = '_blank'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+  const handleDownloadCV = async () => {
+    try {
+      // Fetch the PDF and download it directly
+      const response = await fetch(CV_URL)
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'Ido_Mosseri_CV.pdf'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      // Fallback: open in new tab if download fails
+      window.open(CV_URL, '_blank')
+    }
   }
 
   return (
@@ -30,7 +38,7 @@ export function CVSidebar() {
             src={PROFILE_IMAGE_URL}
             alt="Ido Mosseri"
             fill
-            className="object-cover"
+            className="object-cover object-top"
             priority
           />
         </div>
