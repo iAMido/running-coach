@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { signOut } from 'next-auth/react';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
@@ -14,6 +15,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  LogOut,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -98,8 +100,19 @@ export function CoachSidebar() {
         })}
       </nav>
 
-      {/* Back to Portfolio Link */}
-      <div className="absolute bottom-4 left-0 right-0 px-2">
+      {/* Bottom Actions */}
+      <div className="absolute bottom-4 left-0 right-0 px-2 space-y-1">
+        <button
+          onClick={() => signOut({ callbackUrl: '/' })}
+          className={cn(
+            'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors',
+            collapsed && 'justify-center px-2'
+          )}
+          title={collapsed ? 'Sign Out' : undefined}
+        >
+          <LogOut className="w-5 h-5 shrink-0" />
+          {!collapsed && <span className="text-sm font-medium">Sign Out</span>}
+        </button>
         <Link
           href="/"
           className={cn(
