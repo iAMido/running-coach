@@ -23,6 +23,17 @@ const planTypes = [
 const durationOptions = [4, 6, 8, 10, 12, 16];
 const runsPerWeekOptions = [3, 4, 5];
 
+// Helper function to get workout tag class based on workout type
+const getWorkoutTagClass = (type: string): string => {
+  const lowerType = type.toLowerCase();
+  if (lowerType.includes('easy') || lowerType.includes('recovery')) return 'workout-tag workout-tag-easy';
+  if (lowerType.includes('tempo') || lowerType.includes('threshold')) return 'workout-tag workout-tag-tempo';
+  if (lowerType.includes('interval') || lowerType.includes('speed') || lowerType.includes('fartlek')) return 'workout-tag workout-tag-interval';
+  if (lowerType.includes('long')) return 'workout-tag workout-tag-long';
+  if (lowerType.includes('rest') || lowerType.includes('off')) return 'workout-tag workout-tag-rest';
+  return 'workout-tag workout-tag-easy';
+};
+
 export default function TrainingPlanPage() {
   const [planType, setPlanType] = useState('');
   const [duration, setDuration] = useState('8');
@@ -125,8 +136,8 @@ export default function TrainingPlanPage() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Training Plan</h1>
-        <p className="text-muted-foreground mt-1">
+        <h1 className="coach-heading text-3xl tracking-tight">Training Plan</h1>
+        <p className="text-muted-foreground mt-2">
           Generate and manage your AI-powered training plan.
         </p>
       </div>
@@ -150,20 +161,22 @@ export default function TrainingPlanPage() {
             {activePlan ? (
               <>
                 {/* Plan Header */}
-                <Card>
+                <Card className="coach-card">
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <div>
-                        <CardTitle className="flex items-center gap-2">
-                          <Target className="w-5 h-5" />
+                        <CardTitle className="coach-heading flex items-center gap-2">
+                          <div className="p-2 rounded-lg bg-gradient-to-br from-primary/15 to-secondary/15">
+                            <Target className="w-5 h-5 text-primary" />
+                          </div>
                           {activePlan.plan_type}
                         </CardTitle>
-                        <CardDescription>
+                        <CardDescription className="mt-2">
                           Week {currentWeek} of {totalWeeks}
                           {weekData?.phase && ` - ${weekData.phase}`}
                         </CardDescription>
                       </div>
-                      <Badge variant="outline" className="text-green-600 border-green-600">
+                      <Badge variant="outline" className="text-green-600 border-green-600 bg-green-500/10 px-3 py-1">
                         Active
                       </Badge>
                     </div>
@@ -171,34 +184,34 @@ export default function TrainingPlanPage() {
                 </Card>
 
                 {/* Week Navigation */}
-                <Card>
+                <Card className="coach-card">
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <Button
-                        variant="ghost"
-                        size="icon"
+                      <button
+                        className="week-nav-button"
                         disabled={currentWeek <= 1}
                         onClick={() => setCurrentWeek(w => w - 1)}
+                        aria-label="Previous week"
                       >
-                        <ChevronLeft className="w-4 h-4" />
-                      </Button>
+                        <ChevronLeft className="w-5 h-5" />
+                      </button>
                       <div className="text-center">
-                        <CardTitle>Week {currentWeek}</CardTitle>
+                        <CardTitle className="coach-heading">Week {currentWeek}</CardTitle>
                         <CardDescription>{getWeekDateRange(currentWeek)}</CardDescription>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
+                      <button
+                        className="week-nav-button"
                         disabled={currentWeek >= totalWeeks}
                         onClick={() => setCurrentWeek(w => w + 1)}
+                        aria-label="Next week"
                       >
-                        <ChevronRight className="w-4 h-4" />
-                      </Button>
+                        <ChevronRight className="w-5 h-5" />
+                      </button>
                     </div>
                   </CardHeader>
                   <CardContent>
                     {weekData?.focus && (
-                      <p className="text-sm text-muted-foreground mb-4 text-center">
+                      <p className="text-sm text-muted-foreground mb-4 text-center bg-gradient-to-r from-primary/5 to-secondary/5 py-2 px-4 rounded-lg">
                         <strong>Focus:</strong> {weekData.focus}
                       </p>
                     )}
@@ -208,32 +221,44 @@ export default function TrainingPlanPage() {
                         {Object.entries(weekData.workouts).map(([day, workout]) => (
                           <div
                             key={day}
-                            className="flex items-start gap-3 p-3 rounded-lg border bg-card"
+                            className="week-workout-card flex items-start gap-3"
                           >
-                            <div className="p-2 rounded-full bg-primary/10 mt-0.5">
+                            <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/15 to-secondary/15 mt-0.5">
                               <Activity className="w-4 h-4 text-primary" />
                             </div>
                             <div className="flex-1">
-                              <div className="flex items-center justify-between">
-                                <p className="font-medium">{day}</p>
-                                {workout.distance && (
-                                  <Badge variant="secondary">
-                                    {workout.distance}
-                                  </Badge>
-                                )}
+                              <div className="flex items-center justify-between flex-wrap gap-2">
+                                <p className="font-semibold">{day}</p>
+                                <div className="flex items-center gap-2">
+                                  {workout.distance && (
+                                    <span className="metric-value text-sm font-bold">
+                                      {workout.distance}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                              <p className="text-sm font-medium text-primary">{workout.type}</p>
+                              <span className={getWorkoutTagClass(workout.type)}>
+                                {workout.type}
+                              </span>
                               {workout.duration && (
-                                <p className="text-sm text-muted-foreground">{workout.duration}</p>
+                                <p className="text-sm text-muted-foreground mt-1">{workout.duration}</p>
                               )}
-                              {workout.target_pace && (
-                                <p className="text-xs text-muted-foreground">Pace: {workout.target_pace}</p>
-                              )}
-                              {workout.target_hr && (
-                                <p className="text-xs text-muted-foreground">HR: {workout.target_hr}</p>
+                              {(workout.target_pace || workout.target_hr) && (
+                                <div className="flex gap-3 mt-1">
+                                  {workout.target_pace && (
+                                    <p className="text-xs text-muted-foreground">
+                                      <span className="font-medium">Pace:</span> {workout.target_pace}
+                                    </p>
+                                  )}
+                                  {workout.target_hr && (
+                                    <p className="text-xs text-muted-foreground">
+                                      <span className="font-medium">HR:</span> {workout.target_hr}
+                                    </p>
+                                  )}
+                                </div>
                               )}
                               {workout.notes && (
-                                <p className="text-xs text-muted-foreground mt-1 italic">{workout.notes}</p>
+                                <p className="text-xs text-muted-foreground mt-2 italic bg-muted/50 p-2 rounded">{workout.notes}</p>
                               )}
                             </div>
                           </div>
@@ -241,25 +266,25 @@ export default function TrainingPlanPage() {
                       </div>
                     ) : activePlan.plan_json?.raw_response ? (
                       <div className="prose dark:prose-invert max-w-none text-sm">
-                        <pre className="whitespace-pre-wrap text-xs bg-muted p-4 rounded-lg overflow-auto max-h-96">
+                        <pre className="whitespace-pre-wrap text-xs bg-muted p-4 rounded-lg overflow-auto max-h-96 scrollable-list">
                           {activePlan.plan_json.raw_response}
                         </pre>
                       </div>
                     ) : (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                        <p>No workout details available for this week.</p>
+                      <div className="empty-state">
+                        <Calendar className="empty-state-icon" />
+                        <p className="font-medium">No workout details available for this week.</p>
                       </div>
                     )}
                   </CardContent>
                 </Card>
               </>
             ) : (
-              <Card>
+              <Card className="coach-card">
                 <CardContent className="py-12">
-                  <div className="text-center text-muted-foreground">
-                    <Target className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>No active training plan.</p>
+                  <div className="empty-state">
+                    <Target className="empty-state-icon" />
+                    <p className="font-medium">No active training plan.</p>
                     <p className="text-sm mt-1">
                       Generate a new plan to get started.
                     </p>
@@ -271,10 +296,12 @@ export default function TrainingPlanPage() {
 
           {/* Generate New Plan */}
           <TabsContent value="generate">
-            <Card>
+            <Card className="coach-card">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5" />
+                <CardTitle className="coach-heading flex items-center gap-2">
+                  <div className={`ai-icon-container p-2 rounded-lg bg-gradient-to-br from-primary/15 to-secondary/15 ${generating ? 'active ai-pulse' : ''}`}>
+                    <Sparkles className="w-5 h-5 text-primary" />
+                  </div>
                   Generate Training Plan
                 </CardTitle>
                 <CardDescription>
@@ -283,7 +310,7 @@ export default function TrainingPlanPage() {
               </CardHeader>
               <CardContent className="space-y-6">
                 {error && (
-                  <div className="p-3 rounded-lg bg-red-500/10 text-red-500 text-sm">
+                  <div className="p-3 rounded-lg bg-red-500/10 text-red-500 text-sm border border-red-500/20">
                     {error}
                   </div>
                 )}
@@ -292,7 +319,7 @@ export default function TrainingPlanPage() {
                 <div className="space-y-3">
                   <label className="text-sm font-medium">Plan Type</label>
                   <Select value={planType} onValueChange={setPlanType}>
-                    <SelectTrigger>
+                    <SelectTrigger className="coach-select-trigger">
                       <SelectValue placeholder="Select plan type..." />
                     </SelectTrigger>
                     <SelectContent>
@@ -309,7 +336,7 @@ export default function TrainingPlanPage() {
                 <div className="space-y-3">
                   <label className="text-sm font-medium">Duration (weeks)</label>
                   <Select value={duration} onValueChange={setDuration}>
-                    <SelectTrigger>
+                    <SelectTrigger className="coach-select-trigger">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -326,7 +353,7 @@ export default function TrainingPlanPage() {
                 <div className="space-y-3">
                   <label className="text-sm font-medium">Runs per Week</label>
                   <Select value={runsPerWeek} onValueChange={setRunsPerWeek}>
-                    <SelectTrigger>
+                    <SelectTrigger className="coach-select-trigger">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -347,13 +374,14 @@ export default function TrainingPlanPage() {
                     onChange={(e) => setNotes(e.target.value)}
                     placeholder="Any specific goals, constraints, or preferences..."
                     rows={3}
+                    className="coach-input-focus"
                   />
                 </div>
 
                 {/* Generate Button */}
                 <Button
                   onClick={handleGenerate}
-                  className="w-full bg-gradient-to-r from-blue-500 to-green-500 text-white"
+                  className="w-full btn-gradient-primary coach-button-accessible"
                   disabled={!planType || generating}
                 >
                   <Sparkles className="w-4 h-4 mr-2" />
@@ -361,8 +389,8 @@ export default function TrainingPlanPage() {
                 </Button>
 
                 {generating && (
-                  <p className="text-sm text-center text-muted-foreground">
-                    This may take up to 30 seconds...
+                  <p className="text-sm text-center text-muted-foreground animate-pulse">
+                    Creating your personalized plan...
                   </p>
                 )}
               </CardContent>

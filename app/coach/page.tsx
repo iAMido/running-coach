@@ -22,13 +22,13 @@ function StatsCard({
   loading?: boolean;
 }) {
   return (
-    <Card className="coach-card stat-card">
+    <Card className="coach-card stat-card stat-card-sparkline">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="metric-label">
           {title}
         </CardTitle>
-        <div className="p-2 rounded-lg bg-primary/10">
-          <Icon className="h-4 w-4 text-primary" />
+        <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/15 to-secondary/15">
+          <Icon className="h-5 w-5 text-primary" />
         </div>
       </CardHeader>
       <CardContent>
@@ -36,7 +36,7 @@ function StatsCard({
           <Skeleton className="h-10 w-24" />
         ) : (
           <>
-            <div className="metric-value text-3xl">{value}</div>
+            <div className="metric-value text-3xl font-bold">{value}</div>
             {description && (
               <p className="text-sm text-muted-foreground mt-1">{description}</p>
             )}

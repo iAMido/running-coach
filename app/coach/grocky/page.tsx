@@ -100,11 +100,11 @@ export default function GrockyBalboaPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+        <h1 className="coach-heading text-3xl tracking-tight flex items-center gap-3">
           <span className="text-4xl">🥊</span>
           Grocky Balboa
         </h1>
-        <p className="text-muted-foreground mt-1">
+        <p className="text-muted-foreground mt-2">
           Your analytical second opinion, powered by Grok. No punches pulled.
         </p>
       </div>
@@ -117,12 +117,12 @@ export default function GrockyBalboaPage() {
 
         {/* Chat Tab */}
         <TabsContent value="chat" className="h-[calc(100vh-16rem)]">
-          <Card className="h-full flex flex-col">
-            <CardHeader className="border-b flex flex-row items-center justify-between">
+          <Card className="coach-card h-full flex flex-col">
+            <CardHeader className="border-b border-border/50 flex flex-row items-center justify-between">
               <div>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center">
-                    <Dumbbell className="w-4 h-4 text-white" />
+                <CardTitle className="coach-heading flex items-center gap-2 text-lg">
+                  <div className={`ai-icon-container w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center ${loading ? 'active ai-pulse' : ''}`}>
+                    <Dumbbell className="w-5 h-5 text-white" />
                   </div>
                   Grocky Balboa
                 </CardTitle>
@@ -131,7 +131,7 @@ export default function GrockyBalboaPage() {
                 </CardDescription>
               </div>
               {messages.length > 0 && (
-                <Button variant="outline" size="sm" onClick={handleClearChat}>
+                <Button variant="outline" size="sm" onClick={handleClearChat} className="coach-button-focus">
                   <Trash2 className="w-4 h-4 mr-2" />
                   Clear
                 </Button>
@@ -213,14 +213,14 @@ export default function GrockyBalboaPage() {
             </CardContent>
 
             {/* Input Area */}
-            <div className="border-t p-4">
+            <div className="border-t border-border/50 p-4">
               <div className="flex gap-2">
                 <Textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="Ask Grocky..."
                   rows={1}
-                  className="resize-none"
+                  className="resize-none coach-input-focus"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
@@ -231,7 +231,8 @@ export default function GrockyBalboaPage() {
                 <Button
                   onClick={handleSend}
                   disabled={!input.trim() || loading}
-                  className="bg-gradient-to-r from-orange-500 to-red-500 text-white shrink-0"
+                  className="btn-gradient-secondary shrink-0 coach-button-accessible"
+                  aria-label="Send message"
                 >
                   <Send className="w-4 h-4" />
                 </Button>
@@ -242,11 +243,13 @@ export default function GrockyBalboaPage() {
 
         {/* Plan Review Tab */}
         <TabsContent value="review">
-          <Card>
+          <Card className="coach-card">
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle className="flex items-center gap-2">
-                  <FileSearch className="w-5 h-5" />
+                <CardTitle className="coach-heading flex items-center gap-2">
+                  <div className={`ai-icon-container p-2 rounded-lg bg-gradient-to-br from-orange-500/15 to-red-500/15 ${reviewLoading ? 'active ai-pulse' : ''}`}>
+                    <FileSearch className="w-5 h-5 text-orange-500" />
+                  </div>
                   Training Plan Review
                 </CardTitle>
                 <CardDescription>
@@ -254,7 +257,7 @@ export default function GrockyBalboaPage() {
                 </CardDescription>
               </div>
               {planReview && (
-                <Button variant="outline" size="sm" onClick={handleClearReview}>
+                <Button variant="outline" size="sm" onClick={handleClearReview} className="coach-button-focus">
                   <Trash2 className="w-4 h-4 mr-2" />
                   Clear
                 </Button>
@@ -262,14 +265,15 @@ export default function GrockyBalboaPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {!planReview && !reviewLoading && (
-                <div className="text-center py-8">
-                  <FileSearch className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                  <p className="text-muted-foreground mb-4">
-                    Get an evidence-based second opinion on your training plan.
+                <div className="empty-state">
+                  <FileSearch className="empty-state-icon text-orange-500/50" />
+                  <p className="font-medium">Get an evidence-based second opinion</p>
+                  <p className="text-sm mt-1 mb-4">
+                    Grocky will analyze your training plan and provide feedback.
                   </p>
                   <Button
                     onClick={handlePlanReview}
-                    className="bg-gradient-to-r from-orange-500 to-red-500 text-white"
+                    className="btn-gradient-secondary coach-button-accessible"
                   >
                     <Dumbbell className="w-4 h-4 mr-2" />
                     Review My Plan
@@ -278,7 +282,7 @@ export default function GrockyBalboaPage() {
               )}
 
               {reviewLoading && (
-                <div className="space-y-4">
+                <div className="space-y-4 p-4 bg-gradient-to-br from-orange-500/5 to-red-500/5 rounded-lg">
                   <Skeleton className="h-4 w-full" />
                   <Skeleton className="h-4 w-3/4" />
                   <Skeleton className="h-4 w-5/6" />
@@ -289,7 +293,9 @@ export default function GrockyBalboaPage() {
 
               {planReview && (
                 <div className="prose dark:prose-invert max-w-none">
-                  <p>{planReview}</p>
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed bg-gradient-to-br from-orange-500/5 to-red-500/5 p-4 rounded-lg border border-border/50">
+                    {planReview}
+                  </div>
                 </div>
               )}
             </CardContent>

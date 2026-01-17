@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ClipboardList, CheckCircle, Save } from 'lucide-react';
+import { ClipboardList, CheckCircle, Save, Activity } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { Run } from '@/lib/db/types';
 
@@ -86,69 +86,74 @@ export default function LogRunsPage() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Log Runs</h1>
-        <p className="text-muted-foreground mt-1">
+        <h1 className="coach-heading text-3xl tracking-tight">Log Runs</h1>
+        <p className="text-muted-foreground mt-2">
           Record your post-run feedback and ratings.
         </p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Run Selector */}
-        <Card>
+        <Card className="coach-card lg:row-span-2">
           <CardHeader>
-            <CardTitle>Select Run</CardTitle>
+            <CardTitle className="coach-heading text-xl flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <ClipboardList className="w-4 h-4 text-primary" />
+              </div>
+              Select Run
+            </CardTitle>
             <CardDescription>Choose a recent run to log feedback for</CardDescription>
           </CardHeader>
           <CardContent>
             {loading ? (
-              <Skeleton className="h-10 w-full" />
+              <div className="space-y-2">
+                {[...Array(8)].map((_, i) => (
+                  <Skeleton key={i} className="h-16 w-full rounded-lg" />
+                ))}
+              </div>
             ) : runs.length > 0 ? (
-              <>
-                <Select value={selectedRun} onValueChange={setSelectedRun}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a run..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {runs.map((run) => (
-                      <SelectItem key={run.id} value={run.id}>
-                        {new Date(run.date).toLocaleDateString('en-US', {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric',
-                        })} - {run.distance_km.toFixed(1)} km
-                        {run.workout_name && ` (${run.workout_name})`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {selectedRun && (
-                  <div className="mt-4 p-3 rounded-lg bg-accent">
-                    {(() => {
-                      const run = getSelectedRunData();
-                      if (!run) return null;
-                      return (
-                        <div className="text-sm space-y-1">
-                          <p className="font-medium">{run.workout_name || 'Run'}</p>
-                          <p className="text-muted-foreground">
-                            {run.distance_km.toFixed(2)} km in {run.duration_min} min
-                            {run.avg_pace_str && ` • ${run.avg_pace_str}/km`}
-                          </p>
-                          {run.avg_hr && (
-                            <p className="text-muted-foreground">
-                              Avg HR: {run.avg_hr} bpm
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })()}
+              <div className="scrollable-list space-y-2 pr-2" style={{ maxHeight: '500px' }}>
+                {runs.map((run) => (
+                  <div
+                    key={run.id}
+                    onClick={() => setSelectedRun(run.id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && setSelectedRun(run.id)}
+                    className={`run-list-item flex items-center justify-between cursor-pointer touch-target-min ${
+                      selectedRun === run.id ? 'selected' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2.5 rounded-xl transition-colors ${
+                        selectedRun === run.id
+                          ? 'bg-gradient-to-br from-primary/30 to-secondary/30'
+                          : 'bg-gradient-to-br from-primary/15 to-secondary/15'
+                      }`}>
+                        <Activity className="w-4 h-4 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-semibold">{run.workout_name || 'Run'}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {new Date(run.date).toLocaleDateString('en-US', {
+                            weekday: 'short',
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="metric-value text-lg font-bold">{run.distance_km.toFixed(1)} km</p>
+                      <p className="text-sm text-muted-foreground font-mono">{run.avg_pace_str || '-'}</p>
+                    </div>
                   </div>
-                )}
-              </>
+                ))}
+              </div>
             ) : (
-              <div className="mt-8 text-center py-8 text-muted-foreground">
-                <ClipboardList className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No runs available to log.</p>
+              <div className="empty-state">
+                <ClipboardList className="empty-state-icon" />
+                <p className="font-medium">No runs available to log</p>
                 <p className="text-sm mt-1">
                   Sync from Strava to see your recent runs.
                 </p>
@@ -158,17 +163,22 @@ export default function LogRunsPage() {
         </Card>
 
         {/* Feedback Form */}
-        <Card>
+        <Card className="coach-card">
           <CardHeader>
-            <CardTitle>Run Feedback</CardTitle>
+            <CardTitle className="coach-heading text-xl flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-secondary/10">
+                <Save className="w-4 h-4 text-secondary" />
+              </div>
+              Run Feedback
+            </CardTitle>
             <CardDescription>How did the run feel?</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Rating */}
             <div className="space-y-3">
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <label className="text-sm font-medium">Overall Rating</label>
-                <span className="text-sm text-muted-foreground">{rating[0]}/10</span>
+                <span className="metric-value text-sm font-bold">{rating[0]}/10</span>
               </div>
               <Slider
                 value={rating}
@@ -176,15 +186,15 @@ export default function LogRunsPage() {
                 max={10}
                 min={1}
                 step={1}
-                className="w-full"
+                className="coach-slider touch-target-min"
               />
             </div>
 
             {/* Effort */}
             <div className="space-y-3">
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <label className="text-sm font-medium">Effort Level (RPE)</label>
-                <span className="text-sm text-muted-foreground">{effort[0]}/10</span>
+                <span className="metric-value text-sm font-bold">{effort[0]}/10</span>
               </div>
               <Slider
                 value={effort}
@@ -192,7 +202,7 @@ export default function LogRunsPage() {
                 max={10}
                 min={1}
                 step={1}
-                className="w-full"
+                className="coach-slider touch-target-min"
               />
             </div>
 
@@ -200,7 +210,7 @@ export default function LogRunsPage() {
             <div className="space-y-3">
               <label className="text-sm font-medium">How did you feel?</label>
               <Select value={feeling} onValueChange={setFeeling}>
-                <SelectTrigger>
+                <SelectTrigger className="coach-select-trigger">
                   <SelectValue placeholder="Select feeling..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -221,13 +231,14 @@ export default function LogRunsPage() {
                 onChange={(e) => setComment(e.target.value)}
                 placeholder="Any notes about the run..."
                 rows={3}
+                className="coach-input-focus"
               />
             </div>
 
             {/* Submit */}
             <Button
               onClick={handleSubmit}
-              className="w-full bg-gradient-to-r from-blue-500 to-green-500 text-white"
+              className="w-full btn-gradient-primary coach-button-accessible"
               disabled={!selectedRun || submitting}
             >
               {submitted ? (

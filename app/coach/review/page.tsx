@@ -87,18 +87,20 @@ export default function WeeklyReviewPage() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Weekly Review</h1>
-        <p className="text-muted-foreground mt-1">
+        <h1 className="coach-heading text-3xl tracking-tight">Weekly Review</h1>
+        <p className="text-muted-foreground mt-2">
           Reflect on your training week and get AI-powered insights.
         </p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* This Week's Runs */}
-        <Card>
+        <Card className="coach-card">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="w-5 h-5" />
+            <CardTitle className="coach-heading text-xl flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Calendar className="w-4 h-4 text-primary" />
+              </div>
               This Week&apos;s Runs
             </CardTitle>
             <CardDescription>{getWeekDateRange()}</CardDescription>
@@ -113,18 +115,18 @@ export default function WeeklyReviewPage() {
             ) : weeklyRuns.length > 0 ? (
               <>
                 {/* Summary Stats */}
-                <div className="grid grid-cols-3 gap-4 mb-4 p-3 bg-muted rounded-lg">
+                <div className="grid grid-cols-3 gap-4 mb-4 p-4 bg-gradient-to-r from-blue-500/5 to-green-500/5 rounded-xl border border-border/50">
                   <div className="text-center">
-                    <p className="text-2xl font-bold">{weeklyRuns.length}</p>
-                    <p className="text-xs text-muted-foreground">Runs</p>
+                    <p className="metric-value text-2xl">{weeklyRuns.length}</p>
+                    <p className="metric-label text-xs">Runs</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-2xl font-bold">{totalDistance.toFixed(1)}</p>
-                    <p className="text-xs text-muted-foreground">km</p>
+                    <p className="metric-value text-2xl">{totalDistance.toFixed(1)}</p>
+                    <p className="metric-label text-xs">km</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-2xl font-bold">{Math.round(totalDuration)}</p>
-                    <p className="text-xs text-muted-foreground">min</p>
+                    <p className="metric-value text-2xl">{Math.round(totalDuration)}</p>
+                    <p className="metric-label text-xs">min</p>
                   </div>
                 </div>
 
@@ -133,31 +135,31 @@ export default function WeeklyReviewPage() {
                   {weeklyRuns.map((run) => (
                     <div
                       key={run.id}
-                      className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                      className="run-list-item flex items-center justify-between"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-full bg-primary/10">
+                        <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20">
                           <Activity className="w-4 h-4 text-primary" />
                         </div>
                         <div>
-                          <p className="font-medium text-sm">{run.workout_name || run.run_type || 'Run'}</p>
+                          <p className="font-semibold text-sm">{run.workout_name || run.run_type || 'Run'}</p>
                           <p className="text-xs text-muted-foreground">
                             {new Date(run.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                           </p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="font-medium text-sm">{run.distance_km?.toFixed(1)} km</p>
-                        <p className="text-xs text-muted-foreground">{run.avg_pace_str || '-'}</p>
+                        <p className="metric-value text-sm">{run.distance_km?.toFixed(1)} km</p>
+                        <p className="text-xs text-muted-foreground font-mono">{run.avg_pace_str || '-'}</p>
                       </div>
                     </div>
                   ))}
                 </div>
               </>
             ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No runs this week yet.</p>
+              <div className="empty-state">
+                <Calendar className="empty-state-icon" />
+                <p className="font-medium">No runs this week yet</p>
                 <p className="text-sm mt-1">
                   Sync from Strava or log a run manually.
                 </p>
@@ -167,10 +169,15 @@ export default function WeeklyReviewPage() {
         </Card>
 
         {/* Weekly Check-in Form */}
-        <Card>
+        <Card className="coach-card">
           <CardHeader>
-            <CardTitle>Weekly Check-in</CardTitle>
-            <CardDescription>How was your week overall?</CardDescription>
+            <CardTitle className="coach-heading text-xl flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-secondary/10">
+                <TrendingUp className="w-4 h-4 text-secondary" />
+              </div>
+              Weekly Check-in
+            </CardTitle>
+            <CardDescription>Rate your week on each metric (1-10)</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Sliders - 2 column layout */}
@@ -178,10 +185,10 @@ export default function WeeklyReviewPage() {
               {/* Left Column */}
               <div className="space-y-6">
                 {/* Overall Feeling */}
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div className="flex justify-between items-center">
                     <label className="text-sm font-medium">Overall Feeling</label>
-                    <span className="text-sm text-muted-foreground">{overallFeeling[0]}/10</span>
+                    <span className="metric-value text-sm font-bold bg-primary/10 px-2 py-1 rounded">{overallFeeling[0]}/10</span>
                   </div>
                   <Slider
                     value={overallFeeling}
@@ -189,14 +196,19 @@ export default function WeeklyReviewPage() {
                     max={10}
                     min={1}
                     step={1}
+                    className="coach-slider touch-target-min"
                   />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Poor</span>
+                    <span>Excellent</span>
+                  </div>
                 </div>
 
                 {/* Sleep Quality */}
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div className="flex justify-between items-center">
                     <label className="text-sm font-medium">Sleep Quality</label>
-                    <span className="text-sm text-muted-foreground">{sleepQuality[0]}/10</span>
+                    <span className="metric-value text-sm font-bold bg-primary/10 px-2 py-1 rounded">{sleepQuality[0]}/10</span>
                   </div>
                   <Slider
                     value={sleepQuality}
@@ -204,17 +216,22 @@ export default function WeeklyReviewPage() {
                     max={10}
                     min={1}
                     step={1}
+                    className="coach-slider touch-target-min"
                   />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Poor</span>
+                    <span>Excellent</span>
+                  </div>
                 </div>
               </div>
 
               {/* Right Column */}
               <div className="space-y-6">
                 {/* Stress Level */}
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div className="flex justify-between items-center">
                     <label className="text-sm font-medium">Stress Level</label>
-                    <span className="text-sm text-muted-foreground">{stressLevel[0]}/10</span>
+                    <span className="metric-value text-sm font-bold bg-primary/10 px-2 py-1 rounded">{stressLevel[0]}/10</span>
                   </div>
                   <Slider
                     value={stressLevel}
@@ -222,7 +239,12 @@ export default function WeeklyReviewPage() {
                     max={10}
                     min={1}
                     step={1}
+                    className="coach-slider touch-target-min"
                   />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Low</span>
+                    <span>High</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -250,7 +272,7 @@ export default function WeeklyReviewPage() {
             </div>
 
             {error && (
-              <div className="p-3 rounded-lg bg-red-500/10 text-red-500 text-sm">
+              <div className="p-3 rounded-lg bg-red-500/10 text-red-500 text-sm border border-red-500/20">
                 {error}
               </div>
             )}
@@ -258,10 +280,12 @@ export default function WeeklyReviewPage() {
             {/* Analyze Button */}
             <Button
               onClick={handleAnalyze}
-              className="w-full bg-gradient-to-r from-blue-500 to-green-500 text-white"
+              className="w-full btn-gradient-primary coach-button-accessible"
               disabled={loading}
             >
-              <Brain className="w-4 h-4 mr-2" />
+              <div className={`ai-icon-container ${loading ? 'active' : ''}`}>
+                <Brain className="w-4 h-4 mr-2" />
+              </div>
               {loading ? 'Analyzing...' : 'Get AI Analysis'}
             </Button>
           </CardContent>
@@ -270,24 +294,27 @@ export default function WeeklyReviewPage() {
 
       {/* AI Analysis */}
       {(aiAnalysis || loading) && (
-        <Card>
+        <Card className="coach-card">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Brain className="w-5 h-5" />
+            <CardTitle className="coach-heading text-xl flex items-center gap-2">
+              <div className={`ai-icon-container p-2 rounded-lg bg-gradient-to-br from-primary/15 to-secondary/15 ${loading ? 'active ai-pulse' : ''}`}>
+                <Brain className="w-5 h-5 text-primary" />
+              </div>
               Coach&apos;s Analysis
             </CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <Skeleton className="h-4 w-full" />
                 <Skeleton className="h-4 w-3/4" />
                 <Skeleton className="h-4 w-5/6" />
                 <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-4 w-4/5" />
               </div>
             ) : (
               <div className="prose dark:prose-invert max-w-none">
-                <div className="whitespace-pre-wrap text-sm">{aiAnalysis}</div>
+                <div className="whitespace-pre-wrap text-sm leading-relaxed bg-gradient-to-br from-primary/5 to-secondary/5 p-4 rounded-lg border border-border/50">{aiAnalysis}</div>
               </div>
             )}
           </CardContent>
@@ -296,36 +323,38 @@ export default function WeeklyReviewPage() {
 
       {/* Weekly Trend */}
       {weeklyRuns.length > 0 && (
-        <Card>
+        <Card className="coach-card">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5" />
+            <CardTitle className="coach-heading text-xl flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <TrendingUp className="w-4 h-4 text-primary" />
+              </div>
               Week Summary
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="text-center p-4 bg-muted rounded-lg">
-                <p className="text-3xl font-bold text-primary">{weeklyRuns.length}</p>
-                <p className="text-sm text-muted-foreground">Total Runs</p>
+              <div className="text-center p-4 bg-gradient-to-br from-blue-500/5 to-green-500/5 rounded-xl border border-border/50">
+                <p className="metric-value text-3xl">{weeklyRuns.length}</p>
+                <p className="metric-label text-sm">Total Runs</p>
               </div>
-              <div className="text-center p-4 bg-muted rounded-lg">
-                <p className="text-3xl font-bold text-primary">{totalDistance.toFixed(1)}</p>
-                <p className="text-sm text-muted-foreground">Total km</p>
+              <div className="text-center p-4 bg-gradient-to-br from-blue-500/5 to-green-500/5 rounded-xl border border-border/50">
+                <p className="metric-value text-3xl">{totalDistance.toFixed(1)}</p>
+                <p className="metric-label text-sm">Total km</p>
               </div>
-              <div className="text-center p-4 bg-muted rounded-lg">
-                <p className="text-3xl font-bold text-primary">
+              <div className="text-center p-4 bg-gradient-to-br from-blue-500/5 to-green-500/5 rounded-xl border border-border/50">
+                <p className="metric-value text-3xl">
                   {weeklyRuns.length > 0 ? (totalDistance / weeklyRuns.length).toFixed(1) : 0}
                 </p>
-                <p className="text-sm text-muted-foreground">Avg Distance</p>
+                <p className="metric-label text-sm">Avg Distance</p>
               </div>
-              <div className="text-center p-4 bg-muted rounded-lg">
-                <p className="text-3xl font-bold text-primary">
+              <div className="text-center p-4 bg-gradient-to-br from-blue-500/5 to-green-500/5 rounded-xl border border-border/50">
+                <p className="metric-value text-3xl">
                   {weeklyRuns.filter(r => r.avg_hr).length > 0
                     ? Math.round(weeklyRuns.reduce((sum, r) => sum + (r.avg_hr || 0), 0) / weeklyRuns.filter(r => r.avg_hr).length)
                     : '-'}
                 </p>
-                <p className="text-sm text-muted-foreground">Avg HR</p>
+                <p className="metric-label text-sm">Avg HR</p>
               </div>
             </div>
           </CardContent>

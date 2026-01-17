@@ -680,52 +680,42 @@ html {
   pointer-events: none;
 }
 
-/* Range Slider with Visible Track */
-.coach-slider {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 8px;
+/* Range Slider with Visible Track and Color Gradient */
+.coach-slider [data-slot="slider-track"] {
+  height: 10px !important;
   background: linear-gradient(to right,
     hsl(0 84% 60%) 0%,
     hsl(45 93% 47%) 50%,
-    hsl(142 71% 45%) 100%);
-  border-radius: 9999px;
-  outline: none;
-  opacity: 0.9;
-  transition: opacity 0.2s;
+    hsl(142 71% 45%) 100%) !important;
+  border-radius: 9999px !important;
 }
 
-.coach-slider:hover {
-  opacity: 1;
+.coach-slider [data-slot="slider-range"] {
+  background: transparent !important;
 }
 
-.coach-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 24px;
-  height: 24px;
-  background: white;
-  border: 3px solid hsl(var(--primary));
-  border-radius: 50%;
-  cursor: pointer;
-  box-shadow: 0 2px 6px rgb(0 0 0 / 0.2);
-  transition: transform 0.2s, box-shadow 0.2s;
+.coach-slider [data-slot="slider-thumb"] {
+  width: 28px !important;
+  height: 28px !important;
+  background: white !important;
+  border: 3px solid hsl(var(--primary)) !important;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.25) !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
 }
 
-.coach-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.1);
-  box-shadow: 0 4px 12px rgb(0 0 0 / 0.3);
+.coach-slider [data-slot="slider-thumb"]:hover {
+  transform: scale(1.15) !important;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.3) !important;
 }
 
-.coach-slider::-moz-range-thumb {
-  width: 24px;
-  height: 24px;
-  background: white;
-  border: 3px solid hsl(var(--primary));
-  border-radius: 50%;
-  cursor: pointer;
-  box-shadow: 0 2px 6px rgb(0 0 0 / 0.2);
+.coach-slider [data-slot="slider-thumb"]:focus-visible {
+  outline: none !important;
+  box-shadow: 0 0 0 3px hsl(var(--background)), 0 0 0 6px hsl(var(--primary) / 0.5) !important;
+}
+
+.dark .coach-slider [data-slot="slider-thumb"] {
+  background: hsl(var(--card)) !important;
+  border-color: hsl(var(--primary)) !important;
 }
 
 /* Run Selection List Item */
@@ -891,4 +881,234 @@ html {
   height: 64px;
   margin-bottom: 16px;
   opacity: 0.5;
+}
+
+/* ========== ENHANCED STAT CARD WITH SPARKLINE ========== */
+.stat-card-sparkline {
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card-sparkline::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(to top,
+    hsl(var(--primary) / 0.08) 0%,
+    transparent 100%);
+  pointer-events: none;
+}
+
+.stat-card-sparkline::after {
+  content: '';
+  position: absolute;
+  bottom: 10%;
+  left: 10%;
+  right: 10%;
+  height: 30%;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30' preserveAspectRatio='none'%3E%3Cpath d='M0,25 Q10,20 20,22 T40,18 T60,20 T80,15 T100,18' stroke='%233B82F6' stroke-width='1.5' fill='none' opacity='0.3'/%3E%3C/svg%3E")
+    no-repeat bottom;
+  background-size: 100% 100%;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.dark .stat-card-sparkline::after {
+  opacity: 0.4;
+}
+
+/* Enhanced Button Focus States */
+.coach-button-focus:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px hsl(var(--background)),
+    0 0 0 4px hsl(var(--primary));
+}
+
+/* Enhanced Input Focus States */
+.coach-input-focus:focus-visible {
+  outline: none;
+  border-color: hsl(var(--primary));
+  box-shadow:
+    0 0 0 3px hsl(var(--primary) / 0.15);
+}
+
+/* Minimum Button Size for Accessibility */
+.coach-button-accessible {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 12px 24px;
+}
+
+/* AI Icon Container with Ring Animation */
+.ai-icon-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ai-icon-container.active::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid hsl(var(--primary) / 0.5);
+  animation: ai-ring-expand 1.5s ease-out infinite;
+}
+
+.ai-icon-container.active::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid hsl(var(--primary) / 0.3);
+  animation: ai-ring-expand 1.5s ease-out infinite 0.3s;
+}
+
+@keyframes ai-ring-expand {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+/* Chat Interface Styling */
+.chat-message-user {
+  background: linear-gradient(135deg, hsl(217 91% 60%) 0%, hsl(217 91% 55%) 100%);
+}
+
+.chat-message-assistant {
+  background: hsl(var(--accent));
+  border: 1px solid hsl(var(--border));
+}
+
+/* Workout Type Tags with Icons for Accessibility */
+.workout-tag-rest {
+  background: hsl(240 5% 65% / 0.15);
+  color: hsl(240 5% 45%);
+}
+
+.dark .workout-tag-rest {
+  background: hsl(240 5% 65% / 0.2);
+  color: hsl(240 5% 75%);
+}
+
+/* Week Navigation Buttons */
+.week-nav-button {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+  transition: all 0.2s ease;
+}
+
+.week-nav-button:hover:not(:disabled) {
+  background: hsl(var(--accent));
+}
+
+.week-nav-button:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px hsl(var(--background)),
+    0 0 0 4px hsl(var(--primary));
+}
+
+/* Training Plan Week Card */
+.week-workout-card {
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  transition: all 0.2s ease;
+}
+
+.week-workout-card:hover {
+  border-color: hsl(var(--primary) / 0.3);
+  box-shadow: 0 2px 8px hsl(var(--primary) / 0.1);
+}
+
+/* Primary Gradient Button */
+.btn-gradient-primary {
+  background: linear-gradient(135deg, hsl(217 91% 60%) 0%, hsl(160 84% 39%) 100%);
+  color: white;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.btn-gradient-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px hsl(217 91% 60% / 0.4);
+}
+
+.btn-gradient-primary:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px hsl(var(--background)),
+    0 0 0 4px hsl(217 91% 60%);
+}
+
+/* Secondary Gradient Button (Orange/Red for Grocky) */
+.btn-gradient-secondary {
+  background: linear-gradient(135deg, hsl(25 95% 53%) 0%, hsl(0 72% 51%) 100%);
+  color: white;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.btn-gradient-secondary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px hsl(25 95% 53% / 0.4);
+}
+
+/* Enhanced Select Trigger */
+.coach-select-trigger {
+  min-height: 44px;
+  border: 1px solid hsl(var(--border));
+  transition: all 0.2s ease;
+}
+
+.coach-select-trigger:hover {
+  border-color: hsl(var(--primary) / 0.5);
+}
+
+.coach-select-trigger:focus-visible {
+  outline: none;
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 3px hsl(var(--primary) / 0.15);
+}
+
+/* Scrollable List Container */
+.scrollable-list {
+  max-height: 400px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+
+.scrollable-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollable-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollable-list::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 3px;
+}
+
+.scrollable-list::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.3);
 }

@@ -69,13 +69,13 @@ export default function AskCoachPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Ask Coach</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="coach-heading text-3xl tracking-tight">Ask Coach</h1>
+          <p className="text-muted-foreground mt-2">
             Chat with your AI running coach powered by Claude.
           </p>
         </div>
         {messages.length > 0 && (
-          <Button variant="outline" size="sm" onClick={handleClear}>
+          <Button variant="outline" size="sm" onClick={handleClear} className="coach-button-focus">
             <Trash2 className="w-4 h-4 mr-2" />
             Clear Chat
           </Button>
@@ -83,11 +83,11 @@ export default function AskCoachPage() {
       </div>
 
       {/* Chat Container */}
-      <Card className="flex-1 flex flex-col overflow-hidden">
-        <CardHeader className="border-b">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-green-500 flex items-center justify-center">
-              <Bot className="w-4 h-4 text-white" />
+      <Card className="coach-card flex-1 flex flex-col overflow-hidden">
+        <CardHeader className="border-b border-border/50">
+          <CardTitle className="coach-heading flex items-center gap-2 text-lg">
+            <div className={`ai-icon-container w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-green-500 flex items-center justify-center ${loading ? 'active ai-pulse' : ''}`}>
+              <Bot className="w-5 h-5 text-white" />
             </div>
             AI Running Coach
           </CardTitle>
@@ -171,14 +171,14 @@ export default function AskCoachPage() {
         </CardContent>
 
         {/* Input Area */}
-        <div className="border-t p-4">
+        <div className="border-t border-border/50 p-4">
           <div className="flex gap-2">
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask your coach..."
               rows={1}
-              className="resize-none"
+              className="resize-none coach-input-focus"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -189,7 +189,8 @@ export default function AskCoachPage() {
             <Button
               onClick={handleSend}
               disabled={!input.trim() || loading}
-              className="bg-gradient-to-r from-blue-500 to-green-500 text-white shrink-0"
+              className="btn-gradient-primary shrink-0 coach-button-accessible"
+              aria-label="Send message"
             >
               <Send className="w-4 h-4" />
             </Button>
