@@ -22,7 +22,29 @@
       "Bash(tasklist:*)",
       "Bash(git reset:*)",
       "Bash(bunx tsx:*)",
-      "Bash(bun run:*)"
+      "Bash(bun run:*)",
+      "Bash(taskkill /F /PID 22840)",
+      "Bash(taskkill //F //PID 22840)",
+      "Bash(bunx openssl:*)",
+      "mcp__supabase__list_tables",
+      "mcp__supabase__apply_migration",
+      "mcp__supabase__execute_sql",
+      "Bash(curl:*)",
+      "mcp__vercel__list_teams",
+      "mcp__vercel__list_projects",
+      "mcp__vercel__deploy_to_vercel",
+      "Bash(npx vercel:*)",
+      "Bash(git remote set-url:*)",
+      "mcp__vercel__list_deployments",
+      "mcp__vercel__get_deployment_build_logs",
+      "mcp__vercel__web_fetch_vercel_url",
+      "mcp__vercel__get_project",
+      "mcp__vercel__get_deployment",
+      "Bash(git checkout:*)"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "supabase"
+  ]
 }

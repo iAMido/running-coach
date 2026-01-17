@@ -144,16 +144,16 @@ export default function CoachDashboard() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="coach-heading text-3xl tracking-tight">
+        <h1 className="coach-heading text-2xl md:text-3xl tracking-tight">
           Welcome back, {session?.user?.name?.split(' ')[0] || 'Coach'}
         </h1>
-        <p className="text-muted-foreground mt-2">
+        <p className="text-muted-foreground mt-1 md:mt-2 text-sm md:text-base">
           Here&apos;s your training overview for today.
         </p>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 md:gap-4 grid-cols-2 lg:grid-cols-4">
         <StatsCard
           title="Total Runs"
           value={stats?.totalRuns ?? 0}
@@ -192,36 +192,63 @@ export default function CoachDashboard() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="space-y-3">
+            <div className="flex gap-3 overflow-x-auto pb-2 md:grid md:gap-3 md:overflow-visible scrollbar-hide">
               {[...Array(5)].map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full rounded-lg" />
+                <Skeleton key={i} className="h-24 min-w-[200px] md:min-w-0 md:w-full rounded-lg shrink-0 md:shrink" />
               ))}
             </div>
           ) : recentRuns.length > 0 ? (
-            <div className="space-y-2">
-              {recentRuns.map((run) => (
-                <div
-                  key={run.id}
-                  className="run-list-item flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20">
-                      <Activity className="w-5 h-5 text-primary" />
+            <>
+              {/* Mobile: Horizontal scroll */}
+              <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-hide md:hidden">
+                {recentRuns.map((run) => (
+                  <div
+                    key={run.id}
+                    className="run-list-item flex flex-col gap-2 min-w-[180px] shrink-0 snap-start p-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-lg bg-gradient-to-br from-primary/20 to-secondary/20">
+                        <Activity className="w-4 h-4 text-primary" />
+                      </div>
+                      <p className="font-semibold text-sm truncate">{run.workout_name || run.run_type || 'Run'}</p>
                     </div>
-                    <div>
-                      <p className="font-semibold">{run.workout_name || run.run_type || 'Run'}</p>
-                      <p className="text-sm text-muted-foreground">
+                    <div className="flex justify-between items-end">
+                      <p className="text-xs text-muted-foreground">
                         {new Date(run.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                       </p>
+                      <div className="text-right">
+                        <p className="metric-value text-base font-bold">{run.distance_km?.toFixed(1)} km</p>
+                      </div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="metric-value text-lg">{run.distance_km?.toFixed(1)} km</p>
-                    <p className="text-sm text-muted-foreground font-mono">{run.avg_pace_str || '-'}</p>
+                ))}
+              </div>
+              {/* Desktop: Vertical list */}
+              <div className="hidden md:block space-y-2">
+                {recentRuns.map((run) => (
+                  <div
+                    key={run.id}
+                    className="run-list-item flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20">
+                        <Activity className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-semibold">{run.workout_name || run.run_type || 'Run'}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {new Date(run.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="metric-value text-lg">{run.distance_km?.toFixed(1)} km</p>
+                      <p className="text-sm text-muted-foreground font-mono">{run.avg_pace_str || '-'}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           ) : (
             <div className="empty-state">
               <Activity className="empty-state-icon" />

@@ -6,7 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ClipboardList, CheckCircle, Save, Activity } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { ClipboardList, CheckCircle, Save, Activity, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { Run } from '@/lib/db/types';
 
@@ -22,6 +23,7 @@ export default function LogRunsPage() {
   const [selectedRun, setSelectedRun] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
 
   useEffect(() => {
     fetchRuns();
@@ -73,6 +75,7 @@ export default function LogRunsPage() {
         setFeeling('');
         setComment('');
         setSelectedRun('');
+        setMobileSheetOpen(false);
         setTimeout(() => setSubmitted(false), 3000);
       }
     } catch (error) {
@@ -82,12 +85,99 @@ export default function LogRunsPage() {
     }
   };
 
+  const handleRunSelect = (runId: string) => {
+    setSelectedRun(runId);
+    // On mobile, open the sheet
+    if (window.innerWidth < 1024) {
+      setMobileSheetOpen(true);
+    }
+  };
+
+  const FeedbackFormContent = () => (
+    <div className="space-y-6">
+      {/* Rating */}
+      <div className="space-y-3">
+        <div className="flex justify-between items-center">
+          <label className="text-sm font-medium">Overall Rating</label>
+          <span className="metric-value text-sm font-bold">{rating[0]}/10</span>
+        </div>
+        <Slider
+          value={rating}
+          onValueChange={setRating}
+          max={10}
+          min={1}
+          step={1}
+          className="coach-slider touch-target-min"
+        />
+      </div>
+
+      {/* Effort */}
+      <div className="space-y-3">
+        <div className="flex justify-between items-center">
+          <label className="text-sm font-medium">Effort Level (RPE)</label>
+          <span className="metric-value text-sm font-bold">{effort[0]}/10</span>
+        </div>
+        <Slider
+          value={effort}
+          onValueChange={setEffort}
+          max={10}
+          min={1}
+          step={1}
+          className="coach-slider touch-target-min"
+        />
+      </div>
+
+      {/* Feeling */}
+      <div className="space-y-3">
+        <label className="text-sm font-medium">How did you feel?</label>
+        <Select value={feeling} onValueChange={setFeeling}>
+          <SelectTrigger className="coach-select-trigger">
+            <SelectValue placeholder="Select feeling..." />
+          </SelectTrigger>
+          <SelectContent>
+            {feelingOptions.map((opt) => (
+              <SelectItem key={opt} value={opt.toLowerCase()}>
+                {opt}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Comment */}
+      <div className="space-y-3">
+        <label className="text-sm font-medium">Notes (optional)</label>
+        <Textarea
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          placeholder="Any notes about the run..."
+          rows={3}
+          className="coach-input-focus"
+        />
+      </div>
+
+      {/* Submit */}
+      <Button
+        onClick={handleSubmit}
+        className="w-full btn-gradient-primary coach-button-accessible"
+        disabled={!selectedRun || submitting}
+      >
+        {submitted ? (
+          <CheckCircle className="w-4 h-4 mr-2" />
+        ) : (
+          <Save className="w-4 h-4 mr-2" />
+        )}
+        {submitting ? 'Saving...' : submitted ? 'Saved!' : 'Save Feedback'}
+      </Button>
+    </div>
+  );
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 md:space-y-8">
       {/* Header */}
       <div>
-        <h1 className="coach-heading text-3xl tracking-tight">Log Runs</h1>
-        <p className="text-muted-foreground mt-2">
+        <h1 className="coach-heading text-2xl md:text-3xl tracking-tight">Log Runs</h1>
+        <p className="text-muted-foreground mt-1 md:mt-2 text-sm md:text-base">
           Record your post-run feedback and ratings.
         </p>
       </div>
@@ -116,10 +206,10 @@ export default function LogRunsPage() {
                 {runs.map((run) => (
                   <div
                     key={run.id}
-                    onClick={() => setSelectedRun(run.id)}
+                    onClick={() => handleRunSelect(run.id)}
                     role="button"
                     tabIndex={0}
-                    onKeyDown={(e) => e.key === 'Enter' && setSelectedRun(run.id)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleRunSelect(run.id)}
                     className={`run-list-item flex items-center justify-between cursor-pointer touch-target-min ${
                       selectedRun === run.id ? 'selected' : ''
                     }`}
@@ -162,8 +252,8 @@ export default function LogRunsPage() {
           </CardContent>
         </Card>
 
-        {/* Feedback Form */}
-        <Card className="coach-card">
+        {/* Feedback Form - Desktop Only */}
+        <Card className="coach-card hidden lg:block">
           <CardHeader>
             <CardTitle className="coach-heading text-xl flex items-center gap-2">
               <div className="p-2 rounded-lg bg-secondary/10">
@@ -173,84 +263,36 @@ export default function LogRunsPage() {
             </CardTitle>
             <CardDescription>How did the run feel?</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Rating */}
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <label className="text-sm font-medium">Overall Rating</label>
-                <span className="metric-value text-sm font-bold">{rating[0]}/10</span>
-              </div>
-              <Slider
-                value={rating}
-                onValueChange={setRating}
-                max={10}
-                min={1}
-                step={1}
-                className="coach-slider touch-target-min"
-              />
-            </div>
-
-            {/* Effort */}
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <label className="text-sm font-medium">Effort Level (RPE)</label>
-                <span className="metric-value text-sm font-bold">{effort[0]}/10</span>
-              </div>
-              <Slider
-                value={effort}
-                onValueChange={setEffort}
-                max={10}
-                min={1}
-                step={1}
-                className="coach-slider touch-target-min"
-              />
-            </div>
-
-            {/* Feeling */}
-            <div className="space-y-3">
-              <label className="text-sm font-medium">How did you feel?</label>
-              <Select value={feeling} onValueChange={setFeeling}>
-                <SelectTrigger className="coach-select-trigger">
-                  <SelectValue placeholder="Select feeling..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {feelingOptions.map((opt) => (
-                    <SelectItem key={opt} value={opt.toLowerCase()}>
-                      {opt}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Comment */}
-            <div className="space-y-3">
-              <label className="text-sm font-medium">Notes (optional)</label>
-              <Textarea
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="Any notes about the run..."
-                rows={3}
-                className="coach-input-focus"
-              />
-            </div>
-
-            {/* Submit */}
-            <Button
-              onClick={handleSubmit}
-              className="w-full btn-gradient-primary coach-button-accessible"
-              disabled={!selectedRun || submitting}
-            >
-              {submitted ? (
-                <CheckCircle className="w-4 h-4 mr-2" />
-              ) : (
-                <Save className="w-4 h-4 mr-2" />
-              )}
-              {submitting ? 'Saving...' : submitted ? 'Saved!' : 'Save Feedback'}
-            </Button>
+          <CardContent>
+            <FeedbackFormContent />
           </CardContent>
         </Card>
       </div>
+
+      {/* Mobile Feedback Sheet */}
+      <Sheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen}>
+        <SheetContent side="bottom" className="h-[85vh] rounded-t-2xl overflow-y-auto">
+          <SheetHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <SheetTitle className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-secondary/10">
+                  <Save className="w-4 h-4 text-secondary" />
+                </div>
+                Run Feedback
+              </SheetTitle>
+            </div>
+            {selectedRun && (
+              <p className="text-sm text-muted-foreground">
+                {runs.find(r => r.id === selectedRun)?.workout_name || 'Run'} - {' '}
+                {runs.find(r => r.id === selectedRun)?.distance_km?.toFixed(1)} km
+              </p>
+            )}
+          </SheetHeader>
+          <div className="pb-8">
+            <FeedbackFormContent />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

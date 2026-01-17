@@ -87,8 +87,8 @@ export default function WeeklyReviewPage() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="coach-heading text-3xl tracking-tight">Weekly Review</h1>
-        <p className="text-muted-foreground mt-2">
+        <h1 className="coach-heading text-2xl md:text-3xl tracking-tight">Weekly Review</h1>
+        <p className="text-muted-foreground mt-1 md:mt-2 text-sm md:text-base">
           Reflect on your training week and get AI-powered insights.
         </p>
       </div>
@@ -198,7 +198,7 @@ export default function WeeklyReviewPage() {
                     step={1}
                     className="coach-slider touch-target-min"
                   />
-                  <div className="flex justify-between text-xs text-muted-foreground">
+                  <div className="flex justify-between text-xs md:text-sm text-muted-foreground">
                     <span>Poor</span>
                     <span>Excellent</span>
                   </div>
@@ -218,7 +218,7 @@ export default function WeeklyReviewPage() {
                     step={1}
                     className="coach-slider touch-target-min"
                   />
-                  <div className="flex justify-between text-xs text-muted-foreground">
+                  <div className="flex justify-between text-xs md:text-sm text-muted-foreground">
                     <span>Poor</span>
                     <span>Excellent</span>
                   </div>
@@ -241,7 +241,7 @@ export default function WeeklyReviewPage() {
                     step={1}
                     className="coach-slider touch-target-min"
                   />
-                  <div className="flex justify-between text-xs text-muted-foreground">
+                  <div className="flex justify-between text-xs md:text-sm text-muted-foreground">
                     <span>Low</span>
                     <span>High</span>
                   </div>
@@ -333,28 +333,28 @@ export default function WeeklyReviewPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="text-center p-4 bg-gradient-to-br from-blue-500/5 to-green-500/5 rounded-xl border border-border/50">
-                <p className="metric-value text-3xl">{weeklyRuns.length}</p>
-                <p className="metric-label text-sm">Total Runs</p>
+            <div className="grid grid-cols-2 gap-3 md:gap-4 md:grid-cols-4">
+              <div className="text-center p-3 md:p-4 bg-gradient-to-br from-blue-500/5 to-green-500/5 rounded-xl border border-border/50">
+                <p className="metric-value text-2xl md:text-3xl">{weeklyRuns.length}</p>
+                <p className="metric-label text-xs md:text-sm">Total Runs</p>
               </div>
-              <div className="text-center p-4 bg-gradient-to-br from-blue-500/5 to-green-500/5 rounded-xl border border-border/50">
-                <p className="metric-value text-3xl">{totalDistance.toFixed(1)}</p>
-                <p className="metric-label text-sm">Total km</p>
+              <div className="text-center p-3 md:p-4 bg-gradient-to-br from-blue-500/5 to-green-500/5 rounded-xl border border-border/50">
+                <p className="metric-value text-2xl md:text-3xl">{totalDistance.toFixed(1)}</p>
+                <p className="metric-label text-xs md:text-sm">Total km</p>
               </div>
-              <div className="text-center p-4 bg-gradient-to-br from-blue-500/5 to-green-500/5 rounded-xl border border-border/50">
-                <p className="metric-value text-3xl">
+              <div className="text-center p-3 md:p-4 bg-gradient-to-br from-blue-500/5 to-green-500/5 rounded-xl border border-border/50">
+                <p className="metric-value text-2xl md:text-3xl">
                   {weeklyRuns.length > 0 ? (totalDistance / weeklyRuns.length).toFixed(1) : 0}
                 </p>
-                <p className="metric-label text-sm">Avg Distance</p>
+                <p className="metric-label text-xs md:text-sm">Avg Dist</p>
               </div>
-              <div className="text-center p-4 bg-gradient-to-br from-blue-500/5 to-green-500/5 rounded-xl border border-border/50">
-                <p className="metric-value text-3xl">
+              <div className="text-center p-3 md:p-4 bg-gradient-to-br from-blue-500/5 to-green-500/5 rounded-xl border border-border/50">
+                <p className="metric-value text-2xl md:text-3xl">
                   {weeklyRuns.filter(r => r.avg_hr).length > 0
                     ? Math.round(weeklyRuns.reduce((sum, r) => sum + (r.avg_hr || 0), 0) / weeklyRuns.filter(r => r.avg_hr).length)
                     : '-'}
                 </p>
-                <p className="metric-label text-sm">Avg HR</p>
+                <p className="metric-label text-xs md:text-sm">Avg HR</p>
               </div>
             </div>
           </CardContent>
