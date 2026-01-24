@@ -72,6 +72,22 @@ export interface TrainingPlan {
   start_date?: string;
   current_week_num: number;
   created_at?: string;
+  // Calculated week info (added by API)
+  week_info?: WeekInfo;
+  isAfterEnd?: boolean;
+}
+
+export interface WeekInfo {
+  currentWeek: number;
+  isBeforeStart: boolean;
+  isAfterEnd: boolean;
+  weekStartDate: string;
+  weekEndDate: string;
+  planStartDate: string;
+  planEndDate: string;
+  weekDateRange: string;
+  daysIntoWeek: number;
+  daysRemaining: number;
 }
 
 export interface PlanData {

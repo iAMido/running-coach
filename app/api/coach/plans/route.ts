@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { supabase } from '@/lib/db/supabase';
+import { calculateCurrentWeek, formatWeekDateRange } from '@/lib/utils/week-calculator';
 
 const DEV_USER_ID = 'idomosseri@gmail.com';
 
@@ -25,6 +26,32 @@ export async function GET() {
       .single();
 
     if (error && error.code !== 'PGRST116') throw error;
+
+    // If we have a plan, calculate the current week dynamically
+    if (data && data.start_date) {
+      const weekInfo = calculateCurrentWeek(data.start_date, data.duration_weeks);
+
+      // Return plan with calculated current week
+      return NextResponse.json({
+        plan: {
+          ...data,
+          current_week_num: weekInfo.currentWeek,
+          // Additional info for the UI
+          week_info: {
+            currentWeek: weekInfo.currentWeek,
+            isBeforeStart: weekInfo.isBeforeStart,
+            isAfterEnd: weekInfo.isAfterEnd,
+            weekStartDate: weekInfo.weekStartDate.toISOString(),
+            weekEndDate: weekInfo.weekEndDate.toISOString(),
+            planStartDate: weekInfo.planStartDate.toISOString(),
+            planEndDate: weekInfo.planEndDate.toISOString(),
+            weekDateRange: formatWeekDateRange(weekInfo.weekStartDate, weekInfo.weekEndDate),
+            daysIntoWeek: weekInfo.daysIntoWeek,
+            daysRemaining: weekInfo.daysRemaining,
+          }
+        }
+      });
+    }
 
     return NextResponse.json({ plan: data || null });
   } catch (error) {

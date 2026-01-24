@@ -73,11 +73,11 @@ export function BottomNav() {
               <span className="text-[10px] font-medium">More</span>
             </button>
           </SheetTrigger>
-          <SheetContent side="bottom" className="h-auto max-h-[70vh] rounded-t-2xl">
-            <SheetHeader className="pb-4">
+          <SheetContent side="bottom" className="h-auto max-h-[70vh] rounded-t-2xl px-4 pb-8 pt-2 bg-background">
+            <SheetHeader className="pb-4 border-b border-border mb-2">
               <SheetTitle>Menu</SheetTitle>
             </SheetHeader>
-            <div className="space-y-1 pb-4">
+            <div className="space-y-1 pb-4 bg-background">
               {menuItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.href;

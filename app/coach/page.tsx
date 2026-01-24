@@ -4,9 +4,10 @@ import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { Activity, Timer, TrendingUp, Calendar } from 'lucide-react';
+import { Activity, Timer, TrendingUp, Calendar, CheckCircle2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { DashboardStats, Run, TrainingPlan, PlanWeek, Workout } from '@/lib/db/types';
+import { isWorkoutToday, getTodayDayName } from '@/lib/utils/week-calculator';
 
 function StatsCard({
   title,
@@ -267,8 +268,11 @@ export default function CoachDashboard() {
           <CardTitle className="coach-heading text-xl">This Week&apos;s Training</CardTitle>
           <CardDescription>
             {activePlan
-              ? `${activePlan.plan_type} - Week ${activePlan.current_week_num}`
+              ? `${activePlan.plan_type} - Week ${activePlan.current_week_num} of ${activePlan.duration_weeks}${activePlan.week_info?.weekDateRange ? ` (${activePlan.week_info.weekDateRange})` : ''}`
               : 'No active training plan'}
+            {activePlan?.isAfterEnd && (
+              <Badge variant="outline" className="ml-2 text-amber-600 border-amber-600">Plan Completed</Badge>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -302,29 +306,46 @@ export default function CoachDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {Object.entries(currentWeekWorkouts).map(([day, workout]) => (
-                      <tr key={day} className="border-b last:border-0 hover:bg-accent/50 transition-colors">
-                        <td className="py-3 px-2 font-medium">{day}</td>
-                        <td className="py-3 px-2">
-                          <Badge variant="outline" className="font-normal">
-                            {typeof workout === 'object' ? workout.type : workout}
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-2 text-muted-foreground">
-                          {typeof workout === 'object' ? (workout.distance || workout.duration || '-') : '-'}
-                        </td>
-                        <td className="py-3 px-2 text-muted-foreground hidden md:table-cell">
-                          {typeof workout === 'object' ? (workout.target_pace || workout.target_hr || '-') : '-'}
-                        </td>
-                        <td className="py-3 px-2 text-muted-foreground text-xs hidden lg:table-cell max-w-[200px] truncate">
-                          {typeof workout === 'object' && workout.description
-                            ? (workout.description.length > 50
-                                ? workout.description.substring(0, 50) + '...'
-                                : workout.description)
-                            : '-'}
-                        </td>
-                      </tr>
-                    ))}
+                    {Object.entries(currentWeekWorkouts).map(([day, workout]) => {
+                      const isToday = isWorkoutToday(day);
+                      return (
+                        <tr
+                          key={day}
+                          className={`border-b last:border-0 transition-colors ${
+                            isToday
+                              ? 'bg-gradient-to-r from-primary/10 to-secondary/10 border-l-4 border-l-primary'
+                              : 'hover:bg-accent/50'
+                          }`}
+                        >
+                          <td className="py-3 px-2 font-medium">
+                            <div className="flex items-center gap-2">
+                              {day}
+                              {isToday && (
+                                <Badge variant="default" className="text-[10px] py-0 px-1.5 bg-primary">Today</Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-2">
+                            <Badge variant="outline" className={`font-normal ${isToday ? 'border-primary text-primary' : ''}`}>
+                              {typeof workout === 'object' ? workout.type : workout}
+                            </Badge>
+                          </td>
+                          <td className={`py-3 px-2 ${isToday ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
+                            {typeof workout === 'object' ? (workout.distance || workout.duration || '-') : '-'}
+                          </td>
+                          <td className="py-3 px-2 text-muted-foreground hidden md:table-cell">
+                            {typeof workout === 'object' ? (workout.target_pace || workout.target_hr || '-') : '-'}
+                          </td>
+                          <td className="py-3 px-2 text-muted-foreground text-xs hidden lg:table-cell max-w-[200px] truncate">
+                            {typeof workout === 'object' && workout.description
+                              ? (workout.description.length > 50
+                                  ? workout.description.substring(0, 50) + '...'
+                                  : workout.description)
+                              : '-'}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

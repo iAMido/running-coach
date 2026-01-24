@@ -7,9 +7,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Target, ChevronLeft, ChevronRight, Sparkles, Calendar, Activity } from 'lucide-react';
+import { Target, ChevronLeft, ChevronRight, Sparkles, Calendar, Activity, Home } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { TrainingPlan, PlanWeek, Workout } from '@/lib/db/types';
+import { isWorkoutToday } from '@/lib/utils/week-calculator';
 
 const planTypes = [
   { value: 'half-marathon', label: 'Half Marathon' },
@@ -42,7 +43,8 @@ export default function TrainingPlanPage() {
   const [generating, setGenerating] = useState(false);
   const [activePlan, setActivePlan] = useState<TrainingPlan | null>(null);
   const [loading, setLoading] = useState(true);
-  const [currentWeek, setCurrentWeek] = useState(1);
+  const [viewingWeek, setViewingWeek] = useState(1); // Week being viewed (can be different from current)
+  const [calculatedCurrentWeek, setCalculatedCurrentWeek] = useState(1); // Actual current week based on date
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -56,7 +58,10 @@ export default function TrainingPlanPage() {
         const data = await response.json();
         if (data.plan) {
           setActivePlan(data.plan);
-          setCurrentWeek(data.plan.current_week_num || 1);
+          // Use calculated current week from API
+          const currentWeek = data.plan.current_week_num || 1;
+          setCalculatedCurrentWeek(currentWeek);
+          setViewingWeek(currentWeek); // Start viewing the current week
         }
       }
     } catch (err) {
@@ -65,6 +70,14 @@ export default function TrainingPlanPage() {
       setLoading(false);
     }
   };
+
+  // Jump to current week
+  const jumpToCurrentWeek = () => {
+    setViewingWeek(calculatedCurrentWeek);
+  };
+
+  // Check if currently viewing the actual current week
+  const isViewingCurrentWeek = viewingWeek === calculatedCurrentWeek;
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -89,7 +102,8 @@ export default function TrainingPlanPage() {
       }
 
       setActivePlan(data.plan);
-      setCurrentWeek(1);
+      setCalculatedCurrentWeek(1);
+      setViewingWeek(1);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate plan');
     } finally {
@@ -117,7 +131,7 @@ export default function TrainingPlanPage() {
 
   const getCurrentWeekData = (): PlanWeek | null => {
     const weeks = getPlanWeeks();
-    return weeks.find(w => w.week_number === currentWeek) || null;
+    return weeks.find(w => w.week_number === viewingWeek) || null;
   };
 
   const getWeekDateRange = (weekNum: number): string => {
@@ -172,13 +186,35 @@ export default function TrainingPlanPage() {
                           {activePlan.plan_type}
                         </CardTitle>
                         <CardDescription className="mt-2">
-                          Week {currentWeek} of {totalWeeks}
-                          {weekData?.phase && ` - ${weekData.phase}`}
+                          Currently on Week {calculatedCurrentWeek} of {totalWeeks}
+                          {activePlan.week_info?.weekDateRange && ` (${activePlan.week_info.weekDateRange})`}
+                          {activePlan.week_info?.daysRemaining !== undefined && activePlan.week_info.daysRemaining > 0 && (
+                            <span className="ml-2 text-muted-foreground">
+                              {activePlan.week_info.daysRemaining} days remaining
+                            </span>
+                          )}
                         </CardDescription>
                       </div>
-                      <Badge variant="outline" className="text-green-600 border-green-600 bg-green-500/10 px-3 py-1">
-                        Active
-                      </Badge>
+                      <div className="flex flex-col items-end gap-2">
+                        <Badge variant="outline" className={`px-3 py-1 ${
+                          activePlan.isAfterEnd
+                            ? 'text-amber-600 border-amber-600 bg-amber-500/10'
+                            : 'text-green-600 border-green-600 bg-green-500/10'
+                        }`}>
+                          {activePlan.isAfterEnd ? 'Completed' : 'Active'}
+                        </Badge>
+                        {!isViewingCurrentWeek && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={jumpToCurrentWeek}
+                            className="text-xs"
+                          >
+                            <Home className="w-3 h-3 mr-1" />
+                            Current Week
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </CardHeader>
                 </Card>
@@ -189,20 +225,25 @@ export default function TrainingPlanPage() {
                     <div className="flex items-center justify-between">
                       <button
                         className="week-nav-button"
-                        disabled={currentWeek <= 1}
-                        onClick={() => setCurrentWeek(w => w - 1)}
+                        disabled={viewingWeek <= 1}
+                        onClick={() => setViewingWeek(w => w - 1)}
                         aria-label="Previous week"
                       >
                         <ChevronLeft className="w-5 h-5" />
                       </button>
                       <div className="text-center">
-                        <CardTitle className="coach-heading">Week {currentWeek}</CardTitle>
-                        <CardDescription>{getWeekDateRange(currentWeek)}</CardDescription>
+                        <CardTitle className="coach-heading flex items-center justify-center gap-2">
+                          Week {viewingWeek}
+                          {isViewingCurrentWeek && (
+                            <Badge variant="default" className="text-[10px] py-0 px-1.5 bg-primary">Current</Badge>
+                          )}
+                        </CardTitle>
+                        <CardDescription>{getWeekDateRange(viewingWeek)}</CardDescription>
                       </div>
                       <button
                         className="week-nav-button"
-                        disabled={currentWeek >= totalWeeks}
-                        onClick={() => setCurrentWeek(w => w + 1)}
+                        disabled={viewingWeek >= totalWeeks}
+                        onClick={() => setViewingWeek(w => w + 1)}
                         aria-label="Next week"
                       >
                         <ChevronRight className="w-5 h-5" />
@@ -218,51 +259,65 @@ export default function TrainingPlanPage() {
 
                     {weekData?.workouts && Object.keys(weekData.workouts).length > 0 ? (
                       <div className="space-y-3">
-                        {Object.entries(weekData.workouts).map(([day, workout]) => (
-                          <div
-                            key={day}
-                            className="week-workout-card flex items-start gap-3"
-                          >
-                            <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/15 to-secondary/15 mt-0.5">
-                              <Activity className="w-4 h-4 text-primary" />
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between flex-wrap gap-2">
-                                <p className="font-semibold">{day}</p>
-                                <div className="flex items-center gap-2">
-                                  {workout.distance && (
-                                    <span className="metric-value text-sm font-bold">
-                                      {workout.distance}
-                                    </span>
-                                  )}
-                                </div>
+                        {Object.entries(weekData.workouts).map(([day, workout]) => {
+                          const isToday = isViewingCurrentWeek && isWorkoutToday(day);
+                          return (
+                            <div
+                              key={day}
+                              className={`week-workout-card flex items-start gap-3 ${
+                                isToday ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
+                              }`}
+                            >
+                              <div className={`p-2.5 rounded-xl mt-0.5 ${
+                                isToday
+                                  ? 'bg-gradient-to-br from-primary to-secondary'
+                                  : 'bg-gradient-to-br from-primary/15 to-secondary/15'
+                              }`}>
+                                <Activity className={`w-4 h-4 ${isToday ? 'text-white' : 'text-primary'}`} />
                               </div>
-                              <span className={getWorkoutTagClass(workout.type)}>
-                                {workout.type}
-                              </span>
-                              {workout.duration && (
-                                <p className="text-sm text-muted-foreground mt-1">{workout.duration}</p>
-                              )}
-                              {(workout.target_pace || workout.target_hr) && (
-                                <div className="flex gap-3 mt-1">
-                                  {workout.target_pace && (
-                                    <p className="text-xs text-muted-foreground">
-                                      <span className="font-medium">Pace:</span> {workout.target_pace}
-                                    </p>
-                                  )}
-                                  {workout.target_hr && (
-                                    <p className="text-xs text-muted-foreground">
-                                      <span className="font-medium">HR:</span> {workout.target_hr}
-                                    </p>
-                                  )}
+                              <div className="flex-1">
+                                <div className="flex items-center justify-between flex-wrap gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-semibold">{day}</p>
+                                    {isToday && (
+                                      <Badge variant="default" className="text-[10px] py-0 px-1.5 bg-primary">Today</Badge>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {workout.distance && (
+                                      <span className="metric-value text-sm font-bold">
+                                        {workout.distance}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
-                              )}
-                              {workout.notes && (
-                                <p className="text-xs text-muted-foreground mt-2 italic bg-muted/50 p-2 rounded">{workout.notes}</p>
-                              )}
+                                <span className={getWorkoutTagClass(workout.type)}>
+                                  {workout.type}
+                                </span>
+                                {workout.duration && (
+                                  <p className="text-sm text-muted-foreground mt-1">{workout.duration}</p>
+                                )}
+                                {(workout.target_pace || workout.target_hr) && (
+                                  <div className="flex gap-3 mt-1">
+                                    {workout.target_pace && (
+                                      <p className="text-xs text-muted-foreground">
+                                        <span className="font-medium">Pace:</span> {workout.target_pace}
+                                      </p>
+                                    )}
+                                    {workout.target_hr && (
+                                      <p className="text-xs text-muted-foreground">
+                                        <span className="font-medium">HR:</span> {workout.target_hr}
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+                                {workout.notes && (
+                                  <p className="text-xs text-muted-foreground mt-2 italic bg-muted/50 p-2 rounded">{workout.notes}</p>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : activePlan.plan_json?.raw_response ? (
                       <div className="prose dark:prose-invert max-w-none text-sm">
