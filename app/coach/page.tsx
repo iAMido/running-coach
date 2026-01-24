@@ -212,16 +212,12 @@ export default function CoachDashboard() {
 
       {/* Today's Workout Hero Card */}
       {!loading && (
-        <Card className="today-hero-card overflow-hidden border-0">
-          <div className="relative">
-            {/* Background gradient */}
-            <div className="absolute inset-0 bg-gradient-to-br from-primary via-primary/90 to-secondary opacity-95" />
+        <div className="today-hero-card overflow-hidden rounded-xl bg-gradient-to-br from-primary via-primary/90 to-secondary relative">
+          {/* Decorative elements */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+          <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
 
-            {/* Decorative elements */}
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-            <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
-
-            <CardContent className="relative p-6 md:p-8">
+          <div className="relative p-6 md:p-8">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 {/* Left side - Today's workout info */}
                 <div className="flex-1">
@@ -323,9 +319,8 @@ export default function CoachDashboard() {
                   )}
                 </div>
               </div>
-            </CardContent>
           </div>
-        </Card>
+        </div>
       )}
 
       {loading && (

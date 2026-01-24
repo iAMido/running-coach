@@ -28,8 +28,10 @@ export async function GET() {
     if (error && error.code !== 'PGRST116') throw error;
 
     // If we have a plan, calculate the current week dynamically
-    if (data && data.start_date) {
-      const weekInfo = calculateCurrentWeek(data.start_date, data.duration_weeks);
+    if (data) {
+      // Use start_date if available, otherwise fallback to created_at
+      const startDate = data.start_date || (data.created_at ? data.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
+      const weekInfo = calculateCurrentWeek(startDate, data.duration_weeks);
 
       // Return plan with calculated current week
       return NextResponse.json({

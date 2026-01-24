@@ -3,15 +3,28 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { MessageSquare, Send, Trash2, User, Bot } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { MessageSquare, Send, Trash2, User, Bot, Wand2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-import type { ChatMessage } from '@/lib/db/types';
+import type { ChatMessage, TrainingPlan } from '@/lib/db/types';
 
 export default function AskCoachPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Plan adjustment state
+  const [activePlan, setActivePlan] = useState<TrainingPlan | null>(null);
+  const [showAdjustPanel, setShowAdjustPanel] = useState(false);
+  const [adjusting, setAdjusting] = useState(false);
+  const [adjustmentResult, setAdjustmentResult] = useState<{
+    summary?: string;
+    recommendations?: string[];
+    warnings?: string[];
+    planUpdated?: boolean;
+  } | null>(null);
+  const [adjustmentError, setAdjustmentError] = useState<string | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -20,6 +33,22 @@ export default function AskCoachPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    fetchActivePlan();
+  }, []);
+
+  const fetchActivePlan = async () => {
+    try {
+      const response = await fetch('/api/coach/plans');
+      if (response.ok) {
+        const data = await response.json();
+        setActivePlan(data.plan || null);
+      }
+    } catch (err) {
+      console.error('Failed to fetch plan:', err);
+    }
+  };
 
   const handleSend = async () => {
     if (!input.trim() || loading) return;
@@ -62,6 +91,65 @@ export default function AskCoachPage() {
 
   const handleClear = () => {
     setMessages([]);
+    setAdjustmentResult(null);
+    setShowAdjustPanel(false);
+  };
+
+  // Extract the last user message as the adjustment request
+  const getConversationContext = (): string => {
+    const userMessages = messages.filter(m => m.role === 'user');
+    if (userMessages.length === 0) return '';
+    // Get last few messages for context
+    const recentMessages = messages.slice(-4);
+    return recentMessages.map(m => `${m.role}: ${m.content}`).join('\n');
+  };
+
+  const handleAdjustPlan = async () => {
+    if (!activePlan) return;
+
+    setAdjusting(true);
+    setAdjustmentError(null);
+    setAdjustmentResult(null);
+
+    try {
+      const conversationContext = getConversationContext();
+      const response = await fetch('/api/coach/plans/adjust', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adjustmentType: 'user_request',
+          userRequest: conversationContext || 'Adjust my plan based on our conversation',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to adjust plan');
+      }
+
+      setAdjustmentResult({
+        summary: data.adjustment?.adjustment_summary,
+        recommendations: data.adjustment?.recommendations,
+        warnings: data.adjustment?.warnings,
+        planUpdated: data.planUpdated,
+      });
+
+      // Refresh the plan data
+      if (data.planUpdated) {
+        fetchActivePlan();
+        // Add a system message about the adjustment
+        const adjustmentMessage: ChatMessage = {
+          role: 'assistant',
+          content: `✅ I've updated your training plan!\n\n**Summary:** ${data.adjustment?.adjustment_summary || 'Plan adjusted based on our discussion.'}\n\n${data.adjustment?.recommendations ? `**Changes:**\n${data.adjustment.recommendations.map((r: string) => `• ${r}`).join('\n')}` : ''}`,
+        };
+        setMessages(prev => [...prev, adjustmentMessage]);
+      }
+    } catch (err) {
+      setAdjustmentError(err instanceof Error ? err.message : 'Failed to adjust plan');
+    } finally {
+      setAdjusting(false);
+    }
   };
 
   return (
@@ -81,6 +169,69 @@ export default function AskCoachPage() {
           </Button>
         )}
       </div>
+
+      {/* Plan Adjustment Panel - Show when there's an active plan and messages */}
+      {activePlan && messages.length > 0 && (
+        <Card className={`coach-card border-2 transition-all ${showAdjustPanel ? 'border-amber-500/50' : 'border-dashed border-primary/30'}`}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg bg-gradient-to-br from-amber-500/15 to-orange-500/15 ${adjusting ? 'animate-pulse' : ''}`}>
+                  <Wand2 className="w-4 h-4 text-amber-500" />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">Want to adjust your plan?</p>
+                  <p className="text-xs text-muted-foreground">
+                    <Badge variant="outline" className="mr-2">
+                      Week {activePlan.current_week_num} of {activePlan.duration_weeks}
+                    </Badge>
+                    AI can modify your training based on this conversation
+                  </p>
+                </div>
+              </div>
+              <Button
+                onClick={handleAdjustPlan}
+                disabled={adjusting}
+                size="sm"
+                className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shrink-0"
+              >
+                <Wand2 className="w-4 h-4 mr-2" />
+                {adjusting ? 'Adjusting...' : 'Adjust Plan'}
+              </Button>
+            </div>
+
+            {/* Adjustment Error */}
+            {adjustmentError && (
+              <div className="mt-3 p-3 rounded-lg bg-red-500/10 text-red-500 text-sm border border-red-500/20">
+                {adjustmentError}
+              </div>
+            )}
+
+            {/* Adjustment Result */}
+            {adjustmentResult && (
+              <div className="mt-3 space-y-3 p-3 bg-gradient-to-br from-amber-500/5 to-orange-500/5 rounded-lg border border-amber-500/20">
+                {adjustmentResult.planUpdated && (
+                  <div className="flex items-center gap-2 text-green-600">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span className="font-semibold text-sm">Plan Updated!</span>
+                  </div>
+                )}
+
+                {adjustmentResult.warnings && adjustmentResult.warnings.length > 0 && (
+                  <div className="flex items-start gap-2 text-amber-600">
+                    <AlertTriangle className="w-4 h-4 mt-0.5" />
+                    <ul className="text-xs space-y-1">
+                      {adjustmentResult.warnings.map((warn, i) => (
+                        <li key={i}>{warn}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Chat Container */}
       <Card className="coach-card flex-1 flex flex-col overflow-hidden">
@@ -106,9 +257,9 @@ export default function AskCoachPage() {
                 <div className="mt-4 space-y-2">
                   {[
                     'How should I adjust my easy run pace?',
+                    'I have a busy week - can you reduce my training?',
+                    'My knee is bothering me, what should I do?',
                     'Can I swap Monday\'s run to Tuesday?',
-                    'Explain the purpose of tempo runs.',
-                    'Why is polarized training effective?',
                   ].map((example) => (
                     <button
                       key={example}

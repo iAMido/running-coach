@@ -243,3 +243,87 @@ Return the plan as a JSON object with this structure:
 
 Generate all ${durationWeeks} weeks with complete workout details for each training day.`;
 }
+
+/**
+ * Build prompt for plan adjustment based on feedback
+ */
+export function buildPlanAdjustmentPrompt(params: {
+  currentPlan: unknown;
+  currentWeek: number;
+  weeklyFeedback?: {
+    overallFeeling?: number;
+    sleepQuality?: number;
+    stressLevel?: number;
+    injuryNotes?: string;
+  };
+  recentRuns?: unknown[];
+  userRequest?: string;
+  adjustmentType: 'weekly_review' | 'user_request' | 'injury' | 'performance';
+}): string {
+  const { currentPlan, currentWeek, weeklyFeedback, recentRuns, userRequest, adjustmentType } = params;
+
+  return `You are adjusting an existing training plan based on athlete feedback and data.
+
+## CURRENT TRAINING PLAN
+${JSON.stringify(currentPlan, null, 2)}
+
+## CURRENT POSITION
+- Currently on Week ${currentWeek}
+- Adjustment type: ${adjustmentType}
+
+## RECENT RUNS DATA
+${recentRuns ? JSON.stringify(recentRuns, null, 2) : 'No recent runs data'}
+
+## ATHLETE FEEDBACK
+- Overall feeling: ${weeklyFeedback?.overallFeeling || 'N/A'}/10
+- Sleep quality: ${weeklyFeedback?.sleepQuality || 'N/A'}/10
+- Stress level: ${weeklyFeedback?.stressLevel || 'N/A'}/10
+- Injury notes: ${weeklyFeedback?.injuryNotes || 'None'}
+
+## USER REQUEST
+${userRequest || 'No specific request - adjust based on feedback data'}
+
+## YOUR TASK
+Analyze the current plan and athlete feedback, then provide adjusted workouts for the REMAINING weeks (Week ${currentWeek} onwards).
+
+You can:
+1. **Reorder workouts** - Move hard sessions to different days
+2. **Adjust paces** - Make workouts easier/harder based on performance
+3. **Change distances** - Increase/decrease based on how athlete is coping
+4. **Add recovery** - Insert extra easy days if needed
+5. **Modify intensity distribution** - Ensure 80/20 rule is maintained
+6. **Address injuries** - Reduce impact, add cross-training if needed
+
+Return a JSON object with this structure:
+{
+  "adjustment_summary": "Brief explanation of what was changed and why",
+  "recommendations": ["List of key changes made"],
+  "warnings": ["Any concerns about the athlete's condition"],
+  "adjusted_weeks": [
+    {
+      "week_number": ${currentWeek},
+      "phase": "Phase name",
+      "focus": "Week focus",
+      "total_km": 35,
+      "changes_made": "What was changed from original",
+      "workouts": {
+        "Sunday": {
+          "type": "Workout type",
+          "duration": "Duration",
+          "distance": "X km",
+          "target_hr": "Zone",
+          "target_pace": "Pace range",
+          "description": "Full workout description"
+        }
+      }
+    }
+  ]
+}
+
+IMPORTANT:
+- Always start the week on SUNDAY
+- Maintain the Triphasic Model principles
+- Keep 80/20 intensity distribution
+- Be conservative with injured athletes
+- Generate workouts for ALL remaining weeks from week ${currentWeek} to the end of the plan`;
+}

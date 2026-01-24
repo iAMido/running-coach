@@ -61,8 +61,10 @@ export async function GET() {
 
     // Calculate current week for the active plan
     let planWithWeekInfo = activePlan;
-    if (activePlan && activePlan.start_date) {
-      const weekInfo = calculateCurrentWeek(activePlan.start_date, activePlan.duration_weeks);
+    if (activePlan) {
+      // Use start_date if available, otherwise fallback to created_at
+      const startDate = activePlan.start_date || (activePlan.created_at ? activePlan.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
+      const weekInfo = calculateCurrentWeek(startDate, activePlan.duration_weeks);
       planWithWeekInfo = {
         ...activePlan,
         current_week_num: weekInfo.currentWeek,

@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Calendar, Brain, Activity, TrendingUp } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Calendar, Brain, Activity, TrendingUp, Wand2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import type { Run } from '@/lib/db/types';
+import type { Run, TrainingPlan } from '@/lib/db/types';
 
 export default function WeeklyReviewPage() {
   const [overallFeeling, setOverallFeeling] = useState([7]);
@@ -21,9 +22,34 @@ export default function WeeklyReviewPage() {
   const [weeklyRuns, setWeeklyRuns] = useState<Run[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // Plan adjustment state
+  const [activePlan, setActivePlan] = useState<TrainingPlan | null>(null);
+  const [adjustmentRequest, setAdjustmentRequest] = useState('');
+  const [adjusting, setAdjusting] = useState(false);
+  const [adjustmentResult, setAdjustmentResult] = useState<{
+    summary?: string;
+    recommendations?: string[];
+    warnings?: string[];
+    planUpdated?: boolean;
+  } | null>(null);
+  const [adjustmentError, setAdjustmentError] = useState<string | null>(null);
+
   useEffect(() => {
     fetchWeeklyRuns();
+    fetchActivePlan();
   }, []);
+
+  const fetchActivePlan = async () => {
+    try {
+      const response = await fetch('/api/coach/plans');
+      if (response.ok) {
+        const data = await response.json();
+        setActivePlan(data.plan || null);
+      }
+    } catch (err) {
+      console.error('Failed to fetch plan:', err);
+    }
+  };
 
   const fetchWeeklyRuns = async () => {
     try {
@@ -73,14 +99,63 @@ export default function WeeklyReviewPage() {
   const totalDistance = weeklyRuns.reduce((sum, run) => sum + (run.distance_km || 0), 0);
   const totalDuration = weeklyRuns.reduce((sum, run) => sum + (run.duration_min || 0), 0);
 
+  // Week starts on Sunday
   const getWeekDateRange = (): string => {
     const now = new Date();
-    const dayOfWeek = now.getDay();
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    return `${monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${sunday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+    const dayOfWeek = now.getDay(); // 0 = Sunday
+    const sunday = new Date(now);
+    sunday.setDate(now.getDate() - dayOfWeek);
+    const saturday = new Date(sunday);
+    saturday.setDate(sunday.getDate() + 6);
+    return `${sunday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${saturday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  };
+
+  // Handle plan adjustment
+  const handleAdjustPlan = async () => {
+    if (!activePlan) return;
+
+    setAdjusting(true);
+    setAdjustmentError(null);
+    setAdjustmentResult(null);
+
+    try {
+      const response = await fetch('/api/coach/plans/adjust', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adjustmentType: 'weekly_review',
+          userRequest: adjustmentRequest || 'Adjust based on my weekly feedback and run data',
+          weeklyFeedback: {
+            overallFeeling: overallFeeling[0],
+            sleepQuality: sleepQuality[0],
+            stressLevel: stressLevel[0],
+            injuryNotes,
+          },
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to adjust plan');
+      }
+
+      setAdjustmentResult({
+        summary: data.adjustment?.adjustment_summary,
+        recommendations: data.adjustment?.recommendations,
+        warnings: data.adjustment?.warnings,
+        planUpdated: data.planUpdated,
+      });
+
+      // Refresh the plan data
+      if (data.planUpdated) {
+        fetchActivePlan();
+      }
+    } catch (err) {
+      setAdjustmentError(err instanceof Error ? err.message : 'Failed to adjust plan');
+    } finally {
+      setAdjusting(false);
+    }
   };
 
   return (
@@ -315,6 +390,97 @@ export default function WeeklyReviewPage() {
             ) : (
               <div className="prose dark:prose-invert max-w-none">
                 <div className="whitespace-pre-wrap text-sm leading-relaxed bg-gradient-to-br from-primary/5 to-secondary/5 p-4 rounded-lg border border-border/50">{aiAnalysis}</div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Plan Adjustment Section */}
+      {activePlan && (
+        <Card className="coach-card border-2 border-dashed border-primary/30">
+          <CardHeader>
+            <CardTitle className="coach-heading text-xl flex items-center gap-2">
+              <div className={`ai-icon-container p-2 rounded-lg bg-gradient-to-br from-amber-500/15 to-orange-500/15 ${adjusting ? 'active ai-pulse' : ''}`}>
+                <Wand2 className="w-5 h-5 text-amber-500" />
+              </div>
+              Adjust Training Plan
+            </CardTitle>
+            <CardDescription>
+              Based on your feedback, the AI coach can modify your remaining training weeks.
+              <br />
+              <Badge variant="outline" className="mt-2">
+                {activePlan.plan_type} - Week {activePlan.current_week_num} of {activePlan.duration_weeks}
+              </Badge>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-3">
+              <label className="text-sm font-medium">Special Requests (Optional)</label>
+              <Textarea
+                value={adjustmentRequest}
+                onChange={(e) => setAdjustmentRequest(e.target.value)}
+                placeholder="e.g., 'I have a work trip next week, need lighter training' or 'Feeling strong, can we increase intensity?' or 'My knee is bothering me, reduce mileage'"
+                rows={3}
+              />
+            </div>
+
+            {adjustmentError && (
+              <div className="p-3 rounded-lg bg-red-500/10 text-red-500 text-sm border border-red-500/20">
+                {adjustmentError}
+              </div>
+            )}
+
+            <Button
+              onClick={handleAdjustPlan}
+              className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
+              disabled={adjusting}
+            >
+              <Wand2 className="w-4 h-4 mr-2" />
+              {adjusting ? 'Adjusting Plan...' : 'Adjust My Plan'}
+            </Button>
+
+            {/* Adjustment Result */}
+            {adjustmentResult && (
+              <div className="space-y-4 mt-4 p-4 bg-gradient-to-br from-amber-500/5 to-orange-500/5 rounded-lg border border-amber-500/20">
+                {adjustmentResult.planUpdated && (
+                  <div className="flex items-center gap-2 text-green-600">
+                    <CheckCircle2 className="w-5 h-5" />
+                    <span className="font-semibold">Plan Updated Successfully!</span>
+                  </div>
+                )}
+
+                {adjustmentResult.summary && (
+                  <div>
+                    <h4 className="font-semibold mb-2">Summary</h4>
+                    <p className="text-sm text-muted-foreground">{adjustmentResult.summary}</p>
+                  </div>
+                )}
+
+                {adjustmentResult.recommendations && adjustmentResult.recommendations.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-2">Changes Made</h4>
+                    <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
+                      {adjustmentResult.recommendations.map((rec, i) => (
+                        <li key={i}>{rec}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {adjustmentResult.warnings && adjustmentResult.warnings.length > 0 && (
+                  <div className="p-3 bg-amber-500/10 rounded-lg">
+                    <div className="flex items-center gap-2 text-amber-600 mb-2">
+                      <AlertTriangle className="w-4 h-4" />
+                      <span className="font-semibold">Warnings</span>
+                    </div>
+                    <ul className="list-disc list-inside text-sm text-amber-700 dark:text-amber-400 space-y-1">
+                      {adjustmentResult.warnings.map((warn, i) => (
+                        <li key={i}>{warn}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
