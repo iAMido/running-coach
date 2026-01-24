@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
+import { runFeedbackSchema, validateInput } from '@/lib/validation/schemas';
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthenticatedUser();
@@ -43,15 +44,21 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    // Validate input
+    const validation = validateInput(runFeedbackSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
     const { data, error } = await supabase
       .from('run_feedback')
       .insert({
         user_id: userId,
-        run_date: body.run_date,
-        rating: body.rating,
-        effort_level: body.effort_level,
-        feeling: body.feeling,
-        comment: body.comment,
+        run_date: validation.data.run_date,
+        rating: validation.data.rating,
+        effort_level: validation.data.effort_level,
+        feeling: validation.data.feeling,
+        comment: validation.data.comment,
       })
       .select()
       .single();

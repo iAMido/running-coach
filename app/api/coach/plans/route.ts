@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { calculateCurrentWeek, formatWeekDateRange } from '@/lib/utils/week-calculator';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
+import { planSaveSchema, validateInput } from '@/lib/validation/schemas';
 
 export async function GET() {
   const auth = await getAuthenticatedUser();
@@ -69,6 +70,12 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    // Validate input
+    const validation = validateInput(planSaveSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
     // Deactivate existing plans
     await supabase
       .from('training_plans')
@@ -81,10 +88,10 @@ export async function POST(request: NextRequest) {
       .from('training_plans')
       .insert({
         user_id: userId,
-        plan_type: body.plan_type,
-        plan_json: body.plan_json,
-        duration_weeks: body.duration_weeks,
-        start_date: body.start_date || new Date().toISOString().split('T')[0],
+        plan_type: validation.data.plan_type,
+        plan_json: validation.data.plan_json,
+        duration_weeks: validation.data.duration_weeks,
+        start_date: validation.data.start_date || new Date().toISOString().split('T')[0],
         current_week_num: 1,
         status: 'active',
       })

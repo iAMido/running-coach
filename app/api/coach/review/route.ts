@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
+import { weeklySummarySchema, validateInput } from '@/lib/validation/schemas';
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthenticatedUser();
@@ -53,17 +54,23 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    // Validate input
+    const validation = validateInput(weeklySummarySchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
     const { data, error } = await supabase
       .from('weekly_summaries')
       .upsert({
         user_id: userId,
-        week_start: body.week_start,
-        overall_feeling: body.overall_feeling,
-        sleep_quality: body.sleep_quality,
-        stress_level: body.stress_level,
-        injury_notes: body.injury_notes,
-        achievements: body.achievements,
-        ai_analysis: body.ai_analysis,
+        week_start: validation.data.week_start,
+        overall_feeling: validation.data.overall_feeling,
+        sleep_quality: validation.data.sleep_quality,
+        stress_level: validation.data.stress_level,
+        injury_notes: validation.data.injury_notes,
+        achievements: validation.data.achievements,
+        ai_analysis: validation.data.ai_analysis,
       }, { onConflict: 'user_id,week_start' })
       .select()
       .single();

@@ -3,6 +3,7 @@ import { supabase } from '@/lib/db/supabase';
 import { callOpenRouter } from '@/lib/ai/openrouter';
 import { buildCoachSystemPrompt, buildPlanGenerationPrompt } from '@/lib/ai/coach-prompts';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
+import { planGenerationSchema, validateInput } from '@/lib/validation/schemas';
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser();
@@ -19,7 +20,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { planType, durationWeeks, runsPerWeek, targetRace, notes } = body;
+
+    // Validate input
+    const validation = validateInput(planGenerationSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
+    const { planType, durationWeeks, runsPerWeek, targetRace, notes } = validation.data;
 
     // Get athlete profile for context
     const { data: profile } = await supabase

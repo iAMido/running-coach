@@ -4,6 +4,7 @@ import { callOpenRouter } from '@/lib/ai/openrouter';
 import { buildCoachSystemPrompt, buildPlanAdjustmentPrompt } from '@/lib/ai/coach-prompts';
 import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
+import { planAdjustmentSchema, validateInput } from '@/lib/validation/schemas';
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser();
@@ -20,11 +21,18 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
+
+    // Validate input
+    const validation = validateInput(planAdjustmentSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
     const {
       userRequest,
       adjustmentType = 'user_request',
       weeklyFeedback,
-    } = body;
+    } = validation.data;
 
     // Get current active plan
     const { data: plan, error: planError } = await supabase

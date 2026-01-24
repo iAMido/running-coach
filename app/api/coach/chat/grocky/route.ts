@@ -4,6 +4,7 @@ import { callOpenRouter } from '@/lib/ai/openrouter';
 import { buildGrockySystemPrompt, buildPlanReviewPrompt, buildGrockyChatContext } from '@/lib/ai/grocky-prompts';
 import type { ChatMessage } from '@/lib/db/types';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
+import { chatRequestSchema, validateInput } from '@/lib/validation/schemas';
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser();
@@ -20,7 +21,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { messages, reviewPlan } = body as { messages?: ChatMessage[]; reviewPlan?: boolean };
+
+    // Validate input
+    const validation = validateInput(chatRequestSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
+    const { messages, reviewPlan } = validation.data;
 
     // Get athlete profile
     const { data: profile } = await supabase

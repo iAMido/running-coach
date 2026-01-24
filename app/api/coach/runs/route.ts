@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
+import { runSchema, validateInput } from '@/lib/validation/schemas';
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthenticatedUser();
@@ -45,9 +46,15 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    // Validate input
+    const validation = validateInput(runSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
     const { data, error } = await supabase
       .from('runs')
-      .insert({ ...body, user_id: userId })
+      .insert({ ...validation.data, user_id: userId })
       .select()
       .single();
 

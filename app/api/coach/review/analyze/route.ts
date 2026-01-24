@@ -3,6 +3,7 @@ import { supabase } from '@/lib/db/supabase';
 import { callOpenRouter } from '@/lib/ai/openrouter';
 import { buildCoachSystemPrompt, buildWeeklyAnalysisPrompt } from '@/lib/ai/coach-prompts';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
+import { reviewAnalysisSchema, validateInput } from '@/lib/validation/schemas';
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser();
@@ -19,7 +20,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { overallFeeling, sleepQuality, stressLevel, injuryNotes, achievements } = body;
+
+    // Validate input
+    const validation = validateInput(reviewAnalysisSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
+    const { overallFeeling, sleepQuality, stressLevel, injuryNotes, achievements } = validation.data;
 
     // Get athlete profile
     const { data: profile } = await supabase

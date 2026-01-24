@@ -4,6 +4,7 @@ import { classifyRun } from '@/lib/utils/run-classifier';
 import { calculateTrimp } from '@/lib/utils/trimp';
 import { formatPace, calculatePace } from '@/lib/utils/pace';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
+import { stravaSyncSchema, validateInput } from '@/lib/validation/schemas';
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser();
@@ -21,7 +22,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { daysBack = 7 } = body;
+
+    // Validate input
+    const validation = validateInput(stravaSyncSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
+    const { daysBack = 7 } = validation.data;
 
     // Get stored tokens
     const { data: tokenData, error: tokenError } = await supabase
