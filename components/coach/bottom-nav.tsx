@@ -41,7 +41,7 @@ export function BottomNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-background/95 backdrop-blur-lg border-t border-border safe-area-inset-bottom">
-      <div className="flex items-center justify-around h-16 px-2">
+      <div className="flex items-center justify-around h-16 px-2 relative">
         {mainNavItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;
@@ -51,14 +51,34 @@ export function BottomNav() {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-colors min-w-[60px]',
+                'relative flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-all duration-200 min-w-[60px]',
                 isActive
                   ? 'text-primary'
-                  : 'text-muted-foreground'
+                  : 'text-muted-foreground active:scale-95'
               )}
             >
-              <Icon className={cn('w-5 h-5', isActive && 'text-primary')} />
-              <span className="text-[10px] font-medium">{item.label}</span>
+              {/* Active indicator dot */}
+              {isActive && (
+                <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-primary rounded-full animate-pulse" />
+              )}
+
+              {/* Icon with background on active */}
+              <div className={cn(
+                'relative p-1.5 rounded-xl transition-all duration-200',
+                isActive && 'bg-primary/10'
+              )}>
+                <Icon className={cn(
+                  'w-5 h-5 transition-transform duration-200',
+                  isActive && 'text-primary scale-110'
+                )} />
+              </div>
+
+              <span className={cn(
+                'text-[10px] font-medium transition-all duration-200',
+                isActive && 'font-semibold'
+              )}>
+                {item.label}
+              </span>
             </Link>
           );
         })}
@@ -67,9 +87,20 @@ export function BottomNav() {
         <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
           <SheetTrigger asChild>
             <button
-              className="flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-colors min-w-[60px] text-muted-foreground"
+              className={cn(
+                'relative flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-all duration-200 min-w-[60px] active:scale-95',
+                menuOpen ? 'text-primary' : 'text-muted-foreground'
+              )}
             >
-              <Menu className="w-5 h-5" />
+              <div className={cn(
+                'relative p-1.5 rounded-xl transition-all duration-200',
+                menuOpen && 'bg-primary/10'
+              )}>
+                <Menu className={cn(
+                  'w-5 h-5 transition-transform duration-200',
+                  menuOpen && 'rotate-90'
+                )} />
+              </div>
               <span className="text-[10px] font-medium">More</span>
             </button>
           </SheetTrigger>

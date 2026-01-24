@@ -4,10 +4,15 @@ import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { Activity, Timer, TrendingUp, Calendar, CheckCircle2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+import { Activity, Timer, TrendingUp, Calendar, CheckCircle2, Flame, Target, Zap, Play } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import type { DashboardStats, Run, TrainingPlan, PlanWeek, Workout } from '@/lib/db/types';
 import { isWorkoutToday, getTodayDayName } from '@/lib/utils/week-calculator';
+
+type StatVariant = 'runs' | 'distance' | 'weekly' | 'plan';
 
 function StatsCard({
   title,
@@ -15,26 +20,42 @@ function StatsCard({
   description,
   icon: Icon,
   loading,
+  variant = 'runs',
 }: {
   title: string;
   value: string | number;
   description?: string;
   icon: React.ElementType;
   loading?: boolean;
+  variant?: StatVariant;
 }) {
+  const variantClasses = {
+    runs: 'stat-card-runs',
+    distance: 'stat-card-distance',
+    weekly: 'stat-card-weekly',
+    plan: 'stat-card-plan',
+  };
+
+  const iconClasses = {
+    runs: 'stat-icon-runs',
+    distance: 'stat-icon-distance',
+    weekly: 'stat-icon-weekly',
+    plan: 'stat-icon-plan',
+  };
+
   return (
-    <Card className="coach-card stat-card stat-card-sparkline">
+    <Card className={`coach-card stat-card stat-card-sparkline ${variantClasses[variant]}`}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="metric-label">
           {title}
         </CardTitle>
-        <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/15 to-secondary/15">
-          <Icon className="h-5 w-5 text-primary" />
+        <div className={`p-2.5 rounded-xl ${iconClasses[variant]}`}>
+          <Icon className="h-5 w-5" />
         </div>
       </CardHeader>
       <CardContent>
         {loading ? (
-          <Skeleton className="h-10 w-24" />
+          <Skeleton className="h-10 w-24 skeleton-shimmer" />
         ) : (
           <>
             <div className="metric-value text-3xl font-bold">{value}</div>
@@ -141,6 +162,42 @@ export default function CoachDashboard() {
   const currentWeekWorkouts = getCurrentWeekWorkouts();
   const currentWeekInfo = getCurrentWeekInfo();
 
+  // Get today's workout
+  const getTodaysWorkout = (): { day: string; workout: Workout } | null => {
+    if (!currentWeekWorkouts) return null;
+    const todayName = getTodayDayName();
+    for (const [day, workout] of Object.entries(currentWeekWorkouts)) {
+      if (day.toLowerCase() === todayName.toLowerCase()) {
+        return { day, workout: workout as Workout };
+      }
+    }
+    return null;
+  };
+
+  const todaysWorkout = getTodaysWorkout();
+
+  // Calculate plan progress percentage
+  const getPlanProgress = (): number => {
+    if (!activePlan) return 0;
+    const currentWeek = activePlan.current_week_num || 1;
+    const totalWeeks = activePlan.duration_weeks || 1;
+    return Math.round((currentWeek / totalWeeks) * 100);
+  };
+
+  const planProgress = getPlanProgress();
+
+  // Get motivational message based on workout type
+  const getMotivationalMessage = (workout: Workout | null): string => {
+    if (!workout) return "Rest day - recovery is part of training!";
+    const type = workout.type?.toLowerCase() || '';
+    if (type.includes('rest') || type.includes('off')) return "Rest day - recovery is part of training!";
+    if (type.includes('easy')) return "Keep it easy, build that aerobic base!";
+    if (type.includes('long')) return "Long run day - embrace the miles!";
+    if (type.includes('tempo') || type.includes('threshold')) return "Time to push the pace!";
+    if (type.includes('interval') || type.includes('speed')) return "Speed work - make it count!";
+    return "Let's get after it today!";
+  };
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -153,6 +210,128 @@ export default function CoachDashboard() {
         </p>
       </div>
 
+      {/* Today's Workout Hero Card */}
+      {!loading && (
+        <Card className="today-hero-card overflow-hidden border-0">
+          <div className="relative">
+            {/* Background gradient */}
+            <div className="absolute inset-0 bg-gradient-to-br from-primary via-primary/90 to-secondary opacity-95" />
+
+            {/* Decorative elements */}
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+            <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
+
+            <CardContent className="relative p-6 md:p-8">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                {/* Left side - Today's workout info */}
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge className="bg-white/20 text-white border-0 text-xs font-medium pulse-badge">
+                      <Flame className="w-3 h-3 mr-1" />
+                      TODAY
+                    </Badge>
+                    <span className="text-white/70 text-sm">{getTodayDayName()}</span>
+                  </div>
+
+                  {todaysWorkout ? (
+                    <>
+                      <h2 className="text-2xl md:text-3xl font-bold text-white mb-1">
+                        {todaysWorkout.workout.type}
+                      </h2>
+                      <div className="flex items-center gap-4 text-white/90 mb-3">
+                        {todaysWorkout.workout.distance && (
+                          <span className="flex items-center gap-1">
+                            <Target className="w-4 h-4" />
+                            {todaysWorkout.workout.distance}
+                          </span>
+                        )}
+                        {todaysWorkout.workout.duration && (
+                          <span className="flex items-center gap-1">
+                            <Timer className="w-4 h-4" />
+                            {todaysWorkout.workout.duration}
+                          </span>
+                        )}
+                        {todaysWorkout.workout.target_pace && (
+                          <span className="flex items-center gap-1">
+                            <Zap className="w-4 h-4" />
+                            {todaysWorkout.workout.target_pace}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-white/80 text-sm italic">
+                        {getMotivationalMessage(todaysWorkout.workout)}
+                      </p>
+                    </>
+                  ) : activePlan ? (
+                    <>
+                      <h2 className="text-2xl md:text-3xl font-bold text-white mb-1">
+                        Rest Day
+                      </h2>
+                      <p className="text-white/80 text-sm italic">
+                        {getMotivationalMessage(null)}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <h2 className="text-2xl md:text-3xl font-bold text-white mb-1">
+                        No Plan Active
+                      </h2>
+                      <p className="text-white/80 text-sm">
+                        Generate a training plan to get started
+                      </p>
+                    </>
+                  )}
+                </div>
+
+                {/* Right side - Action button & progress */}
+                <div className="flex flex-col items-start md:items-end gap-3">
+                  {todaysWorkout && todaysWorkout.workout.type?.toLowerCase() !== 'rest' && (
+                    <Link href="/coach/log">
+                      <Button className="bg-white text-primary hover:bg-white/90 font-semibold shadow-lg">
+                        <Play className="w-4 h-4 mr-2" />
+                        Log This Run
+                      </Button>
+                    </Link>
+                  )}
+
+                  {!activePlan && (
+                    <Link href="/coach/plan">
+                      <Button className="bg-white text-primary hover:bg-white/90 font-semibold shadow-lg">
+                        <Target className="w-4 h-4 mr-2" />
+                        Create Plan
+                      </Button>
+                    </Link>
+                  )}
+
+                  {/* Plan Progress */}
+                  {activePlan && (
+                    <div className="w-full md:w-48">
+                      <div className="flex items-center justify-between text-white/80 text-xs mb-1">
+                        <span>Plan Progress</span>
+                        <span className="font-semibold">{planProgress}%</span>
+                      </div>
+                      <div className="h-2 bg-white/20 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-white rounded-full transition-all duration-500"
+                          style={{ width: `${planProgress}%` }}
+                        />
+                      </div>
+                      <p className="text-white/60 text-xs mt-1">
+                        Week {activePlan.current_week_num} of {activePlan.duration_weeks}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </div>
+        </Card>
+      )}
+
+      {loading && (
+        <Skeleton className="h-40 w-full rounded-xl" />
+      )}
+
       {/* Stats Grid */}
       <div className="grid gap-3 md:gap-4 grid-cols-2 lg:grid-cols-4">
         <StatsCard
@@ -161,6 +340,7 @@ export default function CoachDashboard() {
           description="All time"
           icon={Activity}
           loading={loading}
+          variant="runs"
         />
         <StatsCard
           title="Total Distance"
@@ -168,6 +348,7 @@ export default function CoachDashboard() {
           description="All time"
           icon={TrendingUp}
           loading={loading}
+          variant="distance"
         />
         <StatsCard
           title="This Week"
@@ -175,6 +356,7 @@ export default function CoachDashboard() {
           description={`${stats?.thisWeekRuns ?? 0} runs`}
           icon={Timer}
           loading={loading}
+          variant="weekly"
         />
         <StatsCard
           title="Active Plan"
@@ -182,6 +364,7 @@ export default function CoachDashboard() {
           description={stats?.activePlan ? `Week ${stats.activePlan.current_week_num}` : 'No active plan'}
           icon={Calendar}
           loading={loading}
+          variant="plan"
         />
       </div>
 
@@ -321,7 +504,10 @@ export default function CoachDashboard() {
                             <div className="flex items-center gap-2">
                               {day}
                               {isToday && (
-                                <Badge variant="default" className="text-[10px] py-0 px-1.5 bg-primary">Today</Badge>
+                                <Badge variant="default" className="text-[10px] py-0 px-1.5 bg-primary pulse-badge">
+                                  <Flame className="w-3 h-3 mr-0.5" />
+                                  Today
+                                </Badge>
                               )}
                             </div>
                           </td>

@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Target, ChevronLeft, ChevronRight, Sparkles, Calendar, Activity, Home } from 'lucide-react';
+import { Target, ChevronLeft, ChevronRight, Sparkles, Calendar, Activity, Home, Flame } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { TrainingPlan, PlanWeek, Workout } from '@/lib/db/types';
 import { isWorkoutToday } from '@/lib/utils/week-calculator';
@@ -280,7 +280,10 @@ export default function TrainingPlanPage() {
                                   <div className="flex items-center gap-2">
                                     <p className="font-semibold">{day}</p>
                                     {isToday && (
-                                      <Badge variant="default" className="text-[10px] py-0 px-1.5 bg-primary">Today</Badge>
+                                      <Badge variant="default" className="text-[10px] py-0 px-1.5 bg-primary pulse-badge">
+                                        <Flame className="w-3 h-3 mr-0.5" />
+                                        Today
+                                      </Badge>
                                     )}
                                   </div>
                                   <div className="flex items-center gap-2">
