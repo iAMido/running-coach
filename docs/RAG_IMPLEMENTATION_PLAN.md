@@ -1,20 +1,25 @@
 # RAG System Implementation Plan
-## AI Running Coach - Hybrid Retrieval System
+## AI Running Coach - Three-Layer Hybrid Retrieval System
 
 **Created:** 2026-01-25
+**Updated:** 2026-01-25
 **Status:** Planning
-**Goal:** Implement a hybrid retrieval system combining user training data (dynamic) with coaching methodology books (static) using configurable weighting.
+**Goal:** Implement a three-layer hybrid retrieval system combining:
+1. **User Data** (dynamic) - Recent runs, feedback, profile
+2. **Old Coach Data** (semi-static) - TrainingPeaks workout library, historical plans
+3. **Books** (static) - Coaching methodology books
 
 ---
 
 ## Table of Contents
 1. [Architecture Overview](#architecture-overview)
-2. [Weighting Configuration](#weighting-configuration)
-3. [Implementation Steps](#implementation-steps)
-4. [File Structure](#file-structure)
-5. [Database Changes](#database-changes)
-6. [API Endpoints](#api-endpoints)
-7. [Testing Plan](#testing-plan)
+2. [Three-Layer Data Model](#three-layer-data-model)
+3. [Weighting Configuration](#weighting-configuration)
+4. [Implementation Steps](#implementation-steps)
+5. [File Structure](#file-structure)
+6. [Database Changes](#database-changes)
+7. [API Endpoints](#api-endpoints)
+8. [Testing Plan](#testing-plan)
 
 ---
 
@@ -30,23 +35,25 @@
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                    CONTEXT BUILDER (lib/rag/context-builder.ts)         │
 │                                                                         │
-│  ┌─────────────────────────────┐    ┌─────────────────────────────┐    │
-│  │   USER CONTEXT (Dynamic)    │    │   BOOK CONTEXT (Static)     │    │
-│  │   Weight: 65-70%            │    │   Weight: 30-35%            │    │
-│  │                             │    │                             │    │
-│  │  • Recent runs (14 days)    │    │  • Semantic search results  │    │
-│  │  • Run feedback (feelings)  │    │  • Filtered by:             │    │
-│  │  • Weekly summary           │    │    - Current phase          │    │
-│  │  • Active training plan     │    │    - Workout type           │    │
-│  │  • Athlete profile          │    │    - User level             │    │
-│  │  • Calculated fatigue score │    │  • Source attribution       │    │
-│  └─────────────────────────────┘    └─────────────────────────────┘    │
+│  ┌───────────────────┐  ┌───────────────────┐  ┌───────────────────┐   │
+│  │  USER CONTEXT     │  │  OLD COACH        │  │  BOOK CONTEXT     │   │
+│  │  (Dynamic)        │  │  (Semi-Static)    │  │  (Static)         │   │
+│  │  Weight: 55-65%   │  │  Weight: 10%      │  │  Weight: 25-55%   │   │
+│  │                   │  │                   │  │                   │   │
+│  │ • Recent runs     │  │ • Workout library │  │ • Semantic search │   │
+│  │ • Run feedback    │  │ • Workout names   │  │ • Filtered by:    │   │
+│  │ • Weekly summary  │  │ • Training phases │  │   - Phase         │   │
+│  │ • Active plan     │  │ • Coach notes     │  │   - Workout type  │   │
+│  │ • Athlete profile │  │ • Historical      │  │   - Level         │   │
+│  │ • Fatigue score   │  │   patterns        │  │ • Source cited    │   │
+│  └───────────────────┘  └───────────────────┘  └───────────────────┘   │
 │                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
 │  │                    HIERARCHY OF TRUTH                            │   │
 │  │  Priority 1: User's actual data (what happened)                  │   │
-│  │  Priority 2: Book methodology (rules to follow)                  │   │
-│  │  Priority 3: AI general knowledge (fallback only)                │   │
+│  │  Priority 2: Old coach patterns (proven to work for this user)   │   │
+│  │  Priority 3: Book methodology (general rules)                    │   │
+│  │  Priority 4: AI general knowledge (fallback only)                │   │
 │  │                                                                  │   │
 │  │  Conflicts: Resolved case-by-case, AI asks user when unclear    │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
@@ -57,7 +64,7 @@
 │                         ASSEMBLED PROMPT                                 │
 │                                                                         │
 │  SYSTEM: You are the Running Box AI Coach...                           │
-│  CONTEXT: [User data formatted] + [Book excerpts with sources]         │
+│  CONTEXT: [User] + [Old Coach patterns] + [Book excerpts]              │
 │  USER: [Original question]                                              │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -65,11 +72,61 @@
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                      CLAUDE / GROK RESPONSE                             │
 │                                                                         │
-│  "Based on your 20km long run yesterday and the Running Box            │
-│   methodology which recommends recovery after efforts >15km,           │
-│   today should be a 30-minute Zone 2 flush run..."                     │
+│  "Based on your 20km long run yesterday, and considering your          │
+│   previous coach typically scheduled 'Recovery Flush' workouts         │
+│   after long efforts, plus the Running Box methodology which           │
+│   recommends Zone 2 recovery runs - today should be an easy            │
+│   30-minute Zone 2 run..."                                             │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Three-Layer Data Model
+
+### Layer 1: User Data (Dynamic)
+**Source:** Real-time from Supabase
+**Updates:** Every run, every feedback entry
+
+| Data | Table | Purpose |
+|------|-------|---------|
+| Recent runs (14 days) | `runs` | Current training load, patterns |
+| Run feedback | `run_feedback` | Subjective fatigue, effort |
+| Weekly summaries | `weekly_summaries` | Sleep, stress, injuries |
+| Active plan | `training_plans` | Current week, phase |
+| Athlete profile | `athlete_profile` | Goals, HR zones, history |
+
+### Layer 2: Old Coach Data (Semi-Static)
+**Source:** TrainingPeaks export / manual import
+**Updates:** One-time import, occasional additions
+
+| Data | Table | Purpose |
+|------|-------|---------|
+| Workout definitions | `coach_workouts` | Named workouts with descriptions |
+| Training phases | `coach_phases` | Phase templates (Base, Build, etc.) |
+| Workout patterns | Derived from `runs` | Common sequences, recovery patterns |
+
+**Example Old Coach Data:**
+```json
+{
+  "workout_name": "LT2 Intervals",
+  "category": "Threshold",
+  "description": "4x8min at LT2 pace with 2min recovery",
+  "typical_phase": "Build",
+  "coach_notes": "Use on Tuesdays, never back-to-back with tempo",
+  "frequency": "Weekly during build phase"
+}
+```
+
+### Layer 3: Books (Static)
+**Source:** PDF methodology books, converted to embeddings
+**Updates:** When new books are added
+
+| Data | Table | Purpose |
+|------|-------|---------|
+| Book metadata | `coaching_books` | Title, author, methodology |
+| Instructions | `book_instructions` | Chunked content with embeddings |
+| Schedules | `book_schedules` | Plan templates |
 
 ---
 
@@ -77,13 +134,13 @@
 
 ### Token Budget: 8000 tokens total for context
 
-| Query Type | User Data | Book Data | Use Case |
-|------------|-----------|-----------|----------|
-| `daily_advice` | 70% (5600) | 30% (2400) | "What should I do today?" |
-| `plan_review` | 70% (5600) | 30% (2400) | "How was my week?" |
-| `plan_generation` | 40% (3200) | 60% (4800) | "Create a 12-week marathon plan" |
-| `ask_coach` | 65% (5200) | 35% (2800) | General Q&A (default) |
-| `grocky` | 65% (5200) | 35% (2800) | Second opinion |
+| Query Type | User Data | Old Coach | Books | Use Case |
+|------------|-----------|-----------|-------|----------|
+| `daily_advice` | 65% (5200) | 10% (800) | 25% (2000) | "What should I do today?" |
+| `plan_review` | 65% (5200) | 10% (800) | 25% (2000) | "How was my week?" |
+| `plan_generation` | 35% (2800) | 10% (800) | 55% (4400) | "Create a 12-week marathon plan" |
+| `ask_coach` | 55% (4400) | 10% (800) | 35% (2800) | General Q&A (default) |
+| `grocky` | 55% (4400) | 10% (800) | 35% (2800) | Second opinion |
 
 ### Configuration Interface
 
@@ -98,16 +155,17 @@ export type QueryType =
   | 'grocky';
 
 export interface ContextWeights {
-  userDataWeight: number;  // 0.0 - 1.0
-  bookWeight: number;      // 0.0 - 1.0 (must sum to 1.0)
+  userDataWeight: number;   // 0.0 - 1.0
+  oldCoachWeight: number;   // 0.0 - 1.0
+  bookWeight: number;       // 0.0 - 1.0 (must sum to 1.0)
 }
 
 export const QUERY_WEIGHTS: Record<QueryType, ContextWeights> = {
-  daily_advice:    { userDataWeight: 0.70, bookWeight: 0.30 },
-  plan_review:     { userDataWeight: 0.70, bookWeight: 0.30 },
-  plan_generation: { userDataWeight: 0.40, bookWeight: 0.60 },
-  ask_coach:       { userDataWeight: 0.65, bookWeight: 0.35 },
-  grocky:          { userDataWeight: 0.65, bookWeight: 0.35 },
+  daily_advice:    { userDataWeight: 0.65, oldCoachWeight: 0.10, bookWeight: 0.25 },
+  plan_review:     { userDataWeight: 0.65, oldCoachWeight: 0.10, bookWeight: 0.25 },
+  plan_generation: { userDataWeight: 0.35, oldCoachWeight: 0.10, bookWeight: 0.55 },
+  ask_coach:       { userDataWeight: 0.55, oldCoachWeight: 0.10, bookWeight: 0.35 },
+  grocky:          { userDataWeight: 0.55, oldCoachWeight: 0.10, bookWeight: 0.35 },
 };
 
 export const TOTAL_CONTEXT_TOKENS = 8000;
@@ -117,8 +175,178 @@ export const TOTAL_CONTEXT_TOKENS = 8000;
 
 ## Implementation Steps
 
+### Phase 0: Database Setup for Old Coach Data
+**Priority: HIGH | Estimate: 1-2 hours**
+
+#### Step 0.1: Create Coach Workouts Table
+**Migration:** `supabase/migrations/XXXXXX_create_coach_workouts.sql`
+
+```sql
+-- Table for old coach workout definitions from TrainingPeaks
+CREATE TABLE coach_workouts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id text NOT NULL,
+
+  -- Workout identification
+  workout_name text NOT NULL,
+  workout_name_variants text[],  -- Alternative names used
+
+  -- Classification
+  category text,                  -- "Easy", "Tempo", "Intervals", "Long Run", "Recovery"
+  sub_category text,              -- "LT1", "LT2", "VO2max", etc.
+  training_phase text,            -- "Base", "Build", "Specific", "Taper"
+
+  -- Workout details
+  description text,               -- Full workout description
+  typical_distance_km numeric,
+  typical_duration_min numeric,
+  target_zone text,               -- "Z2", "Z3", "Z4", etc.
+  target_pace text,               -- "4:30/km", "Easy", etc.
+  intensity_level integer,        -- 1-10
+
+  -- Coach wisdom
+  coach_notes text,               -- Original coach instructions/tips
+  when_to_use text,               -- "After rest day", "Mid-week only"
+  when_to_avoid text,             -- "Never after intervals"
+  recovery_needed text,           -- "24h easy", "48h before race"
+
+  -- Usage stats (derived from runs)
+  times_performed integer DEFAULT 0,
+  last_performed date,
+  avg_feeling numeric,            -- Average user feeling when doing this workout
+
+  -- Metadata
+  source text DEFAULT 'trainingpeaks',  -- "trainingpeaks", "manual", "garmin"
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+
+  UNIQUE(user_id, workout_name)
+);
+
+-- Enable RLS
+ALTER TABLE coach_workouts ENABLE ROW LEVEL SECURITY;
+
+-- RLS policies
+CREATE POLICY "Users can view own workouts" ON coach_workouts
+  FOR SELECT USING (auth.uid()::text = user_id);
+
+CREATE POLICY "Users can insert own workouts" ON coach_workouts
+  FOR INSERT WITH CHECK (auth.uid()::text = user_id);
+
+CREATE POLICY "Users can update own workouts" ON coach_workouts
+  FOR UPDATE USING (auth.uid()::text = user_id);
+
+-- Index for fast lookups
+CREATE INDEX idx_coach_workouts_user ON coach_workouts(user_id);
+CREATE INDEX idx_coach_workouts_category ON coach_workouts(user_id, category);
+CREATE INDEX idx_coach_workouts_phase ON coach_workouts(user_id, training_phase);
+```
+
+#### Step 0.2: Create Coach Phases Table
+**Migration:** `supabase/migrations/XXXXXX_create_coach_phases.sql`
+
+```sql
+-- Table for old coach training phase definitions
+CREATE TABLE coach_phases (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id text NOT NULL,
+
+  -- Phase identification
+  phase_name text NOT NULL,       -- "Base 1", "Build", "Specific", "Taper"
+  phase_order integer,            -- 1, 2, 3, 4 (sequence in plan)
+
+  -- Phase details
+  description text,
+  typical_duration_weeks integer,
+  focus_areas text[],             -- ["Aerobic base", "Volume building"]
+
+  -- Workout distribution
+  weekly_structure jsonb,         -- {"Monday": "Easy", "Tuesday": "Intervals", ...}
+  workout_types text[],           -- ["Easy", "Tempo", "Long Run"]
+  intensity_distribution jsonb,   -- {"easy": 80, "moderate": 15, "hard": 5}
+
+  -- Coach wisdom
+  coach_notes text,
+  key_workouts text[],            -- Most important workouts in this phase
+  avoid_in_phase text[],          -- What NOT to do
+
+  -- Progression rules
+  volume_progression text,        -- "Increase 10% weekly"
+  intensity_progression text,     -- "Hold steady", "Increase tempo distance"
+
+  -- Metadata
+  source text DEFAULT 'trainingpeaks',
+  created_at timestamptz DEFAULT now(),
+
+  UNIQUE(user_id, phase_name)
+);
+
+-- Enable RLS
+ALTER TABLE coach_phases ENABLE ROW LEVEL SECURITY;
+
+-- RLS policies
+CREATE POLICY "Users can view own phases" ON coach_phases
+  FOR SELECT USING (auth.uid()::text = user_id);
+
+CREATE POLICY "Users can insert own phases" ON coach_phases
+  FOR INSERT WITH CHECK (auth.uid()::text = user_id);
+```
+
+#### Step 0.3: Add TypeScript Types
+**File:** `lib/db/types.ts` (update)
+
+```typescript
+export interface CoachWorkout {
+  id: string;
+  user_id: string;
+  workout_name: string;
+  workout_name_variants?: string[];
+  category?: string;
+  sub_category?: string;
+  training_phase?: string;
+  description?: string;
+  typical_distance_km?: number;
+  typical_duration_min?: number;
+  target_zone?: string;
+  target_pace?: string;
+  intensity_level?: number;
+  coach_notes?: string;
+  when_to_use?: string;
+  when_to_avoid?: string;
+  recovery_needed?: string;
+  times_performed?: number;
+  last_performed?: string;
+  avg_feeling?: number;
+  source?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CoachPhase {
+  id: string;
+  user_id: string;
+  phase_name: string;
+  phase_order?: number;
+  description?: string;
+  typical_duration_weeks?: number;
+  focus_areas?: string[];
+  weekly_structure?: Record<string, string>;
+  workout_types?: string[];
+  intensity_distribution?: Record<string, number>;
+  coach_notes?: string;
+  key_workouts?: string[];
+  avoid_in_phase?: string[];
+  volume_progression?: string;
+  intensity_progression?: string;
+  source?: string;
+  created_at?: string;
+}
+```
+
+---
+
 ### Phase 1: Core Context Builder
-**Priority: HIGH | Estimate: 2-3 hours**
+**Priority: HIGH | Estimate: 3-4 hours**
 
 #### Step 1.1: Create User Context Formatter
 **File:** `lib/rag/user-formatter.ts`
@@ -149,13 +377,56 @@ export async function formatUserContext(
 ): Promise<FormattedUserContext>;
 ```
 
-**Key Functions:**
-- `formatRunsForAI(runs: Run[], feedback: RunFeedback[]): string`
-- `formatProfileForAI(profile: AthleteProfile): string`
-- `formatPlanForAI(plan: TrainingPlan): string`
-- `calculateFatigueScore(feedback: RunFeedback[], summary: WeeklySummary | null): number`
+#### Step 1.2: Create Old Coach Context Retriever
+**File:** `lib/rag/coach-retriever.ts`
 
-#### Step 1.2: Create Book Context Retriever
+```typescript
+// Responsibilities:
+// - Fetch relevant workouts from coach_workouts table
+// - Match by category, phase, or workout name
+// - Include coach notes and wisdom
+// - Analyze patterns from historical runs
+// - Respect token budget
+
+interface FormattedCoachContext {
+  text: string;
+  tokenCount: number;
+  workoutsIncluded: string[];
+  phasesIncluded: string[];
+}
+
+export async function retrieveCoachContext(
+  userId: string,
+  query: string,
+  filters: {
+    phase?: string;
+    workoutType?: string;
+    category?: string;
+  },
+  maxTokens: number
+): Promise<FormattedCoachContext>;
+
+// Helper: Find relevant workouts based on query
+export async function findRelevantWorkouts(
+  userId: string,
+  workoutType?: string,
+  phase?: string
+): Promise<CoachWorkout[]>;
+
+// Helper: Analyze workout patterns from runs
+export async function analyzeWorkoutPatterns(
+  userId: string,
+  workoutName: string
+): Promise<{
+  avgDuration: number;
+  avgDistance: number;
+  avgFeeling: number;
+  typicalDayOfWeek: string;
+  followedBy: string[];  // What workouts typically come after
+}>;
+```
+
+#### Step 1.3: Create Book Context Retriever
 **File:** `lib/rag/book-retriever.ts`
 
 ```typescript
@@ -186,18 +457,19 @@ export async function retrieveBookContext(
 ): Promise<FormattedBookContext>;
 ```
 
-#### Step 1.3: Create Main Context Builder
+#### Step 1.4: Create Main Context Builder
 **File:** `lib/rag/context-builder.ts`
 
 ```typescript
 // Responsibilities:
-// - Orchestrate user + book context retrieval
+// - Orchestrate all three context layers
 // - Apply weighting based on query type
 // - Assemble final context string
 // - Track sources for attribution
 
 interface EnhancedContext {
   userContext: FormattedUserContext;
+  coachContext: FormattedCoachContext;
   bookContext: FormattedBookContext;
   combinedPrompt: string;
   totalTokens: number;
@@ -219,41 +491,44 @@ export async function buildContext(
 #### Step 2.1: Update Coach System Prompts
 **File:** `lib/ai/coach-prompts.ts` (update existing)
 
-Add new prompt template that includes:
-- Hierarchy of truth instructions
-- Source attribution requirements
-- Conflict resolution guidance
-- Methodology loyalty clause
-
 ```typescript
 export function buildCoachSystemPrompt(
   context: EnhancedContext
 ): string {
   return `
-Role: You are the "Running Box AI Coach," an expert endurance specialist.
+Role: You are the "Running Box AI Coach," an expert endurance specialist who knows this athlete's history and their previous coach's methods.
 
 ## Knowledge Hierarchy (Follow This Order)
-1. **PRIMARY - Athlete Data**: The user's actual training history and feedback below. This is ground truth.
-2. **SECONDARY - Methodology**: The coaching book excerpts below. Apply these rules unless they conflict with athlete data.
-3. **TERTIARY - General Knowledge**: Your sports science knowledge. Only use when books don't cover the topic.
+1. **PRIMARY - Athlete Data**: The user's actual recent training and feedback. This is ground truth about their current state.
+2. **SECONDARY - Previous Coach Patterns**: Workout definitions and wisdom from their previous coach. These are proven to work for THIS specific athlete.
+3. **TERTIARY - Book Methodology**: The coaching book excerpts. Apply these general rules when they don't conflict with athlete-specific data.
+4. **QUATERNARY - General Knowledge**: Your sports science knowledge. Only use when other sources don't cover the topic.
 
-## Athlete Context (Priority 1)
+## Current Athlete State (Priority 1)
 ${context.userContext.text}
 
-## Methodology Context (Priority 2)
+## Previous Coach's Methods (Priority 2)
+${context.coachContext.text}
+
+## Methodology Guidelines (Priority 3)
 ${context.bookContext.text}
 
 ## Instructions
-- When giving advice, cite which source informed your recommendation
-- If athlete data shows fatigue/injury but methodology says push, ASK the user how they feel today
-- Use terminology from the methodology books (e.g., "Zone 2 flush", "Lactate Threshold 1")
-- Never give generic internet fitness advice - stay loyal to the loaded methodology
-- If books conflict with each other, mention both approaches and let user decide
+- Reference the athlete's specific workouts by name when relevant (e.g., "Your coach's 'LT2 Intervals' workout...")
+- When suggesting workouts, prefer ones from their previous coach's library when appropriate
+- If athlete data shows fatigue but methodology says push, ASK the user how they feel today
+- Use terminology consistent with both the previous coach AND the methodology books
+- Never give generic internet fitness advice - stay loyal to the loaded sources
+- When sources conflict, present both options and let the user decide
+
+## Conflict Resolution
+- If previous coach's method differs from book methodology: Mention both, note that the coach's method was specifically tailored for this athlete
+- If user's current data conflicts with all recommendations: Prioritize current state, but note what the sources would normally recommend
 
 ## Response Format
 - Be concise and actionable
 - Include the "why" behind recommendations
-- When citing books, use format: "According to [Book Title]..."
+- Cite sources: "According to your previous coach..." or "The [Book Title] recommends..."
 `;
 }
 ```
@@ -270,12 +545,12 @@ ${context.bookContext.text}
 // Changes:
 // - Import and use buildContext()
 // - Pass queryType based on detected intent
-// - Include sources in response
+// - Include all sources in response
 
 export async function POST(request: Request) {
   // 1. Get user ID from session
   // 2. Parse query and detect queryType
-  // 3. Build enhanced context
+  // 3. Build enhanced context with all three layers
   const context = await buildContext(userId, query, queryType);
 
   // 4. Build system prompt with context
@@ -285,41 +560,93 @@ export async function POST(request: Request) {
   // 6. Return response with sources
   return Response.json({
     response: aiResponse,
-    sources: context.bookContext.sources,
+    sources: {
+      books: context.bookContext.sources,
+      coachWorkouts: context.coachContext.workoutsIncluded,
+    },
     fatigueScore: context.userContext.metadata.fatigueScore,
+    queryType: queryType,
   });
 }
 ```
 
-#### Step 3.2: Update Plan Generation API
-**File:** `app/api/coach/plan/route.ts` (update existing)
+---
+
+### Phase 4: Data Import Tools
+**Priority: MEDIUM | Estimate: 2-3 hours**
+
+#### Step 4.1: TrainingPeaks Import Utility
+**File:** `lib/import/trainingpeaks.ts`
 
 ```typescript
-// Changes:
-// - Use queryType = 'plan_generation' (60% books, 40% user)
-// - Search for relevant schedule templates
-// - Include template sources in response
+// Parse TrainingPeaks export and populate coach_workouts table
+
+interface TrainingPeaksWorkout {
+  name: string;
+  description?: string;
+  workoutType?: string;
+  // ... other fields from TP export
+}
+
+export async function importTrainingPeaksWorkouts(
+  userId: string,
+  workouts: TrainingPeaksWorkout[]
+): Promise<{ imported: number; skipped: number; errors: string[] }>;
+
+// Analyze existing runs to extract workout patterns
+export async function deriveWorkoutsFromRuns(
+  userId: string
+): Promise<CoachWorkout[]>;
 ```
 
-#### Step 3.3: Update Grocky API
-**File:** `app/api/coach/grocky/route.ts` (update existing)
+#### Step 4.2: Admin UI for Workout Management
+**File:** `app/coach/settings/workouts/page.tsx`
 
 ```typescript
-// Changes:
-// - Use same context builder
-// - Different system prompt for Grok personality
+// UI to:
+// - View all coach workouts
+// - Edit workout details
+// - Import from TrainingPeaks
+// - Manually add workouts
+// - Analyze patterns from runs
 ```
 
 ---
 
-### Phase 4: Database Enhancements
+### Phase 5: Database Enhancements
 **Priority: MEDIUM | Estimate: 1 hour**
 
-#### Step 4.1: Add Optimized Search RPC
-**Migration:** `supabase/migrations/XXXXXX_add_hybrid_search_rpc.sql`
+#### Step 5.1: Add Optimized Search RPC
+**Migration:** `supabase/migrations/XXXXXX_add_search_functions.sql`
 
 ```sql
--- Optimized RPC for combined instruction search with filters
+-- Search coach workouts by criteria
+CREATE OR REPLACE FUNCTION search_coach_workouts(
+  p_user_id text,
+  p_category text DEFAULT NULL,
+  p_phase text DEFAULT NULL,
+  p_workout_name text DEFAULT NULL,
+  p_limit int DEFAULT 10
+)
+RETURNS SETOF coach_workouts
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT *
+  FROM coach_workouts
+  WHERE user_id = p_user_id
+    AND (p_category IS NULL OR category = p_category)
+    AND (p_phase IS NULL OR training_phase = p_phase)
+    AND (p_workout_name IS NULL OR
+         workout_name ILIKE '%' || p_workout_name || '%' OR
+         p_workout_name = ANY(workout_name_variants))
+  ORDER BY times_performed DESC, updated_at DESC
+  LIMIT p_limit;
+END;
+$$;
+
+-- Optimized book instruction search with filters
 CREATE OR REPLACE FUNCTION search_instructions_filtered(
   query_embedding vector(1536),
   match_threshold float DEFAULT 0.7,
@@ -368,24 +695,28 @@ $$;
 
 ---
 
-### Phase 5: UI Enhancements (Optional)
-**Priority: LOW | Estimate: 1-2 hours**
+### Phase 6: UI Enhancements (Optional)
+**Priority: LOW | Estimate: 2-3 hours**
 
-#### Step 5.1: Show Sources in Chat
+#### Step 6.1: Show Sources in Chat
 **File:** `components/coach/chat-message.tsx`
 
-```typescript
-// Add collapsible "Sources" section to AI responses
-// Show book title, methodology, and relevant excerpt
-```
+- Collapsible "Sources" section
+- Show book sources + coach workout sources
+- Visual distinction between source types
 
-#### Step 5.2: Show Fatigue Indicator
+#### Step 6.2: Show Fatigue Indicator
 **File:** `components/coach/fatigue-badge.tsx`
 
-```typescript
-// Visual indicator of calculated fatigue score
-// Color-coded: Green (1-3), Yellow (4-6), Red (7-10)
-```
+- Color-coded: Green (1-3), Yellow (4-6), Red (7-10)
+
+#### Step 6.3: Workout Library Browser
+**File:** `app/coach/workouts/page.tsx`
+
+- Browse all coach workouts
+- Filter by category, phase
+- See usage stats
+- Quick add to plan
 
 ---
 
@@ -395,139 +726,115 @@ $$;
 
 ```
 lib/rag/
-├── types.ts              # (update) Add QueryType, ContextWeights
+├── types.ts              # (update) Add QueryType, ContextWeights with 3 layers
 ├── embeddings.ts         # (exists) No changes needed
 ├── user-formatter.ts     # NEW - Format user data for AI
+├── coach-retriever.ts    # NEW - Retrieve old coach context
 ├── book-retriever.ts     # NEW - Retrieve and format book context
-├── context-builder.ts    # NEW - Main orchestration
+├── context-builder.ts    # NEW - Main orchestration (3 layers)
 └── fatigue-calculator.ts # NEW - Calculate fatigue score
 
-lib/ai/
-├── coach-prompts.ts      # (update) Add enhanced prompts
-└── openrouter.ts         # (exists) No changes needed
-
 lib/db/
+├── types.ts              # (update) Add CoachWorkout, CoachPhase types
+├── coach-workouts.ts     # NEW - CRUD for coach_workouts table
+├── coach-phases.ts       # NEW - CRUD for coach_phases table
 ├── books.ts              # (exists) Minor updates for new RPC
 └── [others]              # No changes
 
+lib/import/
+└── trainingpeaks.ts      # NEW - Import utility for TP data
+
+lib/ai/
+├── coach-prompts.ts      # (update) Add 3-layer hierarchy prompt
+└── openrouter.ts         # (exists) No changes needed
+
 app/api/coach/
-├── ask/route.ts          # (update) Use context builder
-├── plan/route.ts         # (update) Use context builder
-└── grocky/route.ts       # (update) Use context builder
+├── ask/route.ts          # (update) Use 3-layer context builder
+├── plan/route.ts         # (update) Use 3-layer context builder
+└── grocky/route.ts       # (update) Use 3-layer context builder
+
+app/coach/settings/
+└── workouts/page.tsx     # NEW - Manage workout library
 
 supabase/migrations/
-└── XXXXXX_add_hybrid_search_rpc.sql  # NEW - Optimized search
+├── XXXXXX_create_coach_workouts.sql   # NEW
+├── XXXXXX_create_coach_phases.sql     # NEW
+└── XXXXXX_add_search_functions.sql    # NEW
 ```
 
 ### Existing Files to Update
 
 | File | Changes |
 |------|---------|
-| `lib/rag/types.ts` | Add `QueryType`, `ContextWeights`, `QUERY_WEIGHTS` |
-| `lib/ai/coach-prompts.ts` | Add `buildCoachSystemPrompt()` with hierarchy |
+| `lib/rag/types.ts` | Add 3-way `ContextWeights`, `QueryType`, `QUERY_WEIGHTS` |
+| `lib/db/types.ts` | Add `CoachWorkout`, `CoachPhase` interfaces |
+| `lib/ai/coach-prompts.ts` | Add `buildCoachSystemPrompt()` with 3-layer hierarchy |
 | `lib/db/books.ts` | Add `searchInstructionsFiltered()` wrapper |
-| `app/api/coach/ask/route.ts` | Integrate context builder |
-| `app/api/coach/plan/route.ts` | Integrate context builder |
-| `app/api/coach/grocky/route.ts` | Integrate context builder |
+| `app/api/coach/ask/route.ts` | Integrate 3-layer context builder |
+| `app/api/coach/plan/route.ts` | Integrate 3-layer context builder |
+| `app/api/coach/grocky/route.ts` | Integrate 3-layer context builder |
 
 ---
 
 ## Database Changes
 
-### New RPC Function
-- `search_instructions_filtered` - Enhanced search with level/phase/workout filters
+### New Tables
+1. `coach_workouts` - Old coach workout definitions from TrainingPeaks
+2. `coach_phases` - Old coach training phase templates
 
-### No Schema Changes Required
-- All needed fields already exist in current tables
-- `coach_notes` field exists in `runs` table
-- `feeling`, `effort_level` exist in `run_feedback` table
-- `sleep_quality`, `stress_level` exist in `weekly_summaries` table
+### New RPC Functions
+1. `search_coach_workouts` - Search workouts by category/phase/name
+2. `search_instructions_filtered` - Enhanced book search with filters
 
----
-
-## API Endpoints
-
-### Updated Endpoints
-
-#### POST `/api/coach/ask`
-**Request:**
-```json
-{
-  "message": "What should I run today?",
-  "history": [...],
-  "queryType": "daily_advice"  // Optional, auto-detected if not provided
-}
-```
-
-**Response:**
-```json
-{
-  "response": "Based on your 20km long run yesterday...",
-  "sources": [
-    {
-      "bookTitle": "The Running Box",
-      "methodology": "Triphasic",
-      "chapterTitle": "Recovery Principles"
-    }
-  ],
-  "fatigueScore": 7.2,
-  "queryType": "daily_advice"
-}
-```
-
-#### POST `/api/coach/plan`
-**Request:**
-```json
-{
-  "planType": "Half Marathon",
-  "durationWeeks": 12,
-  "level": "intermediate"
-}
-```
-
-**Response:**
-```json
-{
-  "plan": {...},
-  "sources": [
-    {
-      "bookTitle": "Advanced Marathon Training",
-      "methodology": "Daniels",
-      "planName": "12-Week Half Marathon"
-    }
-  ]
-}
-```
+### Existing Data to Leverage
+- `runs.workout_name` - 634 runs already have workout names
+- `runs.coach_notes` - Some runs have coach notes
+- Can derive `coach_workouts` entries from analyzing existing runs
 
 ---
 
-## Testing Plan
+## Data Flow Example
 
-### Unit Tests
+### Query: "What should I run today?"
 
-| Test | File | Description |
-|------|------|-------------|
-| Fatigue calculation | `__tests__/fatigue-calculator.test.ts` | Various feedback scenarios |
-| User formatting | `__tests__/user-formatter.test.ts` | Token limits respected |
-| Book retrieval | `__tests__/book-retriever.test.ts` | Filters work correctly |
-| Context building | `__tests__/context-builder.test.ts` | Weights applied correctly |
+```
+1. DETECT QUERY TYPE
+   → "daily_advice" (65% user / 10% coach / 25% books)
 
-### Integration Tests
+2. FETCH USER CONTEXT (65% = 5200 tokens)
+   → Last 14 days of runs
+   → Recent feedback (feeling, effort)
+   → Weekly summary (sleep: 6/10, stress: 7/10)
+   → Active plan: Week 8 of Half Marathon, "Build" phase
+   → Fatigue score: 6.8/10
 
-| Test | Description |
-|------|-------------|
-| Ask Coach flow | Query -> Context -> Response with sources |
-| Plan generation | User profile + books = personalized plan |
-| Weight switching | Different queryTypes use different weights |
+3. FETCH COACH CONTEXT (10% = 800 tokens)
+   → Query: "What does old coach do on recovery days in Build phase?"
+   → Found: "Easy Recovery" workout
+     - Description: "30-40 min very easy, conversational pace"
+     - Coach notes: "Never skip recovery days, they're when adaptation happens"
+     - When to use: "Day after intervals or tempo"
+   → Found pattern: After tempo runs, old coach typically scheduled easy day
 
-### Manual Testing Checklist
+4. FETCH BOOK CONTEXT (25% = 2000 tokens)
+   → Semantic search: "recovery day build phase"
+   → Found: "The Running Box - Chapter 5: Recovery"
+     - "After threshold workouts, schedule 24-48h of Zone 1-2 running"
+   → Found: "80/20 Running - Easy Days"
+     - "80% of training should be easy, including recovery runs"
 
-- [ ] Ask "What should I run today?" - verify uses 70/30 weight
-- [ ] Generate new plan - verify uses 40/60 weight
-- [ ] Check sources appear in response
-- [ ] Verify fatigue score reflects recent feedback
-- [ ] Test with no books loaded (should still work with user data only)
-- [ ] Test with no user data (new user, should still work with books only)
+5. ASSEMBLE PROMPT
+   → System prompt with hierarchy of truth
+   → All three contexts formatted
+   → User question
+
+6. AI RESPONSE
+   "Based on your tempo run yesterday and elevated fatigue (6.8/10),
+    today should be a recovery day. Your previous coach's 'Easy Recovery'
+    workout - 30-40 min at conversational pace - would be perfect.
+    This aligns with the Running Box recommendation for Zone 1-2 running
+    after threshold work. How are you feeling this morning?"
+```
 
 ---
 
@@ -535,49 +842,90 @@ supabase/migrations/
 
 ```
 Week 1:
-├── Day 1-2: Phase 1 (Context Builder core)
+├── Day 1: Phase 0 (Database Setup)
+│   ├── Create coach_workouts table
+│   ├── Create coach_phases table
+│   └── Add TypeScript types
+│
+├── Day 2-3: Phase 1 (Context Builders)
 │   ├── user-formatter.ts
+│   ├── coach-retriever.ts
 │   ├── book-retriever.ts
 │   └── context-builder.ts
 │
-├── Day 3: Phase 2 (Enhanced Prompts)
-│   └── Update coach-prompts.ts
+├── Day 4: Phase 2 (Enhanced Prompts)
+│   └── Update coach-prompts.ts with 3-layer hierarchy
 │
-└── Day 4-5: Phase 3 (API Integration)
+└── Day 5: Phase 3 (API Integration)
     ├── Update ask/route.ts
     ├── Update plan/route.ts
     └── Update grocky/route.ts
 
-Week 2 (if needed):
-├── Phase 4: Database migration
-└── Phase 5: UI enhancements (optional)
+Week 2:
+├── Day 1-2: Phase 4 (Import Tools)
+│   ├── TrainingPeaks import utility
+│   └── Derive workouts from existing runs
+│
+├── Day 3: Phase 5 (Database Optimization)
+│   └── Add search RPC functions
+│
+└── Day 4-5: Phase 6 (UI - Optional)
+    ├── Sources in chat
+    ├── Fatigue badge
+    └── Workout library browser
 ```
 
 ---
 
 ## Success Criteria
 
-1. **Personalization**: AI references specific runs from user's history
-2. **Attribution**: Responses cite which book/methodology informed advice
-3. **Weighting**: Plan generation clearly uses more book content than daily advice
-4. **Conflict Handling**: When user data conflicts with books, AI asks for clarification
-5. **Performance**: Context building completes in <500ms
-6. **Token Efficiency**: Never exceeds 8000 token budget
+1. **Three-Layer Integration**: AI uses all three sources appropriately
+2. **Personalization**: AI references user's specific coach workouts by name
+3. **Attribution**: Responses cite which layer informed advice
+4. **Weighting**: Plan generation uses 55% books, daily advice uses 65% user data
+5. **Conflict Handling**: When sources conflict, AI presents options
+6. **Performance**: Context building completes in <500ms
+7. **Token Efficiency**: Never exceeds 8000 token budget
+
+---
+
+## Testing Checklist
+
+### Unit Tests
+- [ ] Fatigue calculation with various feedback
+- [ ] User formatting respects token limits
+- [ ] Coach retrieval finds relevant workouts
+- [ ] Book retrieval applies filters correctly
+- [ ] Weight calculations sum to 1.0
+
+### Integration Tests
+- [ ] Full flow: Query → Context → Response
+- [ ] Query type detection works
+- [ ] Sources correctly attributed in response
+
+### Manual Testing
+- [ ] Ask "What should I run today?" - verify 65/10/25 split
+- [ ] Generate new plan - verify 35/10/55 split
+- [ ] Verify old coach workouts appear in suggestions
+- [ ] Test with no coach workouts (should work with user + books only)
+- [ ] Test with no books (should work with user + coach only)
 
 ---
 
 ## Notes & Decisions
 
-- **No separate Vector DB needed** - Supabase pgvector handles both relational + vector
-- **No source_methodology on runs** - Keep runs simple, methodology comes from books
-- **Conflicts resolved case-by-case** - AI will ask user when unclear, not auto-decide
-- **Configurable weights per query type** - Easy to tune without code changes
+- **TrainingPeaks as source**: Will import workout library from TP exports
+- **10% for old coach**: Consistent across all query types - enough to influence but not dominate
+- **Derive from runs**: Can analyze existing 634 runs to populate coach_workouts automatically
+- **Conflicts case-by-case**: AI presents options when sources disagree
+- **No embedding for coach workouts**: Simple text matching is sufficient for workout library
 
 ---
 
 ## Next Steps
 
-1. Review this plan
-2. Start with Phase 1, Step 1.1 (user-formatter.ts)
-3. Test each component before moving to next
-4. Commit after each phase completion
+1. Review this updated plan
+2. Start with Phase 0 (Database migrations)
+3. Import/derive coach workouts from existing runs
+4. Build context retrievers
+5. Test with real queries
