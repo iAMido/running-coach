@@ -212,7 +212,7 @@ export default function CoachDashboard() {
 
       {/* Today's Workout Hero Card */}
       {!loading && (
-        <div className="today-hero-card overflow-hidden rounded-xl bg-gradient-to-br from-primary via-primary/90 to-secondary relative">
+        <div className="today-hero-card overflow-hidden rounded-xl relative" style={{ background: 'linear-gradient(135deg, hsl(217 91% 60%) 0%, hsl(200 90% 50%) 50%, hsl(160 84% 39%) 100%)' }}>
           {/* Decorative elements */}
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
           <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />

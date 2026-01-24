@@ -228,7 +228,7 @@ Return the plan as a JSON object with this structure:
       "focus": "Build aerobic foundation",
       "total_km": 35,
       "workouts": {
-        "Monday": {
+        "Sunday": {
           "type": "Easy Run",
           "duration": "45 min",
           "distance": "7 km",
@@ -241,7 +241,10 @@ Return the plan as a JSON object with this structure:
   ]
 }
 
-Generate all ${durationWeeks} weeks with complete workout details for each training day.`;
+IMPORTANT:
+- The week MUST start on SUNDAY and end on Saturday
+- Order workouts in each week as: Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday
+- Generate all ${durationWeeks} weeks with complete workout details for each training day.`;
 }
 
 /**
