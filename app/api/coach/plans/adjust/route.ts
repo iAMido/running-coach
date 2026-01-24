@@ -1,21 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
 import { supabase } from '@/lib/db/supabase';
 import { callOpenRouter } from '@/lib/ai/openrouter';
 import { buildCoachSystemPrompt, buildPlanAdjustmentPrompt } from '@/lib/ai/coach-prompts';
 import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
-
-const DEV_USER_ID = 'idomosseri@gmail.com';
+import { getAuthenticatedUser } from '@/lib/auth/get-user';
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession();
-
-  const isDev = process.env.NODE_ENV === 'development';
-  if (!session?.user?.email && !isDev) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await getAuthenticatedUser();
+  if (!auth.authenticated || !auth.userId) {
+    return NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 401 });
   }
 
-  const userId = session?.user?.email || DEV_USER_ID;
+  const userId = auth.userId;
   const apiKey = process.env.OPENROUTER_API_KEY;
 
   if (!apiKey) {

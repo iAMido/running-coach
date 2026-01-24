@@ -42,6 +42,7 @@
     "@supabase/supabase-js": "^2.90.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dompurify": "^3.3.1",
     "fit-file-parser": "^2.1.0",
     "framer-motion": "^12.24.0",
     "lucide-react": "^0.562.0",
@@ -53,11 +54,12 @@
     "react-hook-form": "^7.70.0",
     "recharts": "^3.6.0",
     "tailwind-merge": "^3.4.0",
-    "zod": "^4.3.5"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/dompurify": "^3.0.5",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

@@ -1,22 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
+import { verifyOAuthState } from '@/lib/utils/oauth-state';
 
 // Handle GET request from Strava OAuth redirect
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get('code');
-  const state = searchParams.get('state'); // Contains user email
+  const state = searchParams.get('state');
   const error = searchParams.get('error');
 
   if (error) {
-    return NextResponse.redirect(new URL('/coach/strava?error=' + error, request.url));
+    return NextResponse.redirect(new URL('/coach/strava?error=' + encodeURIComponent(error), request.url));
   }
 
   if (!code || !state) {
     return NextResponse.redirect(new URL('/coach/strava?error=missing_params', request.url));
   }
 
-  const userId = decodeURIComponent(state);
+  // Verify the signed state to prevent CSRF attacks
+  const stateVerification = verifyOAuthState(state);
+  if (!stateVerification.valid) {
+    console.error('OAuth state verification failed:', stateVerification.error);
+    return NextResponse.redirect(new URL('/coach/strava?error=invalid_state', request.url));
+  }
+
+  const userId = stateVerification.userId;
   const clientId = process.env.STRAVA_CLIENT_ID;
   const clientSecret = process.env.STRAVA_CLIENT_SECRET;
 

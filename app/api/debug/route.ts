@@ -1,47 +1,64 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/db/supabase';
+import { getServerSession } from 'next-auth';
+import { supabase, isSupabaseConfigured } from '@/lib/db/supabase';
 
 export async function GET() {
-  // Test Supabase connection
+  // Only allow in development mode
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Debug endpoint disabled in production' }, { status: 403 });
+  }
+
+  // Require authentication even in development
+  const session = await getServerSession();
+  if (!session?.user?.email) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  }
+
+  const userId = session.user.email;
+
+  // Only show limited, non-sensitive debug info
   let supabaseStatus = 'unknown';
   let runCount = 0;
   let stravaConnected = false;
 
   try {
-    const { count, error } = await supabase
-      .from('runs')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', 'idomosseri@gmail.com');
+    if (isSupabaseConfigured()) {
+      const { count, error } = await supabase
+        .from('runs')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
 
-    if (error) {
-      supabaseStatus = `error: ${error.message}`;
+      if (error) {
+        supabaseStatus = 'error';
+      } else {
+        supabaseStatus = 'connected';
+        runCount = count || 0;
+      }
+
+      const { data: stravaData } = await supabase
+        .from('strava_tokens')
+        .select('athlete_id')
+        .eq('user_id', userId)
+        .single();
+
+      stravaConnected = !!stravaData;
     } else {
-      supabaseStatus = 'connected';
-      runCount = count || 0;
+      supabaseStatus = 'not_configured';
     }
-
-    const { data: stravaData } = await supabase
-      .from('strava_tokens')
-      .select('athlete_id')
-      .eq('user_id', 'idomosseri@gmail.com')
-      .single();
-
-    stravaConnected = !!stravaData;
-  } catch (e) {
-    supabaseStatus = `exception: ${e}`;
+  } catch {
+    supabaseStatus = 'exception';
   }
 
+  // Return only boolean flags for configuration (no values or URIs)
   return NextResponse.json({
-    hasGoogleClientId: !!process.env.GOOGLE_CLIENT_ID,
-    hasGoogleClientSecret: !!process.env.GOOGLE_CLIENT_SECRET,
-    hasNextAuthSecret: !!process.env.NEXTAUTH_SECRET,
-    hasNextAuthUrl: !!process.env.NEXTAUTH_URL,
-    hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-    hasSupabaseAnonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    hasStravaClientId: !!process.env.STRAVA_CLIENT_ID,
-    hasStravaClientSecret: !!process.env.STRAVA_CLIENT_SECRET,
-    hasStravaRedirectUri: !!process.env.NEXT_PUBLIC_STRAVA_REDIRECT_URI,
-    stravaRedirectUri: process.env.NEXT_PUBLIC_STRAVA_REDIRECT_URI,
+    environment: process.env.NODE_ENV,
+    user: session.user.email,
+    configured: {
+      googleOAuth: !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET,
+      nextAuth: !!process.env.NEXTAUTH_SECRET,
+      supabase: isSupabaseConfigured(),
+      strava: !!process.env.STRAVA_CLIENT_ID && !!process.env.STRAVA_CLIENT_SECRET,
+    },
     supabaseStatus,
     runCount,
     stravaConnected,

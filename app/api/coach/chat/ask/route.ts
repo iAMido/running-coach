@@ -1,21 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
 import { supabase } from '@/lib/db/supabase';
 import { callOpenRouter } from '@/lib/ai/openrouter';
 import { buildCoachSystemPrompt } from '@/lib/ai/coach-prompts';
 import type { ChatMessage } from '@/lib/db/types';
-
-const DEV_USER_ID = 'idomosseri@gmail.com';
+import { getAuthenticatedUser } from '@/lib/auth/get-user';
+import { chatRequestSchema, validateInput } from '@/lib/validation/schemas';
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession();
-  const isDev = process.env.NODE_ENV === 'development';
-
-  if (!session?.user?.email && !isDev) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await getAuthenticatedUser();
+  if (!auth.authenticated || !auth.userId) {
+    return NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 401 });
   }
 
-  const userId = session?.user?.email || DEV_USER_ID;
+  const userId = auth.userId;
   const apiKey = process.env.OPENROUTER_API_KEY;
 
   if (!apiKey) {
@@ -24,7 +21,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { messages } = body as { messages: ChatMessage[] };
+
+    // Validate input
+    const validation = validateInput(chatRequestSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
+    const { messages } = validation.data as { messages: ChatMessage[] };
 
     // Get athlete profile and recent runs for context
     const { data: profile } = await supabase

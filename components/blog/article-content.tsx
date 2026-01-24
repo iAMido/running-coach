@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Play, Pause, Square, Volume2, VolumeX, SkipBack, Settings, X } from 'lucide-react';
 import { BlogPost } from '@/lib/blog';
+import DOMPurify from 'dompurify';
 
-// Note: Blog content HTML comes from our own hardcoded lib/blog.ts file,
-// not from user input, so it is safe to render.
+// Note: Even though blog content HTML comes from our own hardcoded lib/blog.ts file,
+// we sanitize it as defense-in-depth in case the content source changes in the future.
 
 interface ArticleContentProps {
   post: BlogPost;
@@ -29,6 +30,17 @@ export function ArticleContent({ post }: ArticleContentProps) {
   const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
   const [speed, setSpeed] = useState(1);
   const [showSettings, setShowSettings] = useState(false);
+
+  // Sanitize HTML content to prevent XSS attacks
+  const sanitizedHtml = useMemo(() => {
+    if (typeof window === 'undefined') return post.contentHtml;
+    return DOMPurify.sanitize(post.contentHtml, {
+      ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'b', 'i', 'u', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'ul', 'ol', 'li', 'a', 'blockquote', 'code', 'pre', 'img', 'span', 'div'],
+      ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id', 'target', 'rel'],
+      ALLOW_DATA_ATTR: false,
+    });
+  }, [post.contentHtml]);
 
   // Refs
   const articleRef = useRef<HTMLDivElement>(null);
@@ -363,7 +375,7 @@ export function ArticleContent({ post }: ArticleContentProps) {
               prose-li:text-sm
               md:prose-li:text-base
             "
-            dangerouslySetInnerHTML={{ __html: post.contentHtml }}
+            dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
           />
 
           {/* Article Footer */}
