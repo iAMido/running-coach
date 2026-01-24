@@ -132,3 +132,29 @@ export function isWorkoutToday(workoutDay: string, referenceDate: Date = new Dat
   const today = getTodayDayName(referenceDate);
   return workoutDay.toLowerCase() === today.toLowerCase();
 }
+
+/**
+ * Day order starting from Sunday (index 0)
+ */
+const DAY_ORDER: Record<string, number> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+};
+
+/**
+ * Sort workout entries by day of week (Sunday first)
+ * @param workouts - Object with day names as keys
+ * @returns Sorted array of [day, workout] entries
+ */
+export function sortWorkoutsByDay<T>(workouts: Record<string, T>): [string, T][] {
+  return Object.entries(workouts).sort(([dayA], [dayB]) => {
+    const orderA = DAY_ORDER[dayA.toLowerCase()] ?? 7;
+    const orderB = DAY_ORDER[dayB.toLowerCase()] ?? 7;
+    return orderA - orderB;
+  });
+}

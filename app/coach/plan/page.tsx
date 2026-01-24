@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Target, ChevronLeft, ChevronRight, Sparkles, Calendar, Activity, Home, Flame } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { TrainingPlan, PlanWeek, Workout } from '@/lib/db/types';
-import { isWorkoutToday } from '@/lib/utils/week-calculator';
+import { isWorkoutToday, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
 
 const planTypes = [
   { value: 'half-marathon', label: 'Half Marathon' },
@@ -259,7 +259,7 @@ export default function TrainingPlanPage() {
 
                     {weekData?.workouts && Object.keys(weekData.workouts).length > 0 ? (
                       <div className="space-y-3">
-                        {Object.entries(weekData.workouts).map(([day, workout]) => {
+                        {sortWorkoutsByDay(weekData.workouts).map(([day, workout]) => {
                           const isToday = isViewingCurrentWeek && isWorkoutToday(day);
                           return (
                             <div

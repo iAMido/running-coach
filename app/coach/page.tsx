@@ -10,7 +10,7 @@ import { Activity, Timer, TrendingUp, Calendar, CheckCircle2, Flame, Target, Zap
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { DashboardStats, Run, TrainingPlan, PlanWeek, Workout } from '@/lib/db/types';
-import { isWorkoutToday, getTodayDayName } from '@/lib/utils/week-calculator';
+import { isWorkoutToday, getTodayDayName, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
 
 type StatVariant = 'runs' | 'distance' | 'weekly' | 'plan';
 
@@ -484,7 +484,7 @@ export default function CoachDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {Object.entries(currentWeekWorkouts).map(([day, workout]) => {
+                    {sortWorkoutsByDay(currentWeekWorkouts).map(([day, workout]) => {
                       const isToday = isWorkoutToday(day);
                       return (
                         <tr
