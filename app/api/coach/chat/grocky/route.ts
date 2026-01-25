@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/db/supabase';
 import { callOpenRouter } from '@/lib/ai/openrouter';
-import { buildGrockySystemPrompt, buildPlanReviewPrompt, buildGrockyChatContext } from '@/lib/ai/grocky-prompts';
+import {
+  buildEnhancedGrockySystemPrompt,
+  buildEnhancedGrockyPlanReviewPrompt,
+  buildEnhancedGrockyChatPrompt,
+} from '@/lib/ai/grocky-prompts';
+import { buildContext, getContextStats } from '@/lib/rag/context-builder';
 import type { ChatMessage } from '@/lib/db/types';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { chatRequestSchema, validateInput } from '@/lib/validation/schemas';
@@ -30,58 +34,29 @@ export async function POST(request: NextRequest) {
 
     const { messages, reviewPlan } = validation.data;
 
-    // Get athlete profile
-    const { data: profile } = await supabase
-      .from('athlete_profile')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
+    // Get the user's query from the last message
+    const lastUserMessage = messages?.filter((m: ChatMessage) => m.role === 'user').pop();
+    const query = lastUserMessage?.content || 'training plan review';
 
-    // Get recent runs
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 14);
+    // Build 3-layer context for Grocky (uses 'grocky' query type)
+    const context = await buildContext(userId, query, 'grocky');
 
-    const { data: recentRuns } = await supabase
-      .from('runs')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('date', startDate.toISOString())
-      .order('date', { ascending: false });
-
-    // Get active plan
-    const { data: activePlan } = await supabase
-      .from('training_plans')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .single();
-
-    const systemPrompt = buildGrockySystemPrompt({ profile, currentPlan: activePlan, recentRuns: recentRuns || undefined });
-
-    let userPrompt: string;
+    let systemPrompt: string;
 
     if (reviewPlan) {
-      // Plan review mode
-      userPrompt = buildPlanReviewPrompt({
-        plan: activePlan?.plan_json || null,
-        recentRuns: recentRuns || [],
-      });
+      // Plan review mode - use enhanced plan review prompt
+      systemPrompt = buildEnhancedGrockyPlanReviewPrompt(context);
     } else if (messages && messages.length > 0) {
-      // Chat mode - use the last user message
-      const lastUserMessage = messages.filter(m => m.role === 'user').pop();
-      userPrompt = buildGrockyChatContext(lastUserMessage?.content || '', {
-        profile,
-        currentPlan: activePlan,
-        recentRuns: recentRuns || undefined
-      });
+      // Chat mode - use enhanced chat prompt
+      systemPrompt = buildEnhancedGrockyChatPrompt(context, query);
     } else {
       return NextResponse.json({ error: 'No messages provided' }, { status: 400 });
     }
 
-    // Build messages array
+    // Build messages array - for Grocky, the system prompt includes the user question
     const apiMessages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
+      { role: 'user', content: reviewPlan ? 'Please review my training plan' : query },
     ];
 
     // Call OpenRouter with Grok model
@@ -95,7 +70,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: response.error }, { status: 500 });
     }
 
-    return NextResponse.json({ content: response.content });
+    // Get context stats for debugging/monitoring
+    const stats = getContextStats(context);
+
+    return NextResponse.json({
+      content: response.content,
+      sources: {
+        books: context.bookContext.sources,
+        coachWorkouts: context.coachContext.workoutsIncluded,
+      },
+      metadata: {
+        queryType: 'grocky',
+        fatigueScore: context.userContext.metadata.fatigueScore,
+        currentPhase: context.userContext.metadata.currentPhase,
+        contextStats: stats,
+      },
+    });
   } catch (error) {
     console.error('Error in Grocky chat:', error);
     return NextResponse.json({ error: 'Failed to get response' }, { status: 500 });

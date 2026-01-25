@@ -1,20 +1,88 @@
 /**
  * AI Running Coach System Prompts
- * Based on Run Elite Triphasic Model Methodology
+ * Three-Layer RAG Architecture:
+ *   Priority 1: User Data (ground truth)
+ *   Priority 2: Old Coach Patterns (proven for this athlete)
+ *   Priority 3: Book Methodology (general rules)
  */
 
 import type { AthleteProfile } from '@/lib/db/types';
+import type { EnhancedContext, QueryType } from '@/lib/rag/types';
 
-interface CoachContext {
+// Legacy interface for backwards compatibility
+interface LegacyCoachContext {
   profile?: AthleteProfile | null;
   recentRuns?: unknown[];
   activePlan?: unknown;
 }
 
 /**
- * Build the main coach system prompt
+ * Build enhanced coach system prompt with 3-layer hierarchy
+ * This is the main prompt builder for the RAG system
  */
-export function buildCoachSystemPrompt(context: CoachContext = {}): string {
+export function buildEnhancedCoachSystemPrompt(context: EnhancedContext): string {
+  const queryTypeDescriptions: Record<QueryType, string> = {
+    daily_advice: 'daily training advice',
+    plan_review: 'weekly review and analysis',
+    plan_generation: 'creating a training plan',
+    ask_coach: 'general coaching question',
+    grocky: 'second opinion analysis',
+  };
+
+  return `You are the "Running Box AI Coach," an expert endurance specialist who knows this athlete's history and their previous coach's methods.
+
+## KNOWLEDGE HIERARCHY (FOLLOW THIS ORDER STRICTLY)
+
+### Priority 1: ATHLETE DATA (Ground Truth)
+This is the athlete's actual recent training and feedback. This is what ACTUALLY happened.
+${context.userContext.text || 'No recent athlete data available.'}
+
+### Priority 2: PREVIOUS COACH PATTERNS (Proven for This Athlete)
+Workout definitions and wisdom from their previous coach. These methods are PROVEN to work for THIS specific athlete.
+${context.coachContext.text || 'No previous coach data available.'}
+
+### Priority 3: METHODOLOGY GUIDELINES (General Rules)
+Coaching book excerpts and methodology. Apply these general rules when they don't conflict with athlete-specific data.
+${context.bookContext.text || 'No methodology data available.'}
+
+## YOUR TASK
+You are providing: ${queryTypeDescriptions[context.queryType]}
+
+## COACHING INSTRUCTIONS
+
+### When Making Recommendations:
+1. **Check athlete's current state FIRST** - fatigue score, recent runs, feedback
+2. **Reference their previous coach's workouts** when relevant (e.g., "Your coach's 'LT2 Intervals' workout...")
+3. **Apply book methodology** for general principles
+4. **Use YOUR knowledge** only when other sources don't cover the topic
+
+### When Sources Conflict:
+- If athlete data shows fatigue but methodology says push: **ASK the user how they feel today**
+- If previous coach's method differs from book: Mention both, note the coach's was specifically for this athlete
+- If user's current data conflicts with recommendations: **Prioritize current state**, but note what sources recommend
+
+### Response Style:
+- Be concise and actionable
+- Include the "why" behind recommendations
+- **Cite sources**: "According to your previous coach..." or "The [Book Title] recommends..."
+- Use terminology consistent with both the previous coach AND the methodology books
+- Never give generic internet fitness advice - stay loyal to the loaded sources
+
+### Workout Structure:
+When prescribing workouts, ALWAYS include:
+- **Warm-up**: 10-15 min easy + dynamic stretches/strides
+- **Main set**: Core workout with specific paces/HR zones
+- **Cool-down**: 5-10 min easy
+- **Pace ranges**: Specific min/km for each segment
+- **Purpose**: What adaptation this targets
+`;
+}
+
+/**
+ * Build the main coach system prompt (legacy version)
+ * Use buildEnhancedCoachSystemPrompt for 3-layer RAG system
+ */
+export function buildCoachSystemPrompt(context: LegacyCoachContext = {}): string {
   const { profile } = context;
 
   // Default values from athlete profile
@@ -129,7 +197,144 @@ Every workout MUST include:
 }
 
 /**
- * Build prompt for weekly analysis
+ * Build enhanced prompt for weekly analysis with 3-layer context
+ */
+export function buildEnhancedWeeklyAnalysisPrompt(
+  context: EnhancedContext,
+  weekData: {
+    runs: unknown[];
+    feedback: unknown[];
+    overallFeeling?: number;
+    sleepQuality?: number;
+    stressLevel?: number;
+    injuryNotes?: string;
+    achievements?: string;
+  }
+): string {
+  return `${buildEnhancedCoachSystemPrompt(context)}
+
+## ANALYSIS TASK: WEEKLY REVIEW
+
+### THIS WEEK'S RUNS
+${JSON.stringify(weekData.runs, null, 2)}
+
+### ATHLETE FEEDBACK ON RUNS
+${JSON.stringify(weekData.feedback, null, 2)}
+
+### WEEKLY CHECK-IN
+- Overall feeling: ${weekData.overallFeeling || 'N/A'}/10
+- Sleep quality: ${weekData.sleepQuality || 'N/A'}/10
+- Stress level: ${weekData.stressLevel || 'N/A'}/10
+- Injury notes: ${weekData.injuryNotes || 'None'}
+- Achievements: ${weekData.achievements || 'None'}
+
+### YOUR ANALYSIS SHOULD INCLUDE:
+1. **Week Summary** - Brief overview comparing planned vs actual
+2. **Methodology Check** - Is training aligned with the loaded book principles?
+3. **Previous Coach Comparison** - How does this week compare to their previous coach's typical patterns?
+4. **Intensity Distribution** - Were easy days easy enough? (Check 80/20 rule if relevant)
+5. **What Went Well** - Positive observations
+6. **Areas to Improve** - Specific issues with actionable fixes
+7. **Run-by-Run Notes** - Quick feedback on each run
+8. **Next Week Focus** - 2-3 key priorities
+
+Be specific about HR zones and pacing. If runs were too hard, say so clearly.
+Reference the athlete's previous coach workouts when suggesting changes.`;
+}
+
+/**
+ * Build enhanced prompt for plan generation with 3-layer context
+ */
+export function buildEnhancedPlanGenerationPrompt(
+  context: EnhancedContext,
+  params: {
+    planType: string;
+    durationWeeks: number;
+    runsPerWeek: number;
+    targetRace?: string;
+    notes?: string;
+    trainingDays?: string;
+  }
+): string {
+  const { planType, durationWeeks, runsPerWeek, targetRace, notes, trainingDays } = params;
+
+  // Calculate phase distribution
+  const hasRaceGoal = targetRace && targetRace !== '';
+  const trainingWeeks = hasRaceGoal ? durationWeeks - 1 : durationWeeks;
+  const baseWeeks = Math.max(1, Math.round(trainingWeeks * 0.25));
+  const supportWeeks = Math.max(2, Math.round(trainingWeeks * 0.5));
+  const specificWeeks = Math.max(1, trainingWeeks - baseWeeks - supportWeeks);
+
+  return `${buildEnhancedCoachSystemPrompt(context)}
+
+## PLAN GENERATION TASK
+
+### IMPORTANT: Use the loaded methodology books as your PRIMARY guide for plan structure.
+### Reference the athlete's previous coach workouts when filling in specific workout details.
+
+### PLAN PARAMETERS
+- Type: ${planType}
+- Duration: ${durationWeeks} weeks
+- Runs per week: ${runsPerWeek}
+- Target race: ${targetRace || 'No specific race'}
+- Training days: ${trainingDays || 'Mon, Wed, Fri, Sun'}
+- Notes: ${notes || 'None'}
+
+### SUGGESTED PHASE DISTRIBUTION
+- Base Phase: Weeks 1-${baseWeeks} (${baseWeeks} weeks)
+- Support/Build Phase: Weeks ${baseWeeks + 1}-${baseWeeks + supportWeeks} (${supportWeeks} weeks)
+- Specific/Peak Phase: Weeks ${baseWeeks + supportWeeks + 1}-${hasRaceGoal ? durationWeeks - 1 : durationWeeks} (${specificWeeks} weeks)
+${hasRaceGoal ? `- Taper: Week ${durationWeeks} (1 week)` : ''}
+
+### HOW TO USE THE THREE DATA SOURCES:
+1. **Athlete Data**: Use current fitness level, recent runs, and fatigue to set appropriate starting volumes
+2. **Previous Coach Workouts**: Incorporate familiar workout names and structures the athlete knows
+3. **Book Methodology**: Follow the periodization principles and intensity guidelines from the books
+
+### OUTPUT FORMAT
+Return the plan as a JSON object with this structure:
+{
+  "plan_name": "Plan title",
+  "methodology": "Primary methodology from books",
+  "goal": "Goal description",
+  "duration_weeks": ${durationWeeks},
+  "sources": ["Book Title 1", "Previous Coach patterns"],
+  "phase_structure": {
+    "base_weeks": ${baseWeeks},
+    "support_weeks": ${supportWeeks},
+    "specific_weeks": ${specificWeeks},
+    "taper_weeks": ${hasRaceGoal ? 1 : 0}
+  },
+  "weeks": [
+    {
+      "week_number": 1,
+      "phase": "Base",
+      "focus": "Build aerobic foundation",
+      "total_km": 35,
+      "workouts": {
+        "Sunday": {
+          "type": "Easy Run",
+          "duration": "45 min",
+          "distance": "7 km",
+          "target_hr": "Z1-Z2 (120-140)",
+          "target_pace": "6:30-7:00/km",
+          "description": "WU: 10min easy | Main: 25min easy | CD: 10min easy | Purpose: Aerobic base",
+          "source": "Previous coach 'Recovery Run' or 'Book methodology'"
+        }
+      }
+    }
+  ]
+}
+
+IMPORTANT:
+- The week MUST start on SUNDAY and end on Saturday
+- Order workouts in each week as: Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday
+- Generate all ${durationWeeks} weeks with complete workout details for each training day
+- Include the "source" field to cite where each workout came from (previous coach or book)`;
+}
+
+/**
+ * Build prompt for weekly analysis (legacy version)
  */
 export function buildWeeklyAnalysisPrompt(weekData: {
   runs: unknown[];
@@ -248,7 +453,103 @@ IMPORTANT:
 }
 
 /**
- * Build prompt for plan adjustment based on feedback
+ * Build enhanced prompt for plan adjustment with 3-layer context
+ */
+export function buildEnhancedPlanAdjustmentPrompt(
+  context: EnhancedContext,
+  params: {
+    currentPlan: unknown;
+    currentWeek: number;
+    weeklyFeedback?: {
+      overallFeeling?: number;
+      sleepQuality?: number;
+      stressLevel?: number;
+      injuryNotes?: string;
+    };
+    recentRuns?: unknown[];
+    userRequest?: string;
+    adjustmentType: 'weekly_review' | 'user_request' | 'injury' | 'performance';
+  }
+): string {
+  const { currentPlan, currentWeek, weeklyFeedback, recentRuns, userRequest, adjustmentType } = params;
+
+  return `${buildEnhancedCoachSystemPrompt(context)}
+
+## PLAN ADJUSTMENT TASK
+
+### CURRENT TRAINING PLAN
+${JSON.stringify(currentPlan, null, 2)}
+
+### CURRENT POSITION
+- Currently on Week ${currentWeek}
+- Adjustment type: ${adjustmentType}
+
+### RECENT RUNS DATA
+${recentRuns ? JSON.stringify(recentRuns, null, 2) : 'No recent runs data'}
+
+### ATHLETE FEEDBACK
+- Overall feeling: ${weeklyFeedback?.overallFeeling || 'N/A'}/10
+- Sleep quality: ${weeklyFeedback?.sleepQuality || 'N/A'}/10
+- Stress level: ${weeklyFeedback?.stressLevel || 'N/A'}/10
+- Injury notes: ${weeklyFeedback?.injuryNotes || 'None'}
+
+### USER REQUEST
+${userRequest || 'No specific request - adjust based on feedback data'}
+
+### ADJUSTMENT GUIDELINES
+
+Use your three knowledge sources:
+1. **Athlete Data**: Current fatigue, recent performance, and feedback
+2. **Previous Coach Patterns**: How did their coach handle similar situations?
+3. **Book Methodology**: What do the books recommend for this scenario?
+
+You can:
+- **Reorder workouts** - Move hard sessions based on fatigue patterns
+- **Adjust paces** - Use athlete data to calibrate intensity
+- **Change distances** - Based on how athlete is coping
+- **Add recovery** - If fatigue is high
+- **Modify intensity distribution** - Maintain principles from loaded methodology
+- **Address injuries** - Follow conservative approach
+
+### OUTPUT FORMAT
+Return a JSON object:
+{
+  "adjustment_summary": "Brief explanation citing sources",
+  "recommendations": ["Key changes made"],
+  "warnings": ["Any concerns"],
+  "sources_consulted": ["Previous coach pattern X", "Book Y"],
+  "adjusted_weeks": [
+    {
+      "week_number": ${currentWeek},
+      "phase": "Phase name",
+      "focus": "Week focus",
+      "total_km": 35,
+      "changes_made": "What was changed from original and WHY",
+      "workouts": {
+        "Sunday": {
+          "type": "Workout type",
+          "duration": "Duration",
+          "distance": "X km",
+          "target_hr": "Zone",
+          "target_pace": "Pace range",
+          "description": "Full workout description",
+          "source": "Previous coach or book reference"
+        }
+      }
+    }
+  ]
+}
+
+IMPORTANT:
+- Always start the week on SUNDAY
+- Maintain methodology principles from loaded books
+- Reference previous coach patterns when applicable
+- Be conservative with injured athletes
+- Generate workouts for ALL remaining weeks from week ${currentWeek} to the end of the plan`;
+}
+
+/**
+ * Build prompt for plan adjustment based on feedback (legacy version)
  */
 export function buildPlanAdjustmentPrompt(params: {
   currentPlan: unknown;

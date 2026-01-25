@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/db/supabase';
 import { callOpenRouter } from '@/lib/ai/openrouter';
-import { buildCoachSystemPrompt } from '@/lib/ai/coach-prompts';
+import { buildEnhancedCoachSystemPrompt } from '@/lib/ai/coach-prompts';
+import { buildContext, detectQueryType, getContextStats } from '@/lib/rag/context-builder';
 import type { ChatMessage } from '@/lib/db/types';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { chatRequestSchema, validateInput } from '@/lib/validation/schemas';
@@ -30,43 +30,16 @@ export async function POST(request: NextRequest) {
 
     const { messages } = validation.data as { messages: ChatMessage[] };
 
-    // Get athlete profile and recent runs for context
-    const { data: profile } = await supabase
-      .from('athlete_profile')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
+    // Get the user's query from the last message
+    const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+    const query = lastUserMessage?.content || '';
 
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 14);
+    // Detect query type and build 3-layer context
+    const queryType = detectQueryType(query);
+    const context = await buildContext(userId, query, queryType);
 
-    const { data: recentRuns } = await supabase
-      .from('runs')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('date', startDate.toISOString())
-      .order('date', { ascending: false })
-      .limit(10);
-
-    // Get active plan
-    const { data: activePlan } = await supabase
-      .from('training_plans')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .single();
-
-    // Build system prompt with context
-    let systemPrompt = buildCoachSystemPrompt({ profile, recentRuns: recentRuns || undefined, activePlan });
-
-    // Add recent training context
-    if (recentRuns && recentRuns.length > 0) {
-      systemPrompt += `\n\n## RECENT TRAINING (Last 14 days)\n${JSON.stringify(recentRuns, null, 2)}`;
-    }
-
-    if (activePlan) {
-      systemPrompt += `\n\n## CURRENT TRAINING PLAN\n${JSON.stringify(activePlan.plan_json, null, 2)}`;
-    }
+    // Build enhanced system prompt with 3-layer hierarchy
+    const systemPrompt = buildEnhancedCoachSystemPrompt(context);
 
     // Build messages array
     const apiMessages: ChatMessage[] = [
@@ -81,7 +54,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: response.error }, { status: 500 });
     }
 
-    return NextResponse.json({ content: response.content });
+    // Get context stats for debugging/monitoring
+    const stats = getContextStats(context);
+
+    return NextResponse.json({
+      content: response.content,
+      sources: {
+        books: context.bookContext.sources,
+        coachWorkouts: context.coachContext.workoutsIncluded,
+      },
+      metadata: {
+        queryType,
+        fatigueScore: context.userContext.metadata.fatigueScore,
+        currentPhase: context.userContext.metadata.currentPhase,
+        contextStats: stats,
+      },
+    });
   } catch (error) {
     console.error('Error in chat:', error);
     return NextResponse.json({ error: 'Failed to get response' }, { status: 500 });

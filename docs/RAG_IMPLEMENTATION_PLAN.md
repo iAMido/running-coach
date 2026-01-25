@@ -860,13 +860,19 @@ Week 1:
 │   ├── 🔲 Run TrainingPeaks import
 │   └── 🔲 Load all 5 books
 │
-├── 🔲 Day 5: Phase 2 (Enhanced Prompts)
-│   └── 🔲 Update coach-prompts.ts with 3-layer hierarchy
+├── ✅ Day 5: Phase 2 (Enhanced Prompts) - COMPLETE
+│   ├── ✅ buildEnhancedCoachSystemPrompt (3-layer hierarchy)
+│   ├── ✅ buildEnhancedWeeklyAnalysisPrompt
+│   ├── ✅ buildEnhancedPlanGenerationPrompt
+│   ├── ✅ buildEnhancedPlanAdjustmentPrompt
+│   ├── ✅ buildEnhancedGrockySystemPrompt
+│   ├── ✅ buildEnhancedGrockyPlanReviewPrompt
+│   └── ✅ buildEnhancedGrockyChatPrompt
 │
-└── 🔲 Day 6: Phase 3 (API Integration)
-    ├── 🔲 Update ask/route.ts
-    ├── 🔲 Update plan/route.ts
-    └── 🔲 Update grocky/route.ts
+├── ✅ Day 6: Phase 3 (API Integration) - COMPLETE
+│   ├── ✅ Update ask/route.ts - uses 3-layer context
+│   ├── ✅ Update plan/generate/route.ts - uses 3-layer context
+│   └── ✅ Update grocky/route.ts - uses 3-layer context
 
 Week 2:
 └── 🔲 Phase 6 (UI - Optional)

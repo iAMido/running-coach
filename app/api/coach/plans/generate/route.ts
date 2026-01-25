@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { callOpenRouter } from '@/lib/ai/openrouter';
-import { buildCoachSystemPrompt, buildPlanGenerationPrompt } from '@/lib/ai/coach-prompts';
+import { buildEnhancedPlanGenerationPrompt } from '@/lib/ai/coach-prompts';
+import { buildContext, getContextStats } from '@/lib/rag/context-builder';
+import { getAthleteProfile } from '@/lib/db/profile';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { planGenerationSchema, validateInput } from '@/lib/validation/schemas';
 
@@ -29,16 +31,17 @@ export async function POST(request: NextRequest) {
 
     const { planType, durationWeeks, runsPerWeek, targetRace, notes } = validation.data;
 
-    // Get athlete profile for context
-    const { data: profile } = await supabase
-      .from('athlete_profile')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
+    // Get athlete profile for training days
+    const profile = await getAthleteProfile(userId);
 
-    // Build prompts
-    const systemPrompt = buildCoachSystemPrompt({ profile });
-    const userPrompt = buildPlanGenerationPrompt({
+    // Build a query string for context retrieval
+    const contextQuery = `Create a ${durationWeeks}-week ${planType} training plan for ${targetRace || 'general fitness'}`;
+
+    // Build 3-layer context (uses 'plan_generation' which is 35% user / 10% coach / 55% books)
+    const context = await buildContext(userId, contextQuery, 'plan_generation');
+
+    // Build enhanced plan generation prompt with 3-layer context
+    const systemPrompt = buildEnhancedPlanGenerationPrompt(context, {
       planType,
       durationWeeks,
       runsPerWeek,
@@ -51,7 +54,7 @@ export async function POST(request: NextRequest) {
     const response = await callOpenRouter(
       [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
+        { role: 'user', content: `Generate my ${durationWeeks}-week ${planType} training plan` },
       ],
       { apiKey, maxTokens: 8000 }
     );
@@ -73,7 +76,7 @@ export async function POST(request: NextRequest) {
       planJson = { raw_response: response.content };
     }
 
-    // Save to database
+    // Save to database - mark existing active plans as completed
     await supabase
       .from('training_plans')
       .update({ status: 'completed' })
@@ -96,7 +99,21 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json({ plan, rawResponse: response.content });
+    // Get context stats for debugging/monitoring
+    const stats = getContextStats(context);
+
+    return NextResponse.json({
+      plan,
+      rawResponse: response.content,
+      sources: {
+        books: context.bookContext.sources,
+        coachWorkouts: context.coachContext.workoutsIncluded,
+      },
+      metadata: {
+        queryType: 'plan_generation',
+        contextStats: stats,
+      },
+    });
   } catch (error) {
     console.error('Error generating plan:', error);
     return NextResponse.json({ error: 'Failed to generate plan' }, { status: 500 });
