@@ -842,38 +842,79 @@ supabase/migrations/
 
 ```
 Week 1:
-├── Day 1: Phase 0 (Database Setup)
-│   ├── Create coach_workouts table
-│   ├── Create coach_phases table
-│   └── Add TypeScript types
+├── ✅ Day 1: Phase 0 (Database Setup) - COMPLETE
+│   ├── ✅ Create coach_workouts table
+│   ├── ✅ Create coach_phases table
+│   ├── ✅ Add TypeScript types
+│   └── ✅ Add search RPC functions
 │
-├── Day 2-3: Phase 1 (Context Builders)
-│   ├── user-formatter.ts
-│   ├── coach-retriever.ts
-│   ├── book-retriever.ts
-│   └── context-builder.ts
+├── ✅ Day 2-3: Phase 1 (Context Builders) - COMPLETE
+│   ├── ✅ user-formatter.ts
+│   ├── ✅ coach-retriever.ts
+│   ├── ✅ book-retriever.ts
+│   └── ✅ context-builder.ts
 │
-├── Day 4: Phase 2 (Enhanced Prompts)
-│   └── Update coach-prompts.ts with 3-layer hierarchy
+├── ⏳ Day 4: Phase 4 (Data Import) - IN PROGRESS
+│   ├── ✅ import-trainingpeaks.ts script
+│   ├── ✅ load-books.ts script
+│   ├── 🔲 Run TrainingPeaks import
+│   └── 🔲 Load all 5 books
 │
-└── Day 5: Phase 3 (API Integration)
-    ├── Update ask/route.ts
-    ├── Update plan/route.ts
-    └── Update grocky/route.ts
+├── 🔲 Day 5: Phase 2 (Enhanced Prompts)
+│   └── 🔲 Update coach-prompts.ts with 3-layer hierarchy
+│
+└── 🔲 Day 6: Phase 3 (API Integration)
+    ├── 🔲 Update ask/route.ts
+    ├── 🔲 Update plan/route.ts
+    └── 🔲 Update grocky/route.ts
 
 Week 2:
-├── Day 1-2: Phase 4 (Import Tools)
-│   ├── TrainingPeaks import utility
-│   └── Derive workouts from existing runs
-│
-├── Day 3: Phase 5 (Database Optimization)
-│   └── Add search RPC functions
-│
-└── Day 4-5: Phase 6 (UI - Optional)
-    ├── Sources in chat
-    ├── Fatigue badge
-    └── Workout library browser
+└── 🔲 Phase 6 (UI - Optional)
+    ├── 🔲 Sources in chat
+    ├── 🔲 Fatigue badge
+    └── 🔲 Workout library browser
 ```
+
+---
+
+## Data Import Instructions
+
+### 1. Import TrainingPeaks Workouts
+
+```bash
+# Install dependencies first
+npm install better-sqlite3 dotenv
+
+# Run the import script
+npx tsx scripts/import-trainingpeaks.ts "C:\Users\reutn\OneDrive\Desktop\books\tp_running_data.db" <your-user-id>
+```
+
+This will:
+- Read 287 runs from your TrainingPeaks database
+- Extract unique workout names and coach notes
+- Categorize workouts (Recovery, Threshold, VO2max, etc.)
+- Import into `coach_workouts` table
+
+### 2. Load Coaching Books
+
+```bash
+# Load each book (run one at a time)
+npx tsx scripts/load-books.ts "C:\Users\reutn\OneDrive\Desktop\books\Run Elite - Train and Think Like the Greatest Distance -  Snow, Andrew.json"
+
+npx tsx scripts/load-books.ts "C:\Users\reutn\OneDrive\Desktop\books\80_20 running -run stronger and race faster by training slower - Fitzgerald, Matt_ Johnson, Robert.json"
+
+npx tsx scripts/load-books.ts "C:\Users\reutn\OneDrive\Desktop\books\Run Faster from the 5K to the Marathon - Brad Hudson_ Matt Fitzgerald.json"
+
+npx tsx scripts/load-books.ts "C:\Users\reutn\OneDrive\Desktop\books\Better Training for Distance Runners - David E. Martin, Peter N. Coe.json"
+
+npx tsx scripts/load-books.ts "C:\Users\reutn\OneDrive\Desktop\books\Endure_ Mind, Body, and the Curiously Elastic Limits of Human Performance - Alex Hutchinson.json"
+```
+
+This will:
+- Parse each book JSON file
+- Chunk text into ~2000 char segments
+- Generate embeddings via OpenAI
+- Store in `book_instructions` table with metadata
 
 ---
 
