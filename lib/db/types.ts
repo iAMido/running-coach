@@ -174,6 +174,56 @@ export interface StravaToken {
   updated_at?: string;
 }
 
+// ============================================================
+// Old Coach Data Types (TrainingPeaks import)
+// ============================================================
+
+export interface CoachWorkout {
+  id: string;
+  user_id: string;
+  workout_name: string;
+  workout_name_variants?: string[];
+  category?: string;              // "Easy", "Tempo", "Intervals", "Long Run", "Recovery"
+  sub_category?: string;          // "LT1", "LT2", "VO2max", etc.
+  training_phase?: string;        // "Base", "Build", "Specific", "Taper"
+  description?: string;
+  typical_distance_km?: number;
+  typical_duration_min?: number;
+  target_zone?: string;           // "Z2", "Z3", "Z4", etc.
+  target_pace?: string;           // "4:30/km", "Easy", etc.
+  intensity_level?: number;       // 1-10
+  coach_notes?: string;
+  when_to_use?: string;
+  when_to_avoid?: string;
+  recovery_needed?: string;
+  times_performed?: number;
+  last_performed?: string;
+  avg_feeling?: number;
+  source?: string;                // "trainingpeaks", "manual", "garmin"
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CoachPhase {
+  id: string;
+  user_id: string;
+  phase_name: string;
+  phase_order?: number;
+  description?: string;
+  typical_duration_weeks?: number;
+  focus_areas?: string[];
+  weekly_structure?: Record<string, string>;
+  workout_types?: string[];
+  intensity_distribution?: Record<string, number>;
+  coach_notes?: string;
+  key_workouts?: string[];
+  avoid_in_phase?: string[];
+  volume_progression?: string;
+  intensity_progression?: string;
+  source?: string;
+  created_at?: string;
+}
+
 // Supabase Database type definition
 export interface Database {
   public: {
@@ -217,6 +267,16 @@ export interface Database {
         Row: StravaToken;
         Insert: Omit<StravaToken, 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Omit<StravaToken, 'id'>>;
+      };
+      coach_workouts: {
+        Row: CoachWorkout;
+        Insert: Omit<CoachWorkout, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<CoachWorkout, 'id'>>;
+      };
+      coach_phases: {
+        Row: CoachPhase;
+        Insert: Omit<CoachPhase, 'id' | 'created_at'>;
+        Update: Partial<Omit<CoachPhase, 'id'>>;
       };
     };
   };
