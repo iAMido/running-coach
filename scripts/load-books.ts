@@ -17,15 +17,16 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
+// Use OpenRouter for embeddings (supports OpenAI embedding models)
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY!;
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
   console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
   process.exit(1);
 }
 
-if (!OPENAI_API_KEY) {
-  console.error('Missing OPENAI_API_KEY for embeddings');
+if (!OPENROUTER_API_KEY) {
+  console.error('Missing OPENROUTER_API_KEY for embeddings');
   process.exit(1);
 }
 
@@ -235,25 +236,27 @@ function extractKeyRules(text: string): string[] {
 }
 
 /**
- * Generate embedding for text using OpenAI
+ * Generate embedding for text using OpenRouter (routes to OpenAI embedding models)
  */
 async function generateEmbedding(text: string): Promise<number[] | null> {
   try {
-    const response = await fetch('https://api.openai.com/v1/embeddings', {
+    const response = await fetch('https://openrouter.ai/api/v1/embeddings', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://running-coach.app',
+        'X-Title': 'Running Coach RAG',
       },
       body: JSON.stringify({
-        model: 'text-embedding-3-small',
+        model: 'openai/text-embedding-3-small',
         input: text.slice(0, 8000), // Limit input size
-        dimensions: 1536,
       }),
     });
 
     if (!response.ok) {
-      console.error('Embedding API error:', response.status);
+      const errorText = await response.text();
+      console.error('Embedding API error:', response.status, errorText);
       return null;
     }
 

@@ -854,11 +854,11 @@ Week 1:
 │   ├── ✅ book-retriever.ts
 │   └── ✅ context-builder.ts
 │
-├── ⏳ Day 4: Phase 4 (Data Import) - IN PROGRESS
+├── ✅ Day 4: Phase 4 (Data Import) - COMPLETE
 │   ├── ✅ import-trainingpeaks.ts script
-│   ├── ✅ load-books.ts script
-│   ├── 🔲 Run TrainingPeaks import
-│   └── 🔲 Load all 5 books
+│   ├── ✅ load-books.ts script (updated to use OpenRouter)
+│   ├── ✅ TrainingPeaks import: 69 workouts loaded
+│   └── ✅ Books loaded: 1,429 total chunks with embeddings
 │
 ├── ✅ Day 5: Phase 2 (Enhanced Prompts) - COMPLETE
 │   ├── ✅ buildEnhancedCoachSystemPrompt (3-layer hierarchy)
