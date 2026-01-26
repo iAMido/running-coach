@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { User, LogOut, Settings, Menu, X } from 'lucide-react';
+import { User, LogOut, Settings, Menu, X, Dumbbell } from 'lucide-react';
 import { useState } from 'react';
 
 const navLinks = [
@@ -108,6 +108,12 @@ export function Navbar() {
                   </div>
                   <DropdownMenuSeparator className="bg-white/10" />
                   <DropdownMenuItem asChild className="text-white/80 hover:text-white hover:bg-white/10 cursor-pointer">
+                    <Link href="/coach">
+                      <Dumbbell className="w-4 h-4 mr-2" />
+                      Coach
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild className="text-white/80 hover:text-white hover:bg-white/10 cursor-pointer">
                     <Link href="/profile">
                       <User className="w-4 h-4 mr-2" />
                       Profile
@@ -190,6 +196,14 @@ export function Navbar() {
                     <p className="text-xs text-muted-foreground truncate">{session.user.email}</p>
                   </div>
                 </div>
+                <Link
+                  href="/coach"
+                  onClick={handleLinkClick}
+                  className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-[#2563EB] to-[#10B981] text-white font-medium hover:opacity-90 transition-opacity"
+                >
+                  <Dumbbell className="w-4 h-4" />
+                  Coach
+                </Link>
                 <Link
                   href="/profile"
                   onClick={handleLinkClick}
