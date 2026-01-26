@@ -9,7 +9,7 @@ const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
-const { PDFParse } = require('pdf-parse');
+const pdf = require('pdf-parse');
 
 // Load environment variables
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
