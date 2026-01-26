@@ -30,7 +30,7 @@ const mainNavItems = [
 
 const menuItems = [
   { href: '/coach/plan', label: 'Training Plan', icon: Target },
-  { href: '/coach/grocky', label: 'Grocky Balboa', icon: Dumbbell },
+  { href: '/coach/grocky', label: 'Grocky', icon: Dumbbell },
   { href: '/coach/strava', label: 'Sync Strava', icon: RefreshCw },
   { href: '/coach/settings', label: 'Settings', icon: Settings },
 ];
@@ -104,9 +104,13 @@ export function BottomNav() {
               <span className="text-[10px] font-medium">More</span>
             </button>
           </SheetTrigger>
-          <SheetContent side="bottom" className="h-auto max-h-[70vh] rounded-t-2xl px-4 pb-8 pt-2 bg-background">
-            <SheetHeader className="pb-4 border-b border-border mb-2">
-              <SheetTitle>Menu</SheetTitle>
+          <SheetContent side="bottom" className="h-auto max-h-[70vh] rounded-t-3xl px-4 pb-8 pt-0 bg-background [&>button]:hidden">
+            {/* Drag handle indicator */}
+            <div className="flex justify-center pt-3 pb-2">
+              <div className="w-12 h-1.5 rounded-full bg-muted-foreground/30" />
+            </div>
+            <SheetHeader className="pb-3 border-b border-border mb-2">
+              <SheetTitle className="text-center text-lg">Menu</SheetTitle>
             </SheetHeader>
             <div className="space-y-1 pb-4 bg-background">
               {menuItems.map((item) => {

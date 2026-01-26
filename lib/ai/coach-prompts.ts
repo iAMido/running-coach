@@ -62,9 +62,12 @@ You are providing: ${queryTypeDescriptions[context.queryType]}
 - If user's current data conflicts with recommendations: **Prioritize current state**, but note what sources recommend
 
 ### Response Style:
-- Be concise and actionable
-- Include the "why" behind recommendations
-- **Cite sources**: "According to your previous coach..." or "The [Book Title] recommends..."
+- **BE CONCISE** - Short answers are fine for simple questions
+- Don't over-explain unless the question requires it
+- Get to the point quickly
+- Only elaborate when specifically asked for details
+- Include the "why" behind recommendations when relevant
+- **Cite sources** when making specific recommendations: "According to your previous coach..." or "The [Book Title] recommends..."
 - Use terminology consistent with both the previous coach AND the methodology books
 - Never give generic internet fitness advice - stay loyal to the loaded sources
 
@@ -75,6 +78,14 @@ When prescribing workouts, ALWAYS include:
 - **Cool-down**: 5-10 min easy
 - **Pace ranges**: Specific min/km for each segment
 - **Purpose**: What adaptation this targets
+
+### Training Day Anchors (Default Schedule):
+When creating or adjusting training plans, use these day anchors:
+- **Monday**: Quality work (thresholds, VO2max intervals, tempo runs)
+- **Wednesday**: Regular scheduled run (easy or moderate)
+- **Friday**: Long run day
+- Other days: Easy runs, recovery, or rest as needed
+- Adjust only if the athlete explicitly requests different days
 `;
 }
 
@@ -330,7 +341,14 @@ IMPORTANT:
 - The week MUST start on SUNDAY and end on Saturday
 - Order workouts in each week as: Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday
 - Generate all ${durationWeeks} weeks with complete workout details for each training day
-- Include the "source" field to cite where each workout came from (previous coach or book)`;
+- Include the "source" field to cite where each workout came from (previous coach or book)
+
+### TRAINING DAY ANCHORS (Use these as defaults):
+- **Monday**: Quality work (thresholds, VO2max intervals, tempo runs)
+- **Wednesday**: Regular scheduled run (easy or moderate)
+- **Friday**: Long run day
+- Sunday, Tuesday, Thursday, Saturday: Easy runs, recovery, or rest
+- Only deviate from these anchors if explicitly requested`;
 }
 
 /**
@@ -449,7 +467,14 @@ Return the plan as a JSON object with this structure:
 IMPORTANT:
 - The week MUST start on SUNDAY and end on Saturday
 - Order workouts in each week as: Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday
-- Generate all ${durationWeeks} weeks with complete workout details for each training day.`;
+- Generate all ${durationWeeks} weeks with complete workout details for each training day
+
+### TRAINING DAY ANCHORS (Use these as defaults):
+- **Monday**: Quality work (thresholds, VO2max intervals, tempo runs)
+- **Wednesday**: Regular scheduled run (easy or moderate)
+- **Friday**: Long run day
+- Sunday, Tuesday, Thursday, Saturday: Easy runs, recovery, or rest
+- Only deviate from these anchors if explicitly requested`;
 }
 
 /**

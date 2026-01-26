@@ -25,7 +25,7 @@ const navItems = [
   { href: '/coach/review', label: 'Weekly Review', icon: Calendar },
   { href: '/coach/plan', label: 'Training Plan', icon: Target },
   { href: '/coach/ask', label: 'Ask Coach', icon: MessageSquare },
-  { href: '/coach/grocky', label: 'Grocky Balboa', icon: Dumbbell },
+  { href: '/coach/grocky', label: 'Grocky', icon: Dumbbell },
   { href: '/coach/strava', label: 'Sync Strava', icon: RefreshCw },
   { href: '/coach/settings', label: 'Settings', icon: Settings },
 ];
