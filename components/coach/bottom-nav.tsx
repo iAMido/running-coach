@@ -104,15 +104,15 @@ export function BottomNav() {
               <span className="text-[10px] font-medium">More</span>
             </button>
           </SheetTrigger>
-          <SheetContent side="bottom" className="h-auto max-h-[70vh] rounded-t-3xl px-4 pb-8 pt-0 bg-background [&>button]:hidden">
+          <SheetContent side="bottom" className="h-auto max-h-[70vh] rounded-t-3xl px-4 pb-8 pt-0 bg-background border-t-0 shadow-2xl [&>button]:hidden">
             {/* Drag handle indicator */}
             <div className="flex justify-center pt-3 pb-2">
-              <div className="w-12 h-1.5 rounded-full bg-muted-foreground/30" />
+              <div className="w-10 h-1 rounded-full bg-muted-foreground/40" />
             </div>
-            <SheetHeader className="pb-3 border-b border-border mb-2">
-              <SheetTitle className="text-center text-lg">Menu</SheetTitle>
+            <SheetHeader className="pb-4 mb-4">
+              <SheetTitle className="text-center text-base font-semibold text-foreground">Menu</SheetTitle>
             </SheetHeader>
-            <div className="space-y-1 pb-4 bg-background">
+            <div className="space-y-2 pb-4">
               {menuItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.href;
@@ -123,27 +123,34 @@ export function BottomNav() {
                     href={item.href}
                     onClick={() => setMenuOpen(false)}
                     className={cn(
-                      'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
+                      'flex items-center gap-4 px-4 py-4 rounded-xl transition-all active:scale-[0.98]',
                       isActive
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-foreground hover:bg-accent'
+                        ? 'bg-primary/15 text-primary'
+                        : 'text-foreground bg-accent/50 hover:bg-accent'
                     )}
                   >
-                    <Icon className="w-5 h-5" />
-                    <span className="font-medium">{item.label}</span>
+                    <div className={cn(
+                      'p-2 rounded-lg',
+                      isActive ? 'bg-primary/20' : 'bg-background'
+                    )}>
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <span className="font-medium text-base">{item.label}</span>
                   </Link>
                 );
               })}
 
-              <div className="border-t border-border my-3" />
+              <div className="border-t border-border my-4" />
 
               <Link
                 href="/"
                 onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-3 px-4 py-3 rounded-lg text-foreground hover:bg-accent transition-colors"
+                className="flex items-center gap-4 px-4 py-4 rounded-xl text-foreground bg-accent/50 hover:bg-accent transition-all active:scale-[0.98]"
               >
-                <ChevronLeft className="w-5 h-5" />
-                <span className="font-medium">Back to Portfolio</span>
+                <div className="p-2 rounded-lg bg-background">
+                  <ChevronLeft className="w-5 h-5" />
+                </div>
+                <span className="font-medium text-base">Back to Portfolio</span>
               </Link>
 
               <button
@@ -151,10 +158,12 @@ export function BottomNav() {
                   setMenuOpen(false);
                   signOut({ callbackUrl: '/' });
                 }}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors"
+                className="w-full flex items-center gap-4 px-4 py-4 rounded-xl text-red-500 bg-red-500/10 hover:bg-red-500/20 transition-all active:scale-[0.98]"
               >
-                <LogOut className="w-5 h-5" />
-                <span className="font-medium">Sign Out</span>
+                <div className="p-2 rounded-lg bg-red-500/10">
+                  <LogOut className="w-5 h-5" />
+                </div>
+                <span className="font-medium text-base">Sign Out</span>
               </button>
             </div>
           </SheetContent>
