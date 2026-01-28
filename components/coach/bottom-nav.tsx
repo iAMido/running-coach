@@ -114,7 +114,7 @@ export function BottomNav() {
             }}
           >
             {/* Drag handle indicator */}
-            <div className="flex justify-center pt-3 pb-2">
+            <div className="flex justify-center pt-3 pb-2 cursor-pointer" onClick={() => setMenuOpen(false)}>
               <div className="w-10 h-1 rounded-full bg-muted-foreground/40" />
             </div>
             <SheetHeader className="pb-4 mb-4">
@@ -134,7 +134,7 @@ export function BottomNav() {
                       'flex items-center gap-4 px-4 py-4 rounded-xl transition-all active:scale-[0.98]',
                       isActive
                         ? 'bg-primary/15 text-primary'
-                        : 'text-foreground bg-accent/50 hover:bg-accent'
+                        : 'text-foreground bg-muted/50 hover:bg-muted'
                     )}
                   >
                     <div className={cn(
@@ -153,7 +153,7 @@ export function BottomNav() {
               <Link
                 href="/"
                 onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-4 px-4 py-4 rounded-xl text-foreground bg-accent/50 hover:bg-accent transition-all active:scale-[0.98]"
+                className="flex items-center gap-4 px-4 py-4 rounded-xl text-foreground bg-muted/50 hover:bg-muted transition-all active:scale-[0.98]"
               >
                 <div className="p-2 rounded-lg bg-background">
                   <ChevronLeft className="w-5 h-5" />
