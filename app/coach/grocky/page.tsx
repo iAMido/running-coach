@@ -121,7 +121,7 @@ export default function GrockyBalboaPage() {
             <CardHeader className="border-b border-border/50 flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="coach-heading flex items-center gap-2 text-lg">
-                  <div className={`ai-icon-container w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center ${loading ? 'active ai-pulse' : ''}`}>
+                  <div className={`ai-icon-container w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center ${loading ? 'active ai-pulse' : ''}`}>
                     <Dumbbell className="w-5 h-5 text-white" />
                   </div>
                   Grocky Balboa
@@ -155,7 +155,7 @@ export default function GrockyBalboaPage() {
                         <button
                           key={example}
                           onClick={() => setInput(example)}
-                          className="block w-full text-sm px-4 py-2 rounded-lg bg-accent hover:bg-accent/80 transition-colors text-left"
+                          className="block w-full text-sm px-4 py-2 rounded-lg bg-muted hover:bg-muted/80 transition-colors text-left"
                         >
                           {example}
                         </button>
@@ -168,21 +168,19 @@ export default function GrockyBalboaPage() {
                   {messages.map((message, index) => (
                     <div
                       key={index}
-                      className={`flex gap-3 ${
-                        message.role === 'user' ? 'justify-end' : 'justify-start'
-                      }`}
+                      className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'
+                        }`}
                     >
                       {message.role === 'assistant' && (
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center shrink-0">
                           <Dumbbell className="w-4 h-4 text-white" />
                         </div>
                       )}
                       <div
-                        className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                          message.role === 'user'
-                            ? 'bg-orange-500 text-white'
-                            : 'bg-accent'
-                        }`}
+                        className={`max-w-[80%] rounded-2xl px-4 py-3 ${message.role === 'user'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-muted'
+                          }`}
                       >
                         <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                       </div>
@@ -195,10 +193,10 @@ export default function GrockyBalboaPage() {
                   ))}
                   {loading && (
                     <div className="flex gap-3 justify-start">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center shrink-0">
                         <Dumbbell className="w-4 h-4 text-white" />
                       </div>
-                      <div className="bg-accent rounded-2xl px-4 py-3">
+                      <div className="bg-muted rounded-2xl px-4 py-3">
                         <div className="flex gap-1">
                           <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }} />
                           <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -247,8 +245,8 @@ export default function GrockyBalboaPage() {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="coach-heading flex items-center gap-2">
-                  <div className={`ai-icon-container p-2 rounded-lg bg-gradient-to-br from-orange-500/15 to-red-500/15 ${reviewLoading ? 'active ai-pulse' : ''}`}>
-                    <FileSearch className="w-5 h-5 text-orange-500" />
+                  <div className={`ai-icon-container p-2 rounded-lg bg-gradient-to-br from-indigo-500/15 to-violet-500/15 ${reviewLoading ? 'active ai-pulse' : ''}`}>
+                    <FileSearch className="w-5 h-5 text-indigo-500" />
                   </div>
                   Training Plan Review
                 </CardTitle>
@@ -266,7 +264,7 @@ export default function GrockyBalboaPage() {
             <CardContent className="space-y-4">
               {!planReview && !reviewLoading && (
                 <div className="empty-state">
-                  <FileSearch className="empty-state-icon text-orange-500/50" />
+                  <FileSearch className="empty-state-icon text-indigo-500/50" />
                   <p className="font-medium">Get an evidence-based second opinion</p>
                   <p className="text-sm mt-1 mb-4">
                     Grocky will analyze your training plan and provide feedback.
@@ -282,7 +280,7 @@ export default function GrockyBalboaPage() {
               )}
 
               {reviewLoading && (
-                <div className="space-y-4 p-4 bg-gradient-to-br from-orange-500/5 to-red-500/5 rounded-lg">
+                <div className="space-y-4 p-4 bg-gradient-to-br from-indigo-500/5 to-violet-500/5 rounded-lg">
                   <Skeleton className="h-4 w-full" />
                   <Skeleton className="h-4 w-3/4" />
                   <Skeleton className="h-4 w-5/6" />
@@ -293,7 +291,7 @@ export default function GrockyBalboaPage() {
 
               {planReview && (
                 <div className="prose dark:prose-invert max-w-none">
-                  <div className="whitespace-pre-wrap text-sm leading-relaxed bg-gradient-to-br from-orange-500/5 to-red-500/5 p-4 rounded-lg border border-border/50">
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed bg-gradient-to-br from-indigo-500/5 to-violet-500/5 p-4 rounded-lg border border-border/50">
                     {planReview}
                   </div>
                 </div>

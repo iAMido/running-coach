@@ -172,12 +172,12 @@ export default function AskCoachPage() {
 
       {/* Plan Adjustment Panel - Show when there's an active plan and messages */}
       {activePlan && messages.length > 0 && (
-        <Card className={`coach-card border-2 transition-all ${showAdjustPanel ? 'border-amber-500/50' : 'border-dashed border-primary/30'}`}>
+        <Card className={`coach-card border-2 transition-all ${showAdjustPanel ? 'border-blue-500/50' : 'border-dashed border-primary/30'}`}>
           <CardContent className="p-4">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg bg-gradient-to-br from-amber-500/15 to-orange-500/15 ${adjusting ? 'animate-pulse' : ''}`}>
-                  <Wand2 className="w-4 h-4 text-amber-500" />
+                <div className={`p-2 rounded-lg bg-gradient-to-br from-blue-500/15 to-cyan-500/15 ${adjusting ? 'animate-pulse' : ''}`}>
+                  <Wand2 className="w-4 h-4 text-blue-500" />
                 </div>
                 <div>
                   <p className="font-medium text-sm">Want to adjust your plan?</p>
@@ -193,7 +193,7 @@ export default function AskCoachPage() {
                 onClick={handleAdjustPlan}
                 disabled={adjusting}
                 size="sm"
-                className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shrink-0"
+                className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shrink-0"
               >
                 <Wand2 className="w-4 h-4 mr-2" />
                 {adjusting ? 'Adjusting...' : 'Adjust Plan'}
@@ -209,7 +209,7 @@ export default function AskCoachPage() {
 
             {/* Adjustment Result */}
             {adjustmentResult && (
-              <div className="mt-3 space-y-3 p-3 bg-gradient-to-br from-amber-500/5 to-orange-500/5 rounded-lg border border-amber-500/20">
+              <div className="mt-3 space-y-3 p-3 bg-gradient-to-br from-blue-500/5 to-cyan-500/5 rounded-lg border border-blue-500/20">
                 {adjustmentResult.planUpdated && (
                   <div className="flex items-center gap-2 text-green-600">
                     <CheckCircle2 className="w-4 h-4" />
@@ -264,7 +264,7 @@ export default function AskCoachPage() {
                     <button
                       key={example}
                       onClick={() => setInput(example)}
-                      className="block w-full text-sm px-4 py-2 rounded-lg bg-accent hover:bg-accent/80 transition-colors text-left"
+                      className="block w-full text-sm px-4 py-2 rounded-lg bg-muted hover:bg-muted/80 transition-colors text-left"
                     >
                       {example}
                     </button>
@@ -277,9 +277,8 @@ export default function AskCoachPage() {
               {messages.map((message, index) => (
                 <div
                   key={index}
-                  className={`flex gap-3 ${
-                    message.role === 'user' ? 'justify-end' : 'justify-start'
-                  }`}
+                  className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'
+                    }`}
                 >
                   {message.role === 'assistant' && (
                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-green-500 flex items-center justify-center shrink-0">
@@ -287,11 +286,10 @@ export default function AskCoachPage() {
                     </div>
                   )}
                   <div
-                    className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                      message.role === 'user'
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-accent'
-                    }`}
+                    className={`max-w-[80%] rounded-2xl px-4 py-3 ${message.role === 'user'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-muted'
+                      }`}
                   >
                     <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                   </div>
@@ -307,7 +305,7 @@ export default function AskCoachPage() {
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-green-500 flex items-center justify-center shrink-0">
                     <Bot className="w-4 h-4 text-white" />
                   </div>
-                  <div className="bg-accent rounded-2xl px-4 py-3">
+                  <div className="bg-muted rounded-2xl px-4 py-3">
                     <div className="flex gap-1">
                       <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }} />
                       <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }} />
