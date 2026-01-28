@@ -104,7 +104,15 @@ export function BottomNav() {
               <span className="text-[10px] font-medium">More</span>
             </button>
           </SheetTrigger>
-          <SheetContent side="bottom" className="h-auto max-h-[70vh] rounded-t-3xl px-4 pb-8 pt-0 bg-background border-t-0 shadow-2xl [&>button]:hidden">
+          <SheetContent side="bottom" className="h-auto max-h-[70vh] rounded-t-3xl px-4 pb-8 pt-0 border-t-0 [&>button]:hidden"
+            style={{
+              background: 'var(--nav-bg, rgba(255, 255, 255, 0.95))',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              borderTop: '1px solid var(--nav-border, rgba(255, 255, 255, 0.3))',
+              boxShadow: 'var(--nav-shadow, 0 8px 32px rgba(0, 0, 0, 0.12))',
+            }}
+          >
             {/* Drag handle indicator */}
             <div className="flex justify-center pt-3 pb-2">
               <div className="w-10 h-1 rounded-full bg-muted-foreground/40" />
