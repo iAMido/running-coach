@@ -60,10 +60,18 @@ export const cvData: CVData = {
     location: "Kfar Saba, Israel"
   },
 
-  about: "Highly driven and result-oriented SEO Specialist with over 10 years of experience in both hands-on optimization and strategic planning. I thrive in fast-paced environments that require effective assignment prioritization with tight deadlines. My approach is business-oriented with a strong focus on conversion optimization, A/B testing, quick wins in rankings, content marketing, and RankBrain optimization. I stay current with the constant changes in search engine optimization trends, algorithms, and ranking variables, ensuring my strategies deliver maximum ROI.",
+  about: "Highly driven and result-oriented SEO Specialist with over 10 years of experience (both hands-on and strategy building). I initiate and execute plans from PRD to development, leveraging AI tools like Cursor, Claude, and Gemini for \"vibe coding\" and automation. My approach is business-oriented with a strong focus on conversion, A/B testing, and comprehensive content strategies. I specialize in technical SEO, LLM optimization (both technical and onsite), and cross-functional collaboration to align marketing efforts with business objectives.",
 
   skills: [
     {
+      category: "AI & Automation",
+      items: [
+        "Vibe Coding (Cursor, Gemini, Claude)",
+        "LLM Optimization (Technical & Onsite)",
+        "CRM & Automation Processes",
+        "Python & AI Tools"
+      ]
+    }, {
       category: "Technical SEO",
       items: [
         "Site architecture",
@@ -79,6 +87,7 @@ export const cvData: CVData = {
         "Keyword research",
         "Content planning",
         "RankBrain optimization",
+        "Comprehensive content strategies",
         "Content marketing"
       ]
     },
@@ -126,7 +135,7 @@ export const cvData: CVData = {
       position: "Technical SEO Lead",
       company: "Natural Intelligence",
       duration: "2021-Present",
-      description: "Enhanced site health through technical SEO. Conducted audits, built business cases, developed Python automation tools, educated teams."
+      description: "Enhanced site health and architecture through strategic technical SEO. Led LLM optimization (technical and onsite) and cross-functional collaboration. Initiated and executed plans from PRD to development. Developed Python tools for automation and efficiency."
     },
     {
       position: "Head of SEO",

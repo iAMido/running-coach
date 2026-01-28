@@ -60,8 +60,12 @@ export function CVSidebar() {
             <p className="text-sm text-slate-600">Years of Experience</p>
           </div>
           <div>
-            <p className="text-3xl font-bold text-green-600">200%+</p>
-            <p className="text-sm text-slate-600">Organic Traffic Growth</p>
+            <p className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">AI First</p>
+            <div className="flex flex-wrap gap-2 mt-2">
+              <span className="text-xs bg-white/50 px-2 py-1 rounded-md text-slate-700 font-medium border border-blue-100">Vibe Coding</span>
+              <span className="text-xs bg-white/50 px-2 py-1 rounded-md text-slate-700 font-medium border border-blue-100">LLM Opt.</span>
+              <span className="text-xs bg-white/50 px-2 py-1 rounded-md text-slate-700 font-medium border border-blue-100">Automation</span>
+            </div>
           </div>
         </div>
       </div>
