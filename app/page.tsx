@@ -3,6 +3,8 @@
 import { useSession, signIn, signOut } from 'next-auth/react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
 import { CVNavigation } from '@/components/cv/cv-navigation'
 import { CVHero } from '@/components/cv/cv-hero'
 import { CVAbout } from '@/components/cv/cv-about'
@@ -18,6 +20,13 @@ import { LogIn, User } from 'lucide-react'
 
 export default function Home() {
   const { data: session } = useSession()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (session) {
+      router.push('/coach')
+    }
+  }, [session, router])
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -56,7 +65,7 @@ export default function Home() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => signIn('google')}
+                onClick={() => signIn('google', { callbackUrl: '/coach' })}
                 className="gap-2"
               >
                 <LogIn className="w-4 h-4" />
