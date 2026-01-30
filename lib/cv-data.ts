@@ -60,7 +60,7 @@ export const cvData: CVData = {
     location: "Kfar Saba, Israel"
   },
 
-  about: "Highly driven and result-oriented SEO Specialist with over 10 years of experience (both hands-on and strategy building). I initiate and execute plans from PRD to development, leveraging AI tools like Cursor, Claude, and Gemini for \"vibe coding\" and automation. My approach is business-oriented with a strong focus on conversion, A/B testing, and comprehensive content strategies. I specialize in technical SEO, LLM optimization (both technical and onsite), and cross-functional collaboration to align marketing efforts with business objectives.",
+  about: "Results-oriented SEO Specialist with over 10 years of strategic and operational experience. While my core focus is organic growth, I bring a unique hybrid advantage: I lead select product features from PRD to deployment and execute hands-on technical implementations using AI-assisted workflows (Cursor, Claude, Gemini).\n\nI specialize in technical scalability, automation, and Generative Engine Optimization (GEO). By bridging the gap between marketing and engineering, I foster cross-functional collaboration to integrate SEO best practices directly into the development lifecycle.",
 
   skills: [
     {
