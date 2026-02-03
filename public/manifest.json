@@ -1,0 +1,54 @@
+{
+  "name": "Running Coach",
+  "short_name": "Coach",
+  "description": "AI-powered running coach with personalized training plans and Strava integration",
+  "start_url": "/coach",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f172a",
+  "theme_color": "#3B82F6",
+  "categories": ["fitness", "health", "sports"],
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Log Run",
+      "short_name": "Log",
+      "description": "Log a new run",
+      "url": "/coach/log"
+    },
+    {
+      "name": "Training Plan",
+      "short_name": "Plan",
+      "description": "View your training plan",
+      "url": "/coach/plan"
+    },
+    {
+      "name": "Ask Coach",
+      "short_name": "Ask",
+      "description": "Ask your AI coach a question",
+      "url": "/coach/ask"
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false
+}

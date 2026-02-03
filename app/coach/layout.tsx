@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { CoachSidebar } from '@/components/coach/sidebar';
 import { BottomNav } from '@/components/coach/bottom-nav';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PWAProvider } from '@/components/pwa/pwa-provider';
 
 function LoadingSkeleton() {
   return (
@@ -39,14 +40,16 @@ export default function CoachLayout({
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <CoachSidebar />
-      <BottomNav />
-      <main className="md:ml-64 transition-all duration-300">
-        <div className="p-4 pb-24 md:p-6 md:pb-6 lg:p-8">
-          {children}
-        </div>
-      </main>
-    </div>
+    <PWAProvider>
+      <div className="min-h-screen bg-background">
+        <CoachSidebar />
+        <BottomNav />
+        <main className="md:ml-64 transition-all duration-300">
+          <div className="p-4 pb-24 md:p-6 md:pb-6 lg:p-8">
+            {children}
+          </div>
+        </main>
+      </div>
+    </PWAProvider>
   );
 }
