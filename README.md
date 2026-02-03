@@ -1,56 +1,59 @@
-# Ido Mosseri - Personal Portfolio & CV
+# Running Coach - AI-Powered Training Assistant
 
-Personal portfolio website featuring an interactive CV, professional blog, and project showcase. Built with Next.js 16, Bun, and TypeScript.
+An intelligent running coach application with AI-powered training plans, run analysis, and personalized coaching. Features Strava integration, dual AI coaches (Claude & Grok), and comprehensive training tracking.
 
-![Next.js](https://img.shields.io/badge/Next.js-16.1.1-black?style=for-the-badge&logo=next.js)
+![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js)
 ![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react)
-![Bun](https://img.shields.io/badge/Bun-Runtime-orange?style=for-the-badge&logo=bun)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=for-the-badge&logo=typescript)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-38bdf8?style=for-the-badge&logo=tailwind-css)
+![Supabase](https://img.shields.io/badge/Supabase-Database-3ECF8E?style=for-the-badge&logo=supabase)
 
 ## Features
 
-### Interactive CV
-- **Anchor-based navigation** - Smooth scroll to About, Skills, Experience, Education, and Contact sections
-- **Responsive design** - Two-column layout on desktop, single-column on mobile
-- **Fixed sidebar** - Profile image and quick stats (desktop only)
-- **Mobile-friendly** - Fixed header with hamburger menu
-- **Download CV** - Direct PDF download functionality
-- **Dark/Light mode** - Theme toggle with system preference detection
-- **Print-optimized** - Clean print styles for CV generation
+### AI Running Coach
+- **Smart Dashboard** - Track runs, distance, weekly stats, and training progress
+- **Training Plan Generator** - AI-generated personalized training plans based on your goals
+- **Run Logging** - Log runs with detailed feedback and AI analysis
+- **Weekly Review** - AI-powered weekly training analysis and recommendations
+- **Ask Coach** - Chat with Claude AI for personalized running advice
+- **Grocky Balboa** - Get a second opinion from Grok AI (your tough-love coach)
+- **Strava Sync** - Connect your Strava account to automatically import runs
 
-### Professional Blog
-- **Blog system** with Text-to-Speech (TTS) player
-- **Reading progress bar** - Track article progress as you scroll
-- **Spotify-style audio player** - Listen to articles with playback controls
-- **Voice selection** - Choose from available system voices
-- **Speed control** - Adjust playback speed (0.5x - 2x)
-- **Category tags** - Color-coded article categories
-- **Reading time estimates** - Automatic calculation
+### Additional Features
+- **Interactive CV** - Professional portfolio with anchor navigation
+- **Blog System** - Articles with Text-to-Speech player
+- **Google OAuth** - Secure authentication
+- **Dark/Light Mode** - System-aware theme switching
+- **Responsive Design** - Mobile-first, works on all devices
 
-### Technical Features
-- **Next.js 16** - Latest App Router with React Server Components
-- **React 19** - Newest React features and performance improvements
-- **Bun runtime** - 30x faster package installation
-- **TypeScript 5** - Full type safety with strict mode
-- **Tailwind CSS 4** - Modern utility-first styling
-- **Shadcn/ui** - Beautiful, accessible components
-- **NextAuth.js** - Google OAuth authentication
-- **Framer Motion** - Smooth animations
-- **Dark/Light mode** - System-aware theme switching
+## Tech Stack
+
+| Category | Technology |
+|----------|------------|
+| Framework | Next.js 16 (App Router) |
+| Runtime | Bun |
+| Language | TypeScript 5 |
+| Styling | Tailwind CSS 4 |
+| UI Components | Shadcn/ui |
+| Database | Supabase (PostgreSQL) |
+| AI | OpenRouter (Claude, Grok) |
+| Authentication | NextAuth.js |
+| Animations | Framer Motion |
 
 ## Quick Start
 
 ### Prerequisites
 - [Bun](https://bun.sh/) installed (or Node.js 18+)
-- Git
+- Supabase account for database
+- OpenRouter API key for AI features
+- (Optional) Strava API credentials
 
 ### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/iAMido/my-site.git
-cd my-site
+git clone https://github.com/iAMido/running-coach.git
+cd running-coach
 
 # Install dependencies
 bun install
@@ -62,99 +65,65 @@ cp .env.example .env.local
 bun run dev
 ```
 
-Visit `http://localhost:3000` to see your portfolio.
+Visit `http://localhost:3000` to see the application.
 
 ### Environment Variables
 
-Create a `.env.local` file with:
+Create a `.env.local` file:
 
 ```env
-NEXTAUTH_SECRET=your-secret-here  # Generate with: bunx openssl rand -base64 32
+# Authentication
+NEXTAUTH_SECRET=your-secret-here
 NEXTAUTH_URL=http://localhost:3000
-
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+# Database (Supabase)
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+
+# AI (OpenRouter)
+OPENROUTER_API_KEY=your-openrouter-api-key
+
+# Strava (Optional)
+STRAVA_CLIENT_ID=your-strava-client-id
+STRAVA_CLIENT_SECRET=your-strava-client-secret
 ```
-
-### Google OAuth Setup (Optional)
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create OAuth client ID (Web application)
-3. Add authorized redirect URI: `http://localhost:3000/api/auth/callback/google`
-4. Copy credentials to `.env.local`
 
 ## Project Structure
 
 ```
-my-site/
+running-coach/
 ├── app/
-│   ├── page.tsx                   # CV homepage
-│   ├── blog/                      # Blog system
-│   ├── profile/                   # Protected profile page
-│   └── api/auth/[...nextauth]/    # Authentication
+│   ├── page.tsx                    # Homepage (CV)
+│   ├── blog/                       # Blog system
+│   ├── coach/                      # AI Running Coach (protected)
+│   │   ├── page.tsx                # Dashboard
+│   │   ├── log/                    # Log runs
+│   │   ├── plan/                   # Training plans
+│   │   ├── review/                 # Weekly review
+│   │   ├── ask/                    # Ask Coach (Claude)
+│   │   ├── grocky/                 # Grocky Balboa (Grok)
+│   │   ├── strava/                 # Strava integration
+│   │   └── settings/               # User settings
+│   └── api/                        # API routes
 ├── components/
-│   ├── cv/                        # CV components
-│   │   ├── cv-navigation.tsx      # Anchor navigation
-│   │   ├── cv-hero.tsx            # Hero section
-│   │   ├── cv-about.tsx           # About section
-│   │   ├── cv-skills.tsx          # Skills grid
-│   │   ├── cv-experience.tsx      # Work history
-│   │   ├── cv-education.tsx       # Education timeline
-│   │   ├── cv-contact.tsx         # Contact info
-│   │   └── cv-sidebar.tsx         # Profile sidebar
-│   ├── blog/                      # Blog components
-│   ├── layout/                    # Layout components
-│   └── ui/                        # Shadcn/ui components
+│   ├── coach/                      # Coach UI components
+│   ├── cv/                         # CV components
+│   ├── blog/                       # Blog components
+│   └── ui/                         # Shadcn/ui components
 ├── lib/
-│   ├── cv-data.ts                 # CV content data
-│   ├── blog.ts                    # Blog posts data
-│   └── utils.ts                   # Utility functions
-└── public/
-    └── cv.pdf                     # Downloadable CV
-```
-
-## Customization
-
-### Update CV Content
-
-Edit `lib/cv-data.ts` to update your personal information:
-
-```typescript
-export const cvData: CVData = {
-  personal: {
-    name: "Your Name",
-    title: "Your Title",
-    // ...
-  },
-  // Update about, skills, experience, education, contact
-}
-```
-
-### Add Blog Posts
-
-Edit `lib/blog.ts` to add new articles:
-
-```typescript
-{
-  slug: 'my-article',
-  title: 'My Article Title',
-  content: 'Plain text for TTS...',
-  contentHtml: '<p>HTML content...</p>',
-  category: 'Engineering',
-  // ...
-}
-```
-
-### Customize Colors
-
-Edit `app/globals.css` to change the color scheme:
-
-```css
-:root {
-  --cv-blue: #2563EB;      /* Primary color */
-  --cv-green: #10B981;     /* Accent color */
-  --cv-slate: #64748B;     /* Secondary color */
-}
+│   ├── ai/                         # AI integration
+│   │   ├── openrouter.ts           # OpenRouter client
+│   │   ├── coach-prompts.ts        # Claude prompts
+│   │   └── grocky-prompts.ts       # Grok prompts
+│   ├── db/                         # Database layer
+│   │   ├── supabase.ts             # Supabase client
+│   │   ├── runs.ts                 # Runs CRUD
+│   │   ├── plans.ts                # Training plans
+│   │   └── profile.ts              # Athlete profile
+│   └── utils/                      # Utilities
+└── docs/                           # Documentation
 ```
 
 ## Available Scripts
@@ -166,6 +135,41 @@ bun run start    # Start production server
 bun run lint     # Run ESLint
 ```
 
+## Coach Features
+
+### Dashboard
+Track your running metrics at a glance:
+- Total runs and distance
+- Weekly mileage and trends
+- Active training plan progress
+- Recent activity feed
+
+### Training Plans
+AI-generated training plans tailored to your:
+- Current fitness level
+- Goal race distance
+- Target completion time
+- Available training days
+
+### Ask Coach (Claude)
+Get personalized advice on:
+- Training questions
+- Recovery strategies
+- Race preparation
+- Injury prevention
+
+### Grocky Balboa (Grok)
+Your tough-love second opinion coach:
+- No-nonsense training feedback
+- Reality checks on your goals
+- Motivational push when needed
+
+### Strava Integration
+- One-click Strava connection
+- Automatic run imports
+- Heart rate zone analysis
+- Training load calculation
+
 ## Deployment
 
 ### Vercel (Recommended)
@@ -175,37 +179,22 @@ bun run lint     # Run ESLint
 3. Add environment variables
 4. Deploy
 
-### Other Platforms
+### Database Setup (Supabase)
 
-Works on any platform that supports Next.js:
-- Netlify
-- Railway
-- Render
-- Docker
+1. Create a new Supabase project
+2. Run migrations from `docs/` directory
+3. Copy connection details to `.env.local`
 
-## Technologies Used
+## Contributing
 
-- **Framework**: Next.js 16.1.1
-- **Runtime**: Bun
-- **Language**: TypeScript 5
-- **Styling**: Tailwind CSS 4
-- **UI Components**: Shadcn/ui
-- **Icons**: Lucide React
-- **Authentication**: NextAuth.js
-- **Animations**: Framer Motion
-- **Forms**: React Hook Form + Zod
-
-## About
-
-This is the personal portfolio website of **Ido Mosseri**, Technical SEO Lead with 10+ years of experience in technical SEO, content strategy, and web development.
-
-**Contact:**
-- Email: idomosseri@gmail.com
-- Phone: 050-6790792
-- Location: Kfar Saba, Israel
-- LinkedIn: [linkedin.com/in/idomosseri](https://www.linkedin.com/in/idomosseri/)
-- GitHub: [github.com/iAMido](https://github.com/iAMido)
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-MIT © Ido Mosseri
+MIT - see [LICENSE](LICENSE) for details.
+
+## Author
+
+**Ido Mosseri**
+- GitHub: [@iAMido](https://github.com/iAMido)
+- LinkedIn: [idomosseri](https://www.linkedin.com/in/idomosseri/)
