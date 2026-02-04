@@ -63,7 +63,7 @@ export const chatMessageSchema = z.object({
 });
 
 export const chatRequestSchema = z.object({
-  messages: z.array(chatMessageSchema).max(50),
+  messages: z.array(chatMessageSchema).max(50).optional(),
   reviewPlan: z.boolean().optional(),
 });
 
