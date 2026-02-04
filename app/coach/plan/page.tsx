@@ -26,7 +26,8 @@ const durationOptions = [4, 6, 8, 10, 12, 16];
 const runsPerWeekOptions = [3, 4, 5];
 
 // Helper function to get workout tag class based on workout type
-const getWorkoutTagClass = (type: string): string => {
+const getWorkoutTagClass = (type: string | undefined): string => {
+  if (!type) return 'workout-tag workout-tag-easy';
   const lowerType = type.toLowerCase();
   if (lowerType.includes('easy') || lowerType.includes('recovery')) return 'workout-tag workout-tag-easy';
   if (lowerType.includes('tempo') || lowerType.includes('threshold')) return 'workout-tag workout-tag-tempo';
@@ -296,7 +297,7 @@ export default function TrainingPlanPage() {
                                   </div>
                                 </div>
                                 <span className={getWorkoutTagClass(workout.type)}>
-                                  {workout.type}
+                                  {workout.type || 'Workout'}
                                 </span>
                                 {workout.duration && (
                                   <p className="text-sm text-muted-foreground mt-1">{workout.duration}</p>
