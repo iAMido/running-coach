@@ -11,6 +11,7 @@ import { Target, ChevronLeft, ChevronRight, Sparkles, Calendar, Activity, Home, 
 import { useState, useEffect } from 'react';
 import type { TrainingPlan, PlanWeek, Workout } from '@/lib/db/types';
 import { isWorkoutToday, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
+import { StrengthWorkout } from '@/components/coach/strength-workout';
 
 const planTypes = [
   { value: 'half-marathon', label: 'Half Marathon' },
@@ -336,6 +337,12 @@ export default function TrainingPlanPage() {
                     )}
                   </CardContent>
                 </Card>
+
+                {/* Strength Training Section */}
+                <StrengthWorkout
+                  weekNumber={viewingWeek}
+                  totalWeeks={totalWeeks}
+                />
               </>
             ) : (
               <Card className="coach-card">

@@ -1402,3 +1402,117 @@ html {
 .pwa-install-prompt {
   animation: slide-up 0.3s ease-out;
 }
+
+/* ========================================
+   STRENGTH WORKOUT STYLES
+   ======================================== */
+
+/* Strength Card styling */
+.strength-card {
+  background: linear-gradient(135deg,
+    hsl(var(--card)) 0%,
+    hsl(280 65% 60% / 0.03) 100%
+  );
+}
+
+.dark .strength-card {
+  background: linear-gradient(135deg,
+    hsl(var(--card)) 0%,
+    hsl(280 65% 60% / 0.08) 100%
+  );
+}
+
+/* Strength exercise card */
+.strength-exercise-card {
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  background: hsl(var(--muted) / 0.3);
+  border: 1px solid hsl(var(--border) / 0.5);
+  transition: all 0.2s ease;
+}
+
+.strength-exercise-card:hover {
+  background: hsl(var(--muted) / 0.5);
+  border-color: hsl(280 65% 60% / 0.3);
+}
+
+/* Workout type tag for strength */
+.workout-tag-strength {
+  background: hsl(280 65% 60% / 0.15);
+  color: hsl(280 65% 50%);
+}
+
+.dark .workout-tag-strength {
+  background: hsl(280 65% 60% / 0.2);
+  color: hsl(280 65% 70%);
+}
+
+/* Strength section separator */
+.strength-section-separator {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1.5rem 0;
+}
+
+.strength-section-separator::before,
+.strength-section-separator::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    hsl(280 65% 60% / 0.3),
+    transparent
+  );
+}
+
+.strength-section-separator span {
+  padding: 0 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: hsl(280 65% 60%);
+}
+
+/* Video play button hover effect */
+.strength-exercise-card a:hover {
+  transform: scale(1.1);
+}
+
+/* Phase badge colors */
+.phase-badge-base {
+  background: hsl(142 71% 45% / 0.15);
+  color: hsl(142 71% 35%);
+  border-color: hsl(142 71% 45% / 0.3);
+}
+
+.phase-badge-build {
+  background: hsl(34 100% 50% / 0.15);
+  color: hsl(34 100% 40%);
+  border-color: hsl(34 100% 50% / 0.3);
+}
+
+.phase-badge-specific {
+  background: hsl(0 84% 60% / 0.15);
+  color: hsl(0 84% 45%);
+  border-color: hsl(0 84% 60% / 0.3);
+}
+
+.dark .phase-badge-base {
+  background: hsl(142 71% 45% / 0.2);
+  color: hsl(142 71% 65%);
+}
+
+.dark .phase-badge-build {
+  background: hsl(34 100% 50% / 0.2);
+  color: hsl(34 100% 65%);
+}
+
+.dark .phase-badge-specific {
+  background: hsl(0 84% 60% / 0.2);
+  color: hsl(0 84% 65%);
+}

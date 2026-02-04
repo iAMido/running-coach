@@ -296,3 +296,50 @@ export interface DashboardStats {
   thisWeekRuns: number;
   activePlan: TrainingPlan | null;
 }
+
+// ============================================================
+// Strength Training Types
+// ============================================================
+
+export interface StrengthExercise {
+  id: string;
+  name: string;
+  category: 'core' | 'lower_body' | 'upper_body' | 'mobility';
+  equipment: 'bodyweight' | 'dumbbell' | 'band' | 'wheel' | 'bar';
+  focus_areas: string[];
+  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  youtube_url?: string;
+  description?: string;
+  default_sets_reps: string;
+  coaching_cues?: string[];
+  runner_benefit?: string;
+  phases: ('base' | 'build' | 'specific')[];
+  created_at?: string;
+}
+
+export interface StrengthTemplate {
+  id: string;
+  phase: 'base' | 'build' | 'specific';
+  name: string;
+  duration_minutes: number;
+  exercise_ids: string[];
+  notes?: string;
+  created_at?: string;
+}
+
+export interface WeeklyStrength {
+  phase: 'base' | 'build' | 'specific';
+  template_name: string;
+  duration_minutes: number;
+  notes?: string;
+  exercises: {
+    id: string;
+    name: string;
+    sets_reps: string;
+    youtube_url?: string;
+    description?: string;
+    coaching_cues?: string[];
+    category: string;
+    equipment: string;
+  }[];
+}
