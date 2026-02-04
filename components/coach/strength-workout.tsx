@@ -91,27 +91,29 @@ export function StrengthWorkout({ weekNumber, totalWeeks }: StrengthWorkoutProps
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger asChild>
           <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors rounded-t-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start gap-3">
+                <div className="p-2.5 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex-shrink-0">
                   <Dumbbell className="w-5 h-5 text-purple-500" />
                 </div>
-                <div>
-                  <CardTitle className="coach-heading text-lg flex items-center gap-2">
+                <div className="min-w-0">
+                  <CardTitle className="coach-heading text-lg">
                     Weekly Strength
-                    <Badge variant="outline" className={`text-xs ${phaseInfo.color}`}>
-                      {phaseInfo.label} Phase
-                    </Badge>
                   </CardTitle>
-                  <CardDescription className="flex items-center gap-2 mt-1">
-                    <Clock className="w-3 h-3" />
-                    {strengthData.duration_minutes} min
-                    <span className="text-muted-foreground">|</span>
-                    {strengthData.exercises.length} exercises
-                  </CardDescription>
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    <Badge variant="outline" className={`text-xs ${phaseInfo.color}`}>
+                      {phaseInfo.label}
+                    </Badge>
+                    <CardDescription className="flex items-center gap-1.5 text-xs">
+                      <Clock className="w-3 h-3" />
+                      {strengthData.duration_minutes} min
+                      <span className="text-muted-foreground mx-0.5">•</span>
+                      {strengthData.exercises.length} exercises
+                    </CardDescription>
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-muted-foreground">
+              <div className="flex items-center text-muted-foreground flex-shrink-0 mt-1">
                 {isOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
               </div>
             </div>
@@ -134,23 +136,23 @@ export function StrengthWorkout({ weekNumber, totalWeeks }: StrengthWorkoutProps
                   className="strength-exercise-card group"
                 >
                   <div
-                    className="flex items-center gap-3 cursor-pointer"
+                    className="flex items-start gap-3 cursor-pointer"
                     onClick={() => setExpandedExercise(expandedExercise === exercise.id ? null : exercise.id)}
                   >
-                    <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center text-sm font-semibold text-purple-600 dark:text-purple-400">
+                    <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center text-sm font-semibold text-purple-600 dark:text-purple-400 mt-0.5">
                       {index + 1}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <h4 className="font-medium text-sm truncate">{exercise.name}</h4>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <Badge variant="secondary" className={`text-xs ${categoryColors[exercise.category] || ''}`}>
-                            {equipmentIcons[exercise.equipment] || exercise.equipment}
-                          </Badge>
-                          <span className="text-sm font-semibold text-purple-600 dark:text-purple-400">
-                            {exercise.sets_reps}
-                          </span>
-                        </div>
+                      {/* Exercise name - full width, no truncation */}
+                      <h4 className="font-medium text-sm leading-tight">{exercise.name}</h4>
+                      {/* Equipment + Sets/Reps on second row */}
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant="secondary" className={`text-xs px-1.5 py-0 ${categoryColors[exercise.category] || ''}`}>
+                          {equipmentIcons[exercise.equipment] || exercise.equipment}
+                        </Badge>
+                        <span className="text-sm font-semibold text-purple-600 dark:text-purple-400">
+                          {exercise.sets_reps}
+                        </span>
                       </div>
                     </div>
                     {exercise.youtube_url && (
