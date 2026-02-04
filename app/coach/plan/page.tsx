@@ -7,11 +7,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Target, ChevronLeft, ChevronRight, Sparkles, Calendar, Activity, Home, Flame } from 'lucide-react';
+import { Target, ChevronLeft, ChevronRight, Sparkles, Calendar, Home } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { TrainingPlan, PlanWeek, Workout } from '@/lib/db/types';
 import { isWorkoutToday, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
 import { StrengthWorkout } from '@/components/coach/strength-workout';
+import { WorkoutCard, getWorkoutTagClass } from '@/components/coach/workout-card';
 
 const planTypes = [
   { value: 'half-marathon', label: 'Half Marathon' },
@@ -24,18 +25,6 @@ const planTypes = [
 
 const durationOptions = [4, 6, 8, 10, 12, 16];
 const runsPerWeekOptions = [3, 4, 5];
-
-// Helper function to get workout tag class based on workout type
-const getWorkoutTagClass = (type: string | undefined): string => {
-  if (!type) return 'workout-tag workout-tag-easy';
-  const lowerType = type.toLowerCase();
-  if (lowerType.includes('easy') || lowerType.includes('recovery')) return 'workout-tag workout-tag-easy';
-  if (lowerType.includes('tempo') || lowerType.includes('threshold')) return 'workout-tag workout-tag-tempo';
-  if (lowerType.includes('interval') || lowerType.includes('speed') || lowerType.includes('fartlek')) return 'workout-tag workout-tag-interval';
-  if (lowerType.includes('long')) return 'workout-tag workout-tag-long';
-  if (lowerType.includes('rest') || lowerType.includes('off')) return 'workout-tag workout-tag-rest';
-  return 'workout-tag workout-tag-easy';
-};
 
 export default function TrainingPlanPage() {
   const [planType, setPlanType] = useState('');
@@ -264,63 +253,13 @@ export default function TrainingPlanPage() {
                         {sortWorkoutsByDay(weekData.workouts).map(([day, workout]) => {
                           const isToday = isViewingCurrentWeek && isWorkoutToday(day);
                           return (
-                            <div
+                            <WorkoutCard
                               key={day}
-                              className={`week-workout-card flex items-start gap-3 ${
-                                isToday ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
-                              }`}
-                            >
-                              <div className={`p-2.5 rounded-xl mt-0.5 ${
-                                isToday
-                                  ? 'bg-gradient-to-br from-primary to-secondary'
-                                  : 'bg-gradient-to-br from-primary/15 to-secondary/15'
-                              }`}>
-                                <Activity className={`w-4 h-4 ${isToday ? 'text-white' : 'text-primary'}`} />
-                              </div>
-                              <div className="flex-1">
-                                <div className="flex items-center justify-between flex-wrap gap-2">
-                                  <div className="flex items-center gap-2">
-                                    <p className="font-semibold">{day}</p>
-                                    {isToday && (
-                                      <Badge variant="default" className="text-[10px] py-0 px-1.5 bg-primary pulse-badge">
-                                        <Flame className="w-3 h-3 mr-0.5" />
-                                        Today
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    {workout.distance && (
-                                      <span className="metric-value text-sm font-bold">
-                                        {workout.distance}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                                <span className={getWorkoutTagClass(workout.type)}>
-                                  {workout.type || 'Workout'}
-                                </span>
-                                {workout.duration && (
-                                  <p className="text-sm text-muted-foreground mt-1">{workout.duration}</p>
-                                )}
-                                {(workout.target_pace || workout.target_hr) && (
-                                  <div className="flex gap-3 mt-1">
-                                    {workout.target_pace && (
-                                      <p className="text-xs text-muted-foreground">
-                                        <span className="font-medium">Pace:</span> {workout.target_pace}
-                                      </p>
-                                    )}
-                                    {workout.target_hr && (
-                                      <p className="text-xs text-muted-foreground">
-                                        <span className="font-medium">HR:</span> {workout.target_hr}
-                                      </p>
-                                    )}
-                                  </div>
-                                )}
-                                {workout.notes && (
-                                  <p className="text-xs text-muted-foreground mt-2 italic bg-muted/50 p-2 rounded">{workout.notes}</p>
-                                )}
-                              </div>
-                            </div>
+                              day={day}
+                              workout={workout}
+                              isToday={isToday}
+                              variant="card"
+                            />
                           );
                         })}
                       </div>

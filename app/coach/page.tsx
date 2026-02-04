@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { DashboardStats, Run, TrainingPlan, PlanWeek, Workout } from '@/lib/db/types';
 import { isWorkoutToday, getTodayDayName, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
+import { WorkoutCard } from '@/components/coach/workout-card';
 
 type StatVariant = 'runs' | 'distance' | 'weekly' | 'plan';
 
@@ -480,51 +481,21 @@ export default function CoachDashboard() {
                       <th className="text-left py-2 px-2 font-medium text-muted-foreground">Workout</th>
                       <th className="text-left py-2 px-2 font-medium text-muted-foreground">Distance</th>
                       <th className="text-left py-2 px-2 font-medium text-muted-foreground hidden md:table-cell">Pace</th>
-                      <th className="text-left py-2 px-2 font-medium text-muted-foreground hidden lg:table-cell">Notes</th>
+                      <th className="text-left py-2 px-2 font-medium text-muted-foreground hidden lg:table-cell">Details</th>
                     </tr>
                   </thead>
                   <tbody>
                     {sortWorkoutsByDay(currentWeekWorkouts).map(([day, workout]) => {
                       const isToday = isWorkoutToday(day);
+                      const workoutObj = typeof workout === 'object' ? workout : { type: workout } as Workout;
                       return (
-                        <tr
+                        <WorkoutCard
                           key={day}
-                          className={`border-b last:border-0 transition-colors ${
-                            isToday
-                              ? 'bg-gradient-to-r from-primary/10 to-secondary/10 border-l-4 border-l-primary'
-                              : 'hover:bg-accent/50'
-                          }`}
-                        >
-                          <td className="py-3 px-2 font-medium">
-                            <div className="flex items-center gap-2">
-                              {day}
-                              {isToday && (
-                                <Badge variant="default" className="text-[10px] py-0 px-1.5 bg-primary pulse-badge">
-                                  <Flame className="w-3 h-3 mr-0.5" />
-                                  Today
-                                </Badge>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-3 px-2">
-                            <Badge variant="outline" className={`font-normal ${isToday ? 'border-primary text-primary' : ''}`}>
-                              {typeof workout === 'object' ? workout.type : workout}
-                            </Badge>
-                          </td>
-                          <td className={`py-3 px-2 ${isToday ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
-                            {typeof workout === 'object' ? (workout.distance || workout.duration || '-') : '-'}
-                          </td>
-                          <td className="py-3 px-2 text-muted-foreground hidden md:table-cell">
-                            {typeof workout === 'object' ? (workout.target_pace || workout.target_hr || '-') : '-'}
-                          </td>
-                          <td className="py-3 px-2 text-muted-foreground text-xs hidden lg:table-cell max-w-[200px] truncate">
-                            {typeof workout === 'object' && workout.description
-                              ? (workout.description.length > 50
-                                  ? workout.description.substring(0, 50) + '...'
-                                  : workout.description)
-                              : '-'}
-                          </td>
-                        </tr>
+                          day={day}
+                          workout={workoutObj}
+                          isToday={isToday}
+                          variant="row"
+                        />
                       );
                     })}
                   </tbody>
