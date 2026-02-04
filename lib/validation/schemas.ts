@@ -47,7 +47,7 @@ export const planSaveSchema = z.object({
 // Plan adjustment validation
 export const planAdjustmentSchema = z.object({
   adjustmentType: z.enum(['weekly_review', 'user_request', 'injury', 'performance']).optional(),
-  userRequest: safeText.max(2000).optional(),
+  userRequest: safeText.max(10000).optional(), // Increased to handle full conversation context
   weeklyFeedback: z.object({
     overallFeeling: rating.optional(),
     sleepQuality: rating.optional(),
