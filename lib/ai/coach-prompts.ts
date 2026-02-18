@@ -386,10 +386,12 @@ Return the plan as a JSON object with this structure:
 }
 
 IMPORTANT:
+- Return ONLY the raw JSON object — no markdown code blocks, no explanatory text before or after
 - The week MUST start on SUNDAY and end on Saturday
 - Order workouts in each week as: Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday
 - Generate all ${durationWeeks} weeks with complete workout details for each training day
 - Include the "source" field to cite where each workout came from (previous coach or book)
+- Keep workout descriptions concise (under 80 chars each) to fit within token limits
 
 ### TRAINING DAY ANCHORS (Use these as defaults):
 - **Monday**: Quality work (thresholds, VO2max intervals, tempo runs)

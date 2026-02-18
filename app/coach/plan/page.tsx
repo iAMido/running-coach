@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Target, ChevronLeft, ChevronRight, Sparkles, Calendar, Home } from 'lucide-react';
+import { Target, ChevronLeft, ChevronRight, Sparkles, Calendar, Home, CheckCircle2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { TrainingPlan, PlanWeek, Workout } from '@/lib/db/types';
 import { isWorkoutToday, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
@@ -37,6 +37,8 @@ export default function TrainingPlanPage() {
   const [viewingWeek, setViewingWeek] = useState(1); // Week being viewed (can be different from current)
   const [calculatedCurrentWeek, setCalculatedCurrentWeek] = useState(1); // Actual current week based on date
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string>('generate');
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchPlan();
@@ -53,6 +55,7 @@ export default function TrainingPlanPage() {
           const currentWeek = data.plan.current_week_num || 1;
           setCalculatedCurrentWeek(currentWeek);
           setViewingWeek(currentWeek); // Start viewing the current week
+          setActiveTab('current');
         }
       }
     } catch (err) {
@@ -95,6 +98,8 @@ export default function TrainingPlanPage() {
       setActivePlan(data.plan);
       setCalculatedCurrentWeek(1);
       setViewingWeek(1);
+      setSuccessMessage('Your training plan has been generated successfully!');
+      setActiveTab('current');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate plan');
     } finally {
@@ -153,7 +158,7 @@ export default function TrainingPlanPage() {
           <Skeleton className="h-64 w-full" />
         </div>
       ) : (
-        <Tabs defaultValue={activePlan ? 'current' : 'generate'} className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList>
             <TabsTrigger value="current" disabled={!activePlan}>
               Current Plan
@@ -314,6 +319,12 @@ export default function TrainingPlanPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                {successMessage && (
+                  <div className="p-3 rounded-lg bg-green-500/10 text-green-600 text-sm border border-green-500/20 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    {successMessage}
+                  </div>
+                )}
                 {error && (
                   <div className="p-3 rounded-lg bg-red-500/10 text-red-500 text-sm border border-red-500/20">
                     {error}

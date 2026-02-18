@@ -54,9 +54,9 @@ export async function POST(request: NextRequest) {
     const response = await callOpenRouter(
       [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Generate my ${durationWeeks}-week ${planType} training plan` },
+        { role: 'user', content: `Generate my ${durationWeeks}-week ${planType} training plan. IMPORTANT: Return ONLY the raw JSON object with no markdown code blocks, no explanation, no extra text — just the JSON.` },
       ],
-      { apiKey, maxTokens: 8000 }
+      { apiKey, maxTokens: 16000 }
     );
 
     if (response.error) {
@@ -66,11 +66,19 @@ export async function POST(request: NextRequest) {
     // Try to parse JSON from response
     let planJson;
     try {
-      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        planJson = JSON.parse(jsonMatch[0]);
+      // First: try to extract JSON from a markdown code block (```json ... ```)
+      const codeBlockMatch = response.content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      if (codeBlockMatch) {
+        planJson = JSON.parse(codeBlockMatch[1]);
       } else {
-        planJson = { raw_response: response.content };
+        // Second: try to find the outermost JSON object (from first { to last })
+        const firstBrace = response.content.indexOf('{');
+        const lastBrace = response.content.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          planJson = JSON.parse(response.content.slice(firstBrace, lastBrace + 1));
+        } else {
+          planJson = { raw_response: response.content };
+        }
       }
     } catch {
       planJson = { raw_response: response.content };
