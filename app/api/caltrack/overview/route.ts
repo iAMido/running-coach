@@ -17,13 +17,23 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
-  const days = Math.min(parseInt(searchParams.get('days') || '7'), 90);
+  const fromParam = searchParams.get('from');
+  const toParam = searchParams.get('to');
+  const days = Math.min(parseInt(searchParams.get('days') || '7'), 365);
 
   const now = new Date();
-  const startDate = new Date(now);
-  startDate.setDate(startDate.getDate() - days);
-  const startStr = startDate.toISOString().split('T')[0];
-  const todayStr = now.toISOString().split('T')[0];
+  let startStr: string;
+  let todayStr: string;
+
+  if (fromParam && toParam) {
+    startStr = fromParam;
+    todayStr = toParam;
+  } else {
+    const startDate = new Date(now);
+    startDate.setDate(startDate.getDate() - days);
+    startStr = startDate.toISOString().split('T')[0];
+    todayStr = now.toISOString().split('T')[0];
+  }
 
   try {
     const [profileRes, summariesRes, weightRes, todayMealsRes] =

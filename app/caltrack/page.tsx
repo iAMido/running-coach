@@ -67,11 +67,15 @@ export default function CaltrackOverview() {
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(7);
+  const [customRange, setCustomRange] = useState<{ from: string; to: string } | undefined>();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/caltrack/overview?days=${days}`);
+      const params = customRange
+        ? `from=${customRange.from}&to=${customRange.to}`
+        : `days=${days}`;
+      const res = await fetch(`/api/caltrack/overview?${params}`);
       if (res.ok) {
         setData(await res.json());
       }
@@ -80,7 +84,7 @@ export default function CaltrackOverview() {
     } finally {
       setLoading(false);
     }
-  }, [days]);
+  }, [days, customRange]);
 
   useEffect(() => {
     fetchData();
@@ -160,7 +164,12 @@ export default function CaltrackOverview() {
               : 'Nutrition & weight tracker'}
           </p>
         </div>
-        <DateRangePicker selectedDays={days} onChange={setDays} />
+        <DateRangePicker
+          selectedDays={days}
+          onChange={(d) => { setDays(d); setCustomRange(undefined); }}
+          customRange={customRange}
+          onCustomRange={(from, to) => { setCustomRange({ from, to }); setDays(-1); }}
+        />
       </div>
 
       {/* KPI Cards */}

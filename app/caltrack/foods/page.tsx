@@ -54,9 +54,9 @@ export default function FoodsPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Foods</h1>
+        <h1 className="text-2xl font-bold tracking-tight">My Foods</h1>
         <p className="text-muted-foreground text-sm">
-          {foods.length} unique foods tracked
+          {foods.length} unique foods you&apos;ve eaten — sorted by frequency
         </p>
       </div>
 

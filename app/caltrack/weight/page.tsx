@@ -26,11 +26,15 @@ export default function WeightPage() {
   const [targetWeight, setTargetWeight] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(30);
+  const [customRange, setCustomRange] = useState<{ from: string; to: string } | undefined>();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/caltrack/weight?days=${days}`);
+      const params = customRange
+        ? `from=${customRange.from}&to=${customRange.to}`
+        : `days=${days}`;
+      const res = await fetch(`/api/caltrack/weight?${params}`);
       if (res.ok) {
         const data = await res.json();
         setWeights(data.weights);
@@ -42,7 +46,7 @@ export default function WeightPage() {
     } finally {
       setLoading(false);
     }
-  }, [days]);
+  }, [days, customRange]);
 
   useEffect(() => {
     fetchData();
@@ -86,7 +90,12 @@ export default function WeightPage() {
             {weights.length} measurements in the last {days} days
           </p>
         </div>
-        <DateRangePicker selectedDays={days} onChange={setDays} />
+        <DateRangePicker
+          selectedDays={days}
+          onChange={(d) => { setDays(d); setCustomRange(undefined); }}
+          customRange={customRange}
+          onCustomRange={(from, to) => { setCustomRange({ from, to }); setDays(-1); }}
+        />
       </div>
 
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">

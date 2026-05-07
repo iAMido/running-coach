@@ -17,18 +17,34 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
+  const fromParam = searchParams.get('from');
+  const toParam = searchParams.get('to');
   const days = Math.min(parseInt(searchParams.get('days') || '30'), 365);
 
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - days);
-  const startStr = startDate.toISOString();
+  let startStr: string;
+  let endStr: string | undefined;
+
+  if (fromParam && toParam) {
+    startStr = `${fromParam}T00:00:00`;
+    endStr = `${toParam}T23:59:59`;
+  } else {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    startStr = startDate.toISOString();
+  }
 
   try {
-    const { data, error } = await caltrackDb
+    let query = caltrackDb
       .from('weight_log')
       .select('weight_kg,measured_at')
       .gte('measured_at', startStr)
       .order('measured_at', { ascending: true });
+
+    if (endStr) {
+      query = query.lte('measured_at', endStr);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
 
