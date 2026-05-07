@@ -9,6 +9,7 @@ export interface CaltrackMeal {
   total_fat_g: number;
   total_fiber_g: number;
   photo_storage_path: string | null;
+  notes: string | null;
   status: string;
   item_names?: string[];
 }

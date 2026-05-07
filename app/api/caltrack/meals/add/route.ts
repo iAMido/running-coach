@@ -31,9 +31,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { meal_type, ingredients } = body as {
+    const { meal_type, ingredients, description } = body as {
       meal_type: string;
       ingredients: IngredientInput[];
+      description?: string;
     };
 
     if (!meal_type || !ingredients || !ingredients.length) {
@@ -78,6 +79,7 @@ export async function POST(request: NextRequest) {
       total_carbs_g: Math.round(totals.carbs * 10) / 10,
       total_fat_g: Math.round(totals.fat * 10) / 10,
       total_fiber_g: Math.round(totals.fiber * 10) / 10,
+      notes: description || null,
       status: 'confirmed',
     });
 

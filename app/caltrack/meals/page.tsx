@@ -134,6 +134,7 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           meal_type: mealType,
+          description,
           ingredients: analysis.ingredients.map((ing) => ({
             name_en: ing.name_en,
             name_he: ing.name_he,
@@ -1044,10 +1045,14 @@ export default function MealsPage() {
                                 {formatDateTime(meal.eaten_at)}
                               </span>
                             </div>
-                            {meal.item_names && meal.item_names.length > 0 && (
+                            {(meal.notes || (meal.item_names && meal.item_names.length > 0)) && (
                               <p className="text-sm font-medium mt-0.5 truncate max-w-[250px] sm:max-w-[400px]">
-                                {meal.item_names.slice(0, 3).join(', ')}
-                                {meal.item_names.length > 3 && ` +${meal.item_names.length - 3}`}
+                                {meal.notes || (
+                                  <>
+                                    {meal.item_names!.slice(0, 3).join(', ')}
+                                    {meal.item_names!.length > 3 && ` +${meal.item_names!.length - 3}`}
+                                  </>
+                                )}
                               </p>
                             )}
                           </div>
