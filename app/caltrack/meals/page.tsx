@@ -149,11 +149,11 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
         onAdded();
         onClose();
       } else {
-        const data = await res.json();
-        setError(data.error || 'Failed to save');
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || `Save failed (${res.status})`);
       }
-    } catch {
-      setError('Network error');
+    } catch (err) {
+      setError(`Network error: ${err instanceof Error ? err.message : 'unknown'}`);
     } finally {
       setSubmitting(false);
     }
@@ -337,6 +337,12 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
                 </div>
               </div>
 
+              {error && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-sm">
+                  {error}
+                </div>
+              )}
+
               <button
                 onClick={handleConfirm}
                 disabled={submitting || !analysis.ingredients.length}
@@ -346,8 +352,6 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
               </button>
             </div>
           )}
-
-          {error && <p className="text-sm text-red-500">{error}</p>}
         </div>
       </div>
     </div>
