@@ -144,8 +144,8 @@ export default function CaltrackOverview() {
     },
   ];
 
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr + 'T00:00:00');
+  const formatDate = (label: unknown) => {
+    const d = new Date(String(label) + 'T00:00:00');
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
