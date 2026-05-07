@@ -603,7 +603,12 @@ function EditMealModal({
               {ingredients.map((ing, idx) => (
                 <div
                   key={idx}
-                  className="flex items-center gap-2 p-2.5 rounded-lg border border-border bg-background"
+                  className={cn(
+                    'flex items-center gap-2 p-2.5 rounded-lg border bg-background',
+                    ing.calories === 0
+                      ? 'border-red-500/40 bg-red-500/5'
+                      : 'border-border'
+                  )}
                 >
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{ing.name_en}</p>
@@ -615,9 +620,18 @@ function EditMealModal({
                         className="w-16 px-2 py-0.5 text-xs rounded border border-border bg-muted/50 text-center"
                       />
                       <span className="text-xs text-muted-foreground">g</span>
-                      <span className="text-xs text-muted-foreground ml-auto">
-                        {ing.calories} kcal
-                      </span>
+                      <input
+                        type="number"
+                        value={ing.calories}
+                        onChange={(e) => updateIngredient(idx, 'calories', e.target.value)}
+                        className={cn(
+                          'w-16 px-2 py-0.5 text-xs rounded border text-center ml-auto',
+                          ing.calories === 0
+                            ? 'border-red-500/50 bg-red-500/10 text-red-600'
+                            : 'border-border bg-muted/50'
+                        )}
+                      />
+                      <span className="text-xs text-muted-foreground">kcal</span>
                     </div>
                   </div>
                   <button
