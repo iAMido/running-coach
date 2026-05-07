@@ -1071,6 +1071,9 @@ export default function MealsPage() {
 
                       {expandedMeal === meal.id && (
                         <div className="border-t border-border px-4 py-3 bg-muted/30">
+                          {meal.notes && (
+                            <p className="text-sm font-semibold mb-2">{meal.notes}</p>
+                          )}
                           <div className="grid grid-cols-4 gap-2 mb-3 text-center text-xs">
                             <div>
                               <p className="text-muted-foreground">Protein</p>
