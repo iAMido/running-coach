@@ -10,7 +10,6 @@ import {
   Plus,
   X,
   Search,
-  ImageIcon,
 } from 'lucide-react';
 import { DateRangePicker } from '@/components/caltrack/date-range-picker';
 import type { CaltrackMeal, CaltrackMealItem } from '@/lib/db/caltrack-types';
@@ -596,8 +595,7 @@ export default function MealsPage() {
                         className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/50 transition-colors"
                       >
                         <div className="flex items-center gap-3">
-                          {/* Photo thumbnail */}
-                          {photoUrl ? (
+                          {photoUrl && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -611,28 +609,32 @@ export default function MealsPage() {
                                 alt=""
                                 className="w-full h-full object-cover"
                                 onError={(e) => {
-                                  (e.target as HTMLImageElement).style.display = 'none';
+                                  (e.target as HTMLImageElement).parentElement!.style.display = 'none';
                                 }}
                               />
                             </button>
-                          ) : (
-                            <div className="w-10 h-10 rounded-lg border border-border bg-muted/50 flex items-center justify-center shrink-0">
-                              <ImageIcon className="w-4 h-4 text-muted-foreground/50" />
-                            </div>
                           )}
                           <div>
-                            <span
-                              className={cn(
-                                'text-xs font-medium px-2 py-0.5 rounded-full',
-                                mealTypeColors[meal.meal_type] ||
-                                  'bg-muted text-muted-foreground'
-                              )}
-                            >
-                              {meal.meal_type}
-                            </span>
-                            <span className="text-sm text-muted-foreground ml-2">
-                              {formatDateTime(meal.eaten_at)}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={cn(
+                                  'text-xs font-medium px-2 py-0.5 rounded-full',
+                                  mealTypeColors[meal.meal_type] ||
+                                    'bg-muted text-muted-foreground'
+                                )}
+                              >
+                                {meal.meal_type}
+                              </span>
+                              <span className="text-sm text-muted-foreground">
+                                {formatDateTime(meal.eaten_at)}
+                              </span>
+                            </div>
+                            {meal.item_names && meal.item_names.length > 0 && (
+                              <p className="text-sm font-medium mt-0.5 truncate max-w-[250px] sm:max-w-[400px]">
+                                {meal.item_names.slice(0, 3).join(', ')}
+                                {meal.item_names.length > 3 && ` +${meal.item_names.length - 3}`}
+                              </p>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-3">

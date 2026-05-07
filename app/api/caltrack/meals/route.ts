@@ -70,8 +70,31 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error;
 
+    const meals = data || [];
+    const mealIds = meals.map((m: { id: string }) => m.id);
+
+    let itemsByMeal: Record<string, string[]> = {};
+    if (mealIds.length > 0) {
+      const { data: items } = await caltrackDb
+        .from('meal_items')
+        .select('meal_id,ingredient_name')
+        .in('meal_id', mealIds);
+
+      if (items) {
+        for (const item of items) {
+          if (!itemsByMeal[item.meal_id]) itemsByMeal[item.meal_id] = [];
+          itemsByMeal[item.meal_id].push(item.ingredient_name);
+        }
+      }
+    }
+
+    const enrichedMeals = meals.map((m: { id: string }) => ({
+      ...m,
+      item_names: itemsByMeal[m.id] || [],
+    }));
+
     return NextResponse.json({
-      meals: data || [],
+      meals: enrichedMeals,
       total: count || 0,
       limit,
       offset,

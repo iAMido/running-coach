@@ -10,6 +10,7 @@ export interface CaltrackMeal {
   total_fiber_g: number;
   photo_storage_path: string | null;
   status: string;
+  item_names?: string[];
 }
 
 export interface CaltrackMealItem {

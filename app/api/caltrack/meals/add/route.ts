@@ -142,8 +142,9 @@ export async function POST(request: NextRequest) {
       totals,
       items: ingredients.length,
     });
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
+  } catch (error: unknown) {
+    const err = error as Record<string, unknown>;
+    const msg = err?.message || err?.details || err?.hint || JSON.stringify(error);
     console.error('CalTrack add meal error:', msg, error);
     return NextResponse.json(
       { error: `Failed to add meal: ${msg}` },
