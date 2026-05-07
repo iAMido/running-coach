@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
         ingredient_name: ing.name_en,
         fdc_id: ing.fdc_id || null,
         weight_grams: Math.round(ing.grams),
-        weight_source: 'dashboard_ai',
+        weight_source: 'ai_estimate',
         calories: ing.calories,
         protein_g: ing.protein_g,
         carbs_g: ing.carbs_g,
