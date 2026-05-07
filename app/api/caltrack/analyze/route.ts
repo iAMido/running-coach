@@ -33,7 +33,10 @@ RULES:
 - Be accurate with typical Israeli portion sizes
 - For composite dishes (שווארמה בפיתה, סביח, etc.), include ALL components (bread, protein, sauces, vegetables)
 - Estimate realistic portions — a pita is ~60g, tahini serving ~30g, hummus serving ~80g, schnitzel portion ~150g
-- Nutrition values must be per 100g, never 0 for real food
+- 1 tablespoon (tbsp/tbs) = ~15g for most foods, ~12g for cottage cheese
+- calories_per_100g must NEVER be 0 for real food. Common reference values:
+  eggs=155, cottage cheese=98, Bulgarian/feta cheese=264, oats=389, rice=130, chicken breast=165, bread=265, olive oil=884, butter=717, hummus=166, tahini=595, avocado=160
+- If unsure about exact nutrition, estimate conservatively but NEVER return 0 calories
 - If the dish has a sauce/dressing, include it as a separate ingredient`;
 
 interface AnalyzedIngredient {
