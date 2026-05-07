@@ -15,13 +15,13 @@ import {
 import { User, LogOut, Settings, Menu, X, Dumbbell, UtensilsCrossed } from 'lucide-react';
 import { useState } from 'react';
 
-const navLinks = [
+const navLinks: { href: string; label: string; authOnly?: boolean }[] = [
   { href: '/#about', label: 'About' },
   { href: '/#skills', label: 'Skills' },
   { href: '/#experience', label: 'Experience' },
   { href: '/blog', label: 'Blog' },
-  { href: '/coach', label: 'Coach' },
-  { href: '/caltrack', label: 'CalTrack' },
+  { href: '/coach', label: 'Coach', authOnly: true },
+  { href: '/caltrack', label: 'CalTrack', authOnly: true },
   { href: '/#contact', label: 'Contact' },
 ];
 
@@ -75,7 +75,9 @@ export function Navbar() {
 
         {/* Desktop Navigation Links */}
         <div className="hidden md:flex items-center gap-8">
-          {navLinks.map((link) => (
+          {navLinks
+            .filter((link) => !link.authOnly || session)
+            .map((link) => (
             <Link
               key={link.href}
               href={link.href}
@@ -176,7 +178,9 @@ export function Navbar() {
             boxShadow: 'var(--nav-shadow, 0 8px 32px rgba(0, 0, 0, 0.12))',
           }}
         >
-          {navLinks.map((link) => (
+          {navLinks
+            .filter((link) => !link.authOnly || session)
+            .map((link) => (
             <Link
               key={link.href}
               href={link.href}
