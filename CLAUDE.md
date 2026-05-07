@@ -59,6 +59,12 @@ app/
 │   ├── page.tsx                  # Blog listing (client component)
 │   ├── [slug]/page.tsx           # Article page (server component with SSG)
 │   └── layout.tsx                # Blog section layout
+├── caltrack/                     # CalTrack calorie tracking dashboard
+│   ├── layout.tsx                # CalTrack layout with sidebar
+│   ├── page.tsx                  # Overview: daily calories, macros, weight chart
+│   ├── meals/page.tsx            # Meals list with add/edit/delete + AI analysis
+│   ├── weight/page.tsx           # Weight log
+│   └── foods/page.tsx            # Food database browser
 ├── coach/                        # AI Running Coach (protected)
 │   ├── layout.tsx                # Protected layout with sidebar
 │   ├── page.tsx                  # Dashboard
@@ -99,7 +105,9 @@ lib/
 ├── blog.ts                       # Blog data layer (getAllPosts, getPostBySlug)
 ├── utils.ts                      # Utility functions (cn for className merging)
 ├── db/                           # Database layer (Supabase)
-│   ├── supabase.ts               # Supabase client
+│   ├── supabase.ts               # Supabase client (RunCoach)
+│   ├── supabase-caltrack.ts      # Supabase client (CalTrack — separate project)
+│   ├── caltrack-types.ts         # CalTrack TypeScript types (meals, items, profile, etc.)
 │   ├── types.ts                  # TypeScript types for all tables
 │   ├── runs.ts                   # Runs CRUD operations
 │   ├── plans.ts                  # Training plans CRUD
@@ -474,7 +482,21 @@ STRAVA_CLIENT_ID="..."
 STRAVA_CLIENT_SECRET="..."
 ```
 
-### API Endpoints (Future)
+### CalTrack API Endpoints (Active)
+| Route | Description |
+|-------|-------------|
+| `/api/caltrack/overview` | GET daily summary, stats, weight chart |
+| `/api/caltrack/meals` | GET meals list with ingredient names |
+| `/api/caltrack/meals/add` | POST new meal with ingredients |
+| `/api/caltrack/meals/edit` | PUT edit meal type/ingredients/recalculate |
+| `/api/caltrack/meals/delete` | DELETE meal (cascades FK order) |
+| `/api/caltrack/analyze` | POST AI food analysis (Hebrew → ingredients + nutrition) |
+| `/api/caltrack/weight` | GET/POST weight logs |
+| `/api/caltrack/foods` | GET food database |
+
+**CalTrack uses a separate Supabase project** (`tlnqkxwlrewbtufnqiwi`) from RunCoach (`ucjsnpnlxklaadqolpkx`). Env vars: `NEXT_PUBLIC_CALTRACK_SUPABASE_URL` and `CALTRACK_SUPABASE_SERVICE_ROLE_KEY`.
+
+### Other API Endpoints (Future)
 | Route | Description |
 |-------|-------------|
 | `/api/coach/plan` | Training plan CRUD |
