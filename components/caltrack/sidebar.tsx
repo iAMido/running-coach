@@ -7,11 +7,11 @@ import {
   LayoutDashboard,
   UtensilsCrossed,
   Scale,
-  Activity,
   Apple,
   ChevronLeft,
   ChevronRight,
   LogOut,
+  Activity,
 } from 'lucide-react';
 import { useState } from 'react';
 import { signOut } from 'next-auth/react';
@@ -20,7 +20,6 @@ const navItems = [
   { href: '/caltrack', label: 'Overview', icon: LayoutDashboard },
   { href: '/caltrack/meals', label: 'Meals', icon: UtensilsCrossed },
   { href: '/caltrack/weight', label: 'Weight', icon: Scale },
-  { href: '/caltrack/runs', label: 'Runs', icon: Activity },
   { href: '/caltrack/foods', label: 'Foods', icon: Apple },
 ];
 

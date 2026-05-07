@@ -30,7 +30,6 @@ const mainNavItems = [
 ];
 
 const menuItems = [
-  { href: '/caltrack/runs', label: 'Runs', icon: Activity },
   { href: '/caltrack/foods', label: 'Foods', icon: Apple },
   { href: '/coach', label: 'Running Coach', icon: Activity },
 ];
