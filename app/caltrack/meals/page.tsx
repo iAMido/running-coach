@@ -487,6 +487,54 @@ function EditMealModal({
     }
   };
 
+  const [recalculating, setRecalculating] = useState(false);
+
+  const handleRecalculate = async () => {
+    if (!ingredients.length) return;
+    setRecalculating(true);
+    setError('');
+    try {
+      const description = ingredients
+        .map((ing) => `${ing.grams}g ${ing.name_en}`)
+        .join(', ');
+      const res = await fetch('/api/caltrack/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description }),
+      });
+      if (!res.ok) throw new Error('Recalculation failed');
+      const data = await res.json();
+      const analyzed: AnalyzedIngredient[] = data.ingredients || [];
+
+      setIngredients((prev) =>
+        prev.map((ing) => {
+          const match = analyzed.find(
+            (a) =>
+              a.name_en.toLowerCase().includes(ing.name_en.toLowerCase()) ||
+              ing.name_en.toLowerCase().includes(a.name_en.toLowerCase())
+          );
+          if (match) {
+            const factor = ing.grams / 100;
+            return {
+              ...ing,
+              calories: Math.round(match.per_100g.calories * factor),
+              protein_g: Math.round(match.per_100g.protein * factor * 10) / 10,
+              carbs_g: Math.round(match.per_100g.carbs * factor * 10) / 10,
+              fat_g: Math.round(match.per_100g.fat * factor * 10) / 10,
+              fiber_g: Math.round(match.per_100g.fiber * factor * 10) / 10,
+              fdc_id: match.fdc_id,
+            };
+          }
+          return ing;
+        })
+      );
+    } catch {
+      setError('Recalculation failed. Try again.');
+    } finally {
+      setRecalculating(false);
+    }
+  };
+
   const totals = ingredients.reduce(
     (acc, ing) => ({
       calories: acc.calories + (ing.calories || 0),
@@ -697,11 +745,18 @@ function EditMealModal({
           {/* Actions */}
           <div className="flex gap-2">
             <button
+              onClick={handleRecalculate}
+              disabled={recalculating || !ingredients.length}
+              className="px-4 py-2.5 rounded-xl border border-orange-500/30 text-orange-600 font-medium hover:bg-orange-500/10 disabled:opacity-50 transition-colors"
+            >
+              {recalculating ? 'Calculating...' : 'Recalculate'}
+            </button>
+            <button
               onClick={handleSave}
               disabled={saving || !ingredients.length}
               className="flex-1 py-2.5 rounded-xl bg-orange-500 text-white font-medium hover:bg-orange-600 disabled:opacity-50 transition-colors"
             >
-              {saving ? 'Saving...' : `Save Changes (${Math.round(totals.calories)} kcal)`}
+              {saving ? 'Saving...' : `Save (${Math.round(totals.calories)} kcal)`}
             </button>
           </div>
 
