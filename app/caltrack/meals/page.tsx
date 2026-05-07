@@ -10,6 +10,9 @@ import {
   Plus,
   X,
   Search,
+  Pencil,
+  Trash2,
+  Minus,
 } from 'lucide-react';
 import { DateRangePicker } from '@/components/caltrack/date-range-picker';
 import type { CaltrackMeal, CaltrackMealItem } from '@/lib/db/caltrack-types';
@@ -381,6 +384,348 @@ function PhotoLightbox({ url, onClose }: { url: string; onClose: () => void }) {
   );
 }
 
+// ─── Edit Meal Modal ───
+interface EditIngredient {
+  name_en: string;
+  grams: number;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+  fdc_id?: number | null;
+}
+
+function EditMealModal({
+  meal,
+  items,
+  onClose,
+  onSaved,
+}: {
+  meal: CaltrackMeal;
+  items: CaltrackMealItem[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [mealType, setMealType] = useState(meal.meal_type);
+  const [ingredients, setIngredients] = useState<EditIngredient[]>(
+    items.map((it) => ({
+      name_en: it.ingredient_name,
+      grams: it.weight_grams,
+      calories: it.calories,
+      protein_g: it.protein_g,
+      carbs_g: it.carbs_g,
+      fat_g: it.fat_g,
+      fiber_g: it.fiber_g,
+      fdc_id: it.fdc_id,
+    }))
+  );
+  const [newName, setNewName] = useState('');
+  const [analyzing, setAnalyzing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [error, setError] = useState('');
+
+  const updateIngredient = (idx: number, field: string, value: string) => {
+    setIngredients((prev) => {
+      const updated = [...prev];
+      const num = parseFloat(value) || 0;
+      if (field === 'grams') {
+        const oldGrams = updated[idx].grams || 1;
+        const ratio = num / oldGrams;
+        updated[idx] = {
+          ...updated[idx],
+          grams: num,
+          calories: Math.round(updated[idx].calories * ratio),
+          protein_g: Math.round(updated[idx].protein_g * ratio * 10) / 10,
+          carbs_g: Math.round(updated[idx].carbs_g * ratio * 10) / 10,
+          fat_g: Math.round(updated[idx].fat_g * ratio * 10) / 10,
+          fiber_g: Math.round(updated[idx].fiber_g * ratio * 10) / 10,
+        };
+      } else {
+        updated[idx] = { ...updated[idx], [field]: num };
+      }
+      return updated;
+    });
+  };
+
+  const removeIngredient = (idx: number) => {
+    setIngredients((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const addIngredient = async () => {
+    if (!newName.trim()) return;
+    setAnalyzing(true);
+    setError('');
+    try {
+      const res = await fetch('/api/caltrack/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: newName }),
+      });
+      if (!res.ok) throw new Error('Analysis failed');
+      const data = await res.json();
+      const newIngs: EditIngredient[] = (data.ingredients || []).map(
+        (ing: AnalyzedIngredient) => ({
+          name_en: ing.name_en,
+          grams: ing.estimated_grams,
+          calories: ing.calculated.calories,
+          protein_g: ing.calculated.protein,
+          carbs_g: ing.calculated.carbs,
+          fat_g: ing.calculated.fat,
+          fiber_g: ing.calculated.fiber,
+          fdc_id: ing.fdc_id,
+        })
+      );
+      setIngredients((prev) => [...prev, ...newIngs]);
+      setNewName('');
+    } catch {
+      setError('Failed to analyze new ingredient');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const totals = ingredients.reduce(
+    (acc, ing) => ({
+      calories: acc.calories + (ing.calories || 0),
+      protein: acc.protein + (ing.protein_g || 0),
+      carbs: acc.carbs + (ing.carbs_g || 0),
+      fat: acc.fat + (ing.fat_g || 0),
+      fiber: acc.fiber + (ing.fiber_g || 0),
+    }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 }
+  );
+
+  const handleSave = async () => {
+    if (!ingredients.length) return;
+    setSaving(true);
+    setError('');
+    try {
+      const typeChanged = mealType !== meal.meal_type;
+      const res = await fetch('/api/caltrack/meals/edit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          meal_id: meal.id,
+          ...(typeChanged ? { meal_type: mealType } : {}),
+          ingredients: ingredients.map((ing) => ({
+            name_en: ing.name_en,
+            fdc_id: ing.fdc_id,
+            grams: ing.grams,
+            calories: ing.calories,
+            protein_g: ing.protein_g,
+            carbs_g: ing.carbs_g,
+            fat_g: ing.fat_g,
+            fiber_g: ing.fiber_g,
+          })),
+        }),
+      });
+      if (res.ok) {
+        onSaved();
+        onClose();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || `Save failed (${res.status})`);
+      }
+    } catch (err) {
+      setError(`Network error: ${err instanceof Error ? err.message : 'unknown'}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    setError('');
+    try {
+      const res = await fetch('/api/caltrack/meals/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meal_id: meal.id }),
+      });
+      if (res.ok) {
+        onSaved();
+        onClose();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || `Delete failed (${res.status})`);
+      }
+    } catch (err) {
+      setError(`Network error: ${err instanceof Error ? err.message : 'unknown'}`);
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <h2 className="text-lg font-semibold">Edit Meal</h2>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {/* Meal type selector */}
+          <div>
+            <label className="text-sm font-medium text-muted-foreground mb-1.5 block">
+              Meal Type
+            </label>
+            <div className="flex gap-2">
+              {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((type) => (
+                <button
+                  key={type}
+                  onClick={() => setMealType(type)}
+                  className={cn(
+                    'px-3 py-1.5 text-sm font-medium rounded-full border transition-all',
+                    mealType === type
+                      ? 'bg-orange-500/10 text-orange-600 border-orange-500/30'
+                      : 'bg-background text-muted-foreground border-border hover:bg-muted'
+                  )}
+                >
+                  {type.charAt(0).toUpperCase() + type.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Ingredients */}
+          <div>
+            <label className="text-sm font-medium text-muted-foreground mb-1.5 block">
+              Ingredients
+            </label>
+            <div className="space-y-2">
+              {ingredients.map((ing, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center gap-2 p-2.5 rounded-lg border border-border bg-background"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{ing.name_en}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <input
+                        type="number"
+                        value={ing.grams}
+                        onChange={(e) => updateIngredient(idx, 'grams', e.target.value)}
+                        className="w-16 px-2 py-0.5 text-xs rounded border border-border bg-muted/50 text-center"
+                      />
+                      <span className="text-xs text-muted-foreground">g</span>
+                      <span className="text-xs text-muted-foreground ml-auto">
+                        {ing.calories} kcal
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => removeIngredient(idx)}
+                    className="p-1 rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-500 shrink-0"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Add new ingredient */}
+            <div className="flex gap-2 mt-2">
+              <input
+                type="text"
+                placeholder="Add ingredient (e.g. חומוס, rice)..."
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addIngredient()}
+                className="flex-1 px-3 py-2 text-sm rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+              />
+              <button
+                onClick={addIngredient}
+                disabled={analyzing || !newName.trim()}
+                className="px-3 py-2 text-sm font-medium rounded-lg bg-muted hover:bg-muted/80 disabled:opacity-50"
+              >
+                {analyzing ? '...' : '+ Add'}
+              </button>
+            </div>
+          </div>
+
+          {/* Totals */}
+          <div className="grid grid-cols-5 gap-2 text-center text-xs p-3 rounded-lg bg-muted/50">
+            <div>
+              <p className="text-muted-foreground">Calories</p>
+              <p className="font-bold text-orange-600">{Math.round(totals.calories)}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Protein</p>
+              <p className="font-bold text-blue-600">{Math.round(totals.protein)}g</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Carbs</p>
+              <p className="font-bold text-green-600">{Math.round(totals.carbs)}g</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Fat</p>
+              <p className="font-bold text-purple-600">{Math.round(totals.fat)}g</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Fiber</p>
+              <p className="font-bold">{Math.round(totals.fiber)}g</p>
+            </div>
+          </div>
+
+          {error && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-sm">
+              {error}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              disabled={saving || !ingredients.length}
+              className="flex-1 py-2.5 rounded-xl bg-orange-500 text-white font-medium hover:bg-orange-600 disabled:opacity-50 transition-colors"
+            >
+              {saving ? 'Saving...' : `Save Changes (${Math.round(totals.calories)} kcal)`}
+            </button>
+          </div>
+
+          {/* Delete */}
+          <div className="pt-2 border-t border-border">
+            {confirmDelete ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-red-500">Delete this meal?</span>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="px-3 py-1.5 text-sm font-medium rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
+                >
+                  {deleting ? 'Deleting...' : 'Yes, delete'}
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="px-3 py-1.5 text-sm font-medium rounded-lg border border-border hover:bg-muted"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-red-500 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete meal
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ───
 export default function MealsPage() {
   const [meals, setMeals] = useState<CaltrackMeal[]>([]);
@@ -392,6 +737,7 @@ export default function MealsPage() {
   const [days, setDays] = useState(7);
   const [customRange, setCustomRange] = useState<{ from: string; to: string } | undefined>();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingMeal, setEditingMeal] = useState<CaltrackMeal | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const fetchMeals = useCallback(async () => {
@@ -698,6 +1044,16 @@ export default function MealsPage() {
                                   </span>
                                 </div>
                               ))}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingMeal(meal);
+                                }}
+                                className="flex items-center gap-1.5 mt-2 px-3 py-1.5 text-sm font-medium rounded-lg text-orange-600 hover:bg-orange-500/10 transition-colors"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                                Edit meal
+                              </button>
                             </div>
                           ) : (
                             <Skeleton className="h-16" />
@@ -717,6 +1073,21 @@ export default function MealsPage() {
         <AddMealModal
           onClose={() => setShowAddModal(false)}
           onAdded={fetchMeals}
+        />
+      )}
+      {editingMeal && mealItems[editingMeal.id] && (
+        <EditMealModal
+          meal={editingMeal}
+          items={mealItems[editingMeal.id]}
+          onClose={() => setEditingMeal(null)}
+          onSaved={() => {
+            setMealItems((prev) => {
+              const next = { ...prev };
+              delete next[editingMeal.id];
+              return next;
+            });
+            fetchMeals();
+          }}
         />
       )}
       {lightboxUrl && (
