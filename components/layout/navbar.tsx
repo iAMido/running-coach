@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { User, LogOut, Settings, Menu, X, Dumbbell } from 'lucide-react';
+import { User, LogOut, Settings, Menu, X, Dumbbell, UtensilsCrossed } from 'lucide-react';
 import { useState } from 'react';
 
 const navLinks = [
@@ -21,6 +21,7 @@ const navLinks = [
   { href: '/#experience', label: 'Experience' },
   { href: '/blog', label: 'Blog' },
   { href: '/coach', label: 'Coach' },
+  { href: '/caltrack', label: 'CalTrack' },
   { href: '/#contact', label: 'Contact' },
 ];
 
@@ -114,6 +115,12 @@ export function Navbar() {
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild className="text-white/80 hover:text-white hover:bg-white/10 cursor-pointer">
+                    <Link href="/caltrack">
+                      <UtensilsCrossed className="w-4 h-4 mr-2" />
+                      CalTrack
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild className="text-white/80 hover:text-white hover:bg-white/10 cursor-pointer">
                     <Link href="/profile">
                       <User className="w-4 h-4 mr-2" />
                       Profile
@@ -203,6 +210,14 @@ export function Navbar() {
                 >
                   <Dumbbell className="w-4 h-4" />
                   Coach
+                </Link>
+                <Link
+                  href="/caltrack"
+                  onClick={handleLinkClick}
+                  className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-[#f97316] to-[#ef4444] text-white font-medium hover:opacity-90 transition-opacity"
+                >
+                  <UtensilsCrossed className="w-4 h-4" />
+                  CalTrack
                 </Link>
                 <Link
                   href="/profile"
