@@ -1,0 +1,86 @@
+import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { getAuthenticatedUser } from '@/lib/auth/get-user';
+import { caltrackDb, isCaltrackConfigured } from '@/lib/db/supabase-caltrack';
+
+export async function GET(request: NextRequest) {
+  const auth = await getAuthenticatedUser();
+  if (!auth.authenticated) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (!isCaltrackConfigured()) {
+    return NextResponse.json(
+      { error: 'CalTrack database not configured' },
+      { status: 503 }
+    );
+  }
+
+  const { searchParams } = new URL(request.url);
+  const from = searchParams.get('from');
+  const to = searchParams.get('to');
+  const mealType = searchParams.get('meal_type');
+  const mealId = searchParams.get('id');
+  const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 200);
+  const offset = parseInt(searchParams.get('offset') || '0');
+
+  try {
+    if (mealId) {
+      const [mealRes, itemsRes] = await Promise.all([
+        caltrackDb
+          .from('meals')
+          .select('*')
+          .eq('id', mealId)
+          .eq('status', 'confirmed')
+          .single(),
+        caltrackDb
+          .from('meal_items')
+          .select('*')
+          .eq('meal_id', mealId),
+      ]);
+
+      if (!mealRes.data) {
+        return NextResponse.json({ error: 'Meal not found' }, { status: 404 });
+      }
+
+      return NextResponse.json({
+        meal: mealRes.data,
+        items: itemsRes.data || [],
+      });
+    }
+
+    let query = caltrackDb
+      .from('meals')
+      .select('*', { count: 'exact' })
+      .eq('status', 'confirmed')
+      .order('eaten_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (from) {
+      query = query.gte('eaten_at', `${from}T00:00:00`);
+    }
+    if (to) {
+      query = query.lte('eaten_at', `${to}T23:59:59`);
+    }
+    if (mealType) {
+      query = query.eq('meal_type', mealType);
+    }
+
+    const { data, count, error } = await query;
+
+    if (error) throw error;
+
+    return NextResponse.json({
+      meals: data || [],
+      total: count || 0,
+      limit,
+      offset,
+    });
+  } catch (error) {
+    console.error('CalTrack meals error:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch meals' },
+      { status: 500 }
+    );
+  }
+}

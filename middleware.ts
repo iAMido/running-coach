@@ -14,6 +14,9 @@ const RATE_LIMITS: Record<string, { maxRequests: number; windowMs: number }> = {
   '/api/coach/plans/adjust': { maxRequests: 10, windowMs: 60000 },
   '/api/coach/review/analyze': { maxRequests: 10, windowMs: 60000 },
 
+  // CalTrack routes
+  '/api/caltrack': { maxRequests: 60, windowMs: 60000 },
+
   // Auth routes - prevent brute force
   '/api/auth': { maxRequests: 20, windowMs: 60000 },
   '/api/strava/auth': { maxRequests: 10, windowMs: 60000 },
