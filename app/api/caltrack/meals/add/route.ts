@@ -4,6 +4,18 @@ import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { caltrackDb, isCaltrackConfigured } from '@/lib/db/supabase-caltrack';
 import { randomUUID } from 'crypto';
 
+interface IngredientInput {
+  name_en: string;
+  name_he?: string;
+  fdc_id?: number | null;
+  grams: number;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+}
+
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser();
   if (!auth.authenticated) {
@@ -19,16 +31,17 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { meal_type, food_name, weight_grams } = body;
+    const { meal_type, ingredients } = body as {
+      meal_type: string;
+      ingredients: IngredientInput[];
+    };
 
-    if (!meal_type || !food_name || !weight_grams) {
+    if (!meal_type || !ingredients || !ingredients.length) {
       return NextResponse.json(
-        { error: 'Missing required fields: meal_type, food_name, weight_grams' },
+        { error: 'Missing meal_type or ingredients' },
         { status: 400 }
       );
     }
-
-    const grams = Math.max(1, Math.min(5000, Number(weight_grams)));
 
     const profileRes = await caltrackDb
       .from('user_profile')
@@ -41,74 +54,50 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = profileRes.data.id;
-
-    const { data: usdaMatches } = await caltrackDb
-      .from('usda_foundation')
-      .select('fdc_id,description,calories_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g,fiber_per_100g')
-      .ilike('description', `%${food_name}%`)
-      .limit(5);
-
-    let nutrition: {
-      calories: number;
-      protein_g: number;
-      carbs_g: number;
-      fat_g: number;
-      fiber_g: number;
-      fdc_id: number | null;
-      source: string;
-    };
-
-    if (usdaMatches && usdaMatches.length > 0) {
-      const match = usdaMatches[0];
-      const factor = grams / 100;
-      nutrition = {
-        calories: Math.round((match.calories_per_100g || 0) * factor),
-        protein_g: Math.round(((match.protein_per_100g || 0) * factor) * 10) / 10,
-        carbs_g: Math.round(((match.carbs_per_100g || 0) * factor) * 10) / 10,
-        fat_g: Math.round(((match.fat_per_100g || 0) * factor) * 10) / 10,
-        fiber_g: Math.round(((match.fiber_per_100g || 0) * factor) * 10) / 10,
-        fdc_id: match.fdc_id,
-        source: 'usda',
-      };
-    } else {
-      return NextResponse.json({
-        error: 'Food not found in USDA database. Try a different name (in English).',
-        suggestions: [],
-      }, { status: 404 });
-    }
-
     const mealId = randomUUID();
     const now = new Date().toISOString();
+
+    const totals = ingredients.reduce(
+      (acc, ing) => ({
+        calories: acc.calories + (ing.calories || 0),
+        protein: acc.protein + (ing.protein_g || 0),
+        carbs: acc.carbs + (ing.carbs_g || 0),
+        fat: acc.fat + (ing.fat_g || 0),
+        fiber: acc.fiber + (ing.fiber_g || 0),
+      }),
+      { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 }
+    );
 
     const { error: mealError } = await caltrackDb.from('meals').insert({
       id: mealId,
       user_id: userId,
       meal_type,
       eaten_at: now,
-      total_calories: nutrition.calories,
-      total_protein_g: nutrition.protein_g,
-      total_carbs_g: nutrition.carbs_g,
-      total_fat_g: nutrition.fat_g,
-      total_fiber_g: nutrition.fiber_g,
+      total_calories: totals.calories,
+      total_protein_g: Math.round(totals.protein * 10) / 10,
+      total_carbs_g: Math.round(totals.carbs * 10) / 10,
+      total_fat_g: Math.round(totals.fat * 10) / 10,
+      total_fiber_g: Math.round(totals.fiber * 10) / 10,
       status: 'confirmed',
     });
 
     if (mealError) throw mealError;
 
-    const { error: itemError } = await caltrackDb.from('meal_items').insert({
-      meal_id: mealId,
-      ingredient_name: food_name,
-      fdc_id: nutrition.fdc_id,
-      weight_grams: grams,
-      weight_source: 'dashboard',
-      calories: nutrition.calories,
-      protein_g: nutrition.protein_g,
-      carbs_g: nutrition.carbs_g,
-      fat_g: nutrition.fat_g,
-      fiber_g: nutrition.fiber_g,
-    });
-
-    if (itemError) throw itemError;
+    for (const ing of ingredients) {
+      const { error: itemError } = await caltrackDb.from('meal_items').insert({
+        meal_id: mealId,
+        ingredient_name: ing.name_en,
+        fdc_id: ing.fdc_id || null,
+        weight_grams: Math.round(ing.grams),
+        weight_source: 'dashboard_ai',
+        calories: ing.calories,
+        protein_g: ing.protein_g,
+        carbs_g: ing.carbs_g,
+        fat_g: ing.fat_g,
+        fiber_g: ing.fiber_g,
+      });
+      if (itemError) throw itemError;
+    }
 
     // Refresh daily summary
     const todayStr = now.split('T')[0];
@@ -121,7 +110,7 @@ export async function POST(request: NextRequest) {
       .lte('eaten_at', `${todayStr}T23:59:59`);
 
     if (dayMeals) {
-      const totals = dayMeals.reduce(
+      const dayTotals = dayMeals.reduce(
         (acc, m) => ({
           cal: acc.cal + (m.total_calories || 0),
           pro: acc.pro + (m.total_protein_g || 0),
@@ -136,13 +125,13 @@ export async function POST(request: NextRequest) {
         {
           user_id: userId,
           date: todayStr,
-          total_calories_in: totals.cal,
-          total_protein_g: Math.round(totals.pro * 10) / 10,
-          total_carbs_g: Math.round(totals.carb * 10) / 10,
-          total_fat_g: Math.round(totals.fat * 10) / 10,
-          total_fiber_g: Math.round(totals.fib * 10) / 10,
+          total_calories_in: dayTotals.cal,
+          total_protein_g: Math.round(dayTotals.pro * 10) / 10,
+          total_carbs_g: Math.round(dayTotals.carb * 10) / 10,
+          total_fat_g: Math.round(dayTotals.fat * 10) / 10,
+          total_fiber_g: Math.round(dayTotals.fib * 10) / 10,
           target_calories: profileRes.data.target_daily_calories || 2000,
-          net_calories: totals.cal,
+          net_calories: dayTotals.cal,
         },
         { onConflict: 'user_id,date' }
       );
@@ -150,8 +139,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       meal_id: mealId,
-      nutrition,
-      message: `Added ${grams}g ${food_name} (${nutrition.calories} kcal)`,
+      totals,
+      items: ingredients.length,
     });
   } catch (error) {
     console.error('CalTrack add meal error:', error);

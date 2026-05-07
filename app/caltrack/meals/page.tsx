@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -27,70 +27,103 @@ const mealTypeColors: Record<string, string> = {
 const CALTRACK_STORAGE_URL =
   process.env.NEXT_PUBLIC_CALTRACK_STORAGE_URL || '';
 
-interface FoodSearchResult {
-  fdc_id: number;
-  name: string;
-  per100g: {
-    calories: number;
-    protein: number;
-    carbs: number;
-    fat: number;
-    fiber: number;
-  };
+// ─── Add Meal Modal ───
+interface AnalyzedIngredient {
+  name_en: string;
+  name_he: string;
+  fdc_id: number | null;
+  source: string;
+  estimated_grams: number;
+  per_100g: { calories: number; protein: number; carbs: number; fat: number; fiber: number };
+  calculated: { calories: number; protein: number; carbs: number; fat: number; fiber: number };
 }
 
-// ─── Add Meal Modal ───
+interface AnalysisResult {
+  dish_name_en: string;
+  dish_name_he: string;
+  ingredients: AnalyzedIngredient[];
+  totals: { calories: number; protein: number; carbs: number; fat: number; fiber: number };
+}
+
 function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
   const [mealType, setMealType] = useState<string>('lunch');
-  const [foodQuery, setFoodQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<FoodSearchResult[]>([]);
-  const [selectedFood, setSelectedFood] = useState<FoodSearchResult | null>(null);
-  const [grams, setGrams] = useState('100');
+  const [description, setDescription] = useState('');
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const searchTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const searchFoods = useCallback(async (q: string) => {
-    if (q.length < 2) {
-      setSearchResults([]);
-      return;
-    }
+  const handleAnalyze = async () => {
+    if (!description.trim()) return;
+    setAnalyzing(true);
+    setError('');
+    setAnalysis(null);
     try {
-      const res = await fetch(`/api/caltrack/foods/search?q=${encodeURIComponent(q)}`);
+      const res = await fetch('/api/caltrack/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: description.trim() }),
+      });
       if (res.ok) {
+        setAnalysis(await res.json());
+      } else {
         const data = await res.json();
-        setSearchResults(data.results);
+        setError(data.error || 'Analysis failed');
       }
     } catch {
-      // ignore
+      setError('Network error');
+    } finally {
+      setAnalyzing(false);
     }
-  }, []);
-
-  const handleQueryChange = (val: string) => {
-    setFoodQuery(val);
-    setSelectedFood(null);
-    clearTimeout(searchTimeout.current);
-    searchTimeout.current = setTimeout(() => searchFoods(val), 300);
   };
 
-  const selectFood = (food: FoodSearchResult) => {
-    setSelectedFood(food);
-    setFoodQuery(food.name);
-    setSearchResults([]);
+  const updateIngredientGrams = (index: number, newGrams: number) => {
+    if (!analysis) return;
+    const updated = { ...analysis };
+    const ing = { ...updated.ingredients[index] };
+    const factor = newGrams / 100;
+    ing.estimated_grams = newGrams;
+    ing.calculated = {
+      calories: Math.round(ing.per_100g.calories * factor),
+      protein: Math.round(ing.per_100g.protein * factor * 10) / 10,
+      carbs: Math.round(ing.per_100g.carbs * factor * 10) / 10,
+      fat: Math.round(ing.per_100g.fat * factor * 10) / 10,
+      fiber: Math.round(ing.per_100g.fiber * factor * 10) / 10,
+    };
+    updated.ingredients = [...updated.ingredients];
+    updated.ingredients[index] = ing;
+    updated.totals = updated.ingredients.reduce(
+      (acc, i) => ({
+        calories: acc.calories + i.calculated.calories,
+        protein: Math.round((acc.protein + i.calculated.protein) * 10) / 10,
+        carbs: Math.round((acc.carbs + i.calculated.carbs) * 10) / 10,
+        fat: Math.round((acc.fat + i.calculated.fat) * 10) / 10,
+        fiber: Math.round((acc.fiber + i.calculated.fiber) * 10) / 10,
+      }),
+      { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 }
+    );
+    setAnalysis(updated);
   };
 
-  const calculated = selectedFood
-    ? {
-        calories: Math.round((selectedFood.per100g.calories * Number(grams)) / 100),
-        protein: Math.round(((selectedFood.per100g.protein * Number(grams)) / 100) * 10) / 10,
-        carbs: Math.round(((selectedFood.per100g.carbs * Number(grams)) / 100) * 10) / 10,
-        fat: Math.round(((selectedFood.per100g.fat * Number(grams)) / 100) * 10) / 10,
-        fiber: Math.round(((selectedFood.per100g.fiber * Number(grams)) / 100) * 10) / 10,
-      }
-    : null;
+  const removeIngredient = (index: number) => {
+    if (!analysis) return;
+    const updated = { ...analysis };
+    updated.ingredients = updated.ingredients.filter((_, i) => i !== index);
+    updated.totals = updated.ingredients.reduce(
+      (acc, i) => ({
+        calories: acc.calories + i.calculated.calories,
+        protein: Math.round((acc.protein + i.calculated.protein) * 10) / 10,
+        carbs: Math.round((acc.carbs + i.calculated.carbs) * 10) / 10,
+        fat: Math.round((acc.fat + i.calculated.fat) * 10) / 10,
+        fiber: Math.round((acc.fiber + i.calculated.fiber) * 10) / 10,
+      }),
+      { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 }
+    );
+    setAnalysis(updated);
+  };
 
-  const handleSubmit = async () => {
-    if (!selectedFood || !grams) return;
+  const handleConfirm = async () => {
+    if (!analysis || !analysis.ingredients.length) return;
     setSubmitting(true);
     setError('');
     try {
@@ -99,8 +132,17 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           meal_type: mealType,
-          food_name: selectedFood.name,
-          weight_grams: Number(grams),
+          ingredients: analysis.ingredients.map((ing) => ({
+            name_en: ing.name_en,
+            name_he: ing.name_he,
+            fdc_id: ing.fdc_id,
+            grams: ing.estimated_grams,
+            calories: ing.calculated.calories,
+            protein_g: ing.calculated.protein,
+            carbs_g: ing.calculated.carbs,
+            fat_g: ing.calculated.fat,
+            fiber_g: ing.calculated.fiber,
+          })),
         }),
       });
       if (res.ok) {
@@ -108,7 +150,7 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
         onClose();
       } else {
         const data = await res.json();
-        setError(data.error || 'Failed to add meal');
+        setError(data.error || 'Failed to save');
       }
     } catch {
       setError('Network error');
@@ -119,7 +161,7 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-card border border-border rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h2 className="text-lg font-semibold">Add Meal</h2>
           <button onClick={onClose} className="p-1 hover:bg-muted rounded-lg">
@@ -133,7 +175,7 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
             <label className="text-sm font-medium text-muted-foreground mb-1.5 block">
               Meal Type
             </label>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               {['breakfast', 'lunch', 'dinner', 'snack'].map((type) => (
                 <button
                   key={type}
@@ -151,96 +193,161 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
             </div>
           </div>
 
-          {/* Food search */}
-          <div className="relative">
-            <label className="text-sm font-medium text-muted-foreground mb-1.5 block">
-              Food (search in English)
-            </label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="e.g. chicken breast, olive oil, rice..."
-                value={foodQuery}
-                onChange={(e) => handleQueryChange(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30"
-              />
-            </div>
-            {searchResults.length > 0 && (
-              <div className="absolute z-10 mt-1 w-full bg-card border border-border rounded-xl shadow-lg max-h-48 overflow-y-auto">
-                {searchResults.map((food) => (
-                  <button
-                    key={food.fdc_id}
-                    onClick={() => selectFood(food)}
-                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted/50 border-b border-border/50 last:border-0"
-                  >
-                    <span className="font-medium">{food.name}</span>
-                    <span className="text-xs text-muted-foreground ml-2">
-                      {food.per100g.calories} kcal/100g
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Weight */}
+          {/* Free-text input */}
           <div>
             <label className="text-sm font-medium text-muted-foreground mb-1.5 block">
-              Weight (grams)
+              What did you eat? (Hebrew or English)
             </label>
-            <input
-              type="number"
-              value={grams}
-              onChange={(e) => setGrams(e.target.value)}
-              min="1"
-              max="5000"
-              className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder={"פיתה שווארמה פרגית\nסושי סלמון רול\nchicken breast with rice and salad"}
+              rows={3}
+              className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 resize-none"
+              dir="auto"
             />
+            <p className="text-xs text-muted-foreground mt-1">
+              Describe any dish — AI will break it down into ingredients
+            </p>
           </div>
 
-          {/* Nutrition preview */}
-          {calculated && (
-            <div className="bg-muted/50 rounded-xl p-3">
-              <p className="text-sm font-medium mb-2">
-                Nutrition for {grams}g {selectedFood?.name}
-              </p>
-              <div className="grid grid-cols-5 gap-2 text-center text-xs">
+          {!analysis && (
+            <button
+              onClick={handleAnalyze}
+              disabled={!description.trim() || analyzing}
+              className="w-full py-2.5 rounded-xl bg-orange-500 text-white font-medium hover:bg-orange-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+            >
+              {analyzing ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <Search className="w-4 h-4" />
+                  Analyze Food
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Analysis results */}
+          {analysis && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-muted-foreground">Cal</p>
-                  <p className="font-bold text-orange-600">{calculated.calories}</p>
+                  <p className="font-semibold">{analysis.dish_name_he}</p>
+                  <p className="text-sm text-muted-foreground">{analysis.dish_name_en}</p>
                 </div>
-                <div>
-                  <p className="text-muted-foreground">Protein</p>
-                  <p className="font-bold text-blue-600">{calculated.protein}g</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Carbs</p>
-                  <p className="font-bold text-green-600">{calculated.carbs}g</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Fat</p>
-                  <p className="font-bold text-purple-600">{calculated.fat}g</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Fiber</p>
-                  <p className="font-bold">{calculated.fiber}g</p>
+                <button
+                  onClick={() => setAnalysis(null)}
+                  className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-lg hover:bg-muted"
+                >
+                  Re-analyze
+                </button>
+              </div>
+
+              {/* Ingredients list — editable */}
+              <div className="space-y-2">
+                {analysis.ingredients.map((ing, i) => (
+                  <div
+                    key={i}
+                    className="bg-muted/40 rounded-xl p-3 space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-sm font-medium">{ing.name_he || ing.name_en}</span>
+                        {ing.name_he && (
+                          <span className="text-xs text-muted-foreground ml-1.5">
+                            ({ing.name_en})
+                          </span>
+                        )}
+                        <span
+                          className={cn(
+                            'text-[10px] ml-1.5 px-1.5 py-0.5 rounded-full',
+                            ing.source === 'usda'
+                              ? 'bg-green-500/10 text-green-600'
+                              : 'bg-blue-500/10 text-blue-600'
+                          )}
+                        >
+                          {ing.source === 'usda' ? 'USDA' : 'AI'}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => removeIngredient(i)}
+                        className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-red-500"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={ing.estimated_grams}
+                        onChange={(e) =>
+                          updateIngredientGrams(i, Math.max(1, Number(e.target.value)))
+                        }
+                        className="w-20 px-2 py-1 text-sm rounded-lg border border-border bg-background text-center"
+                        min="1"
+                      />
+                      <span className="text-xs text-muted-foreground">g</span>
+                      <span className="text-xs text-muted-foreground ml-auto">
+                        {ing.calculated.calories} kcal
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        P:{ing.calculated.protein}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        C:{ing.calculated.carbs}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        F:{ing.calculated.fat}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Totals */}
+              <div className="bg-orange-500/5 rounded-xl p-3 border border-orange-500/10">
+                <p className="text-sm font-semibold mb-2">Total</p>
+                <div className="grid grid-cols-5 gap-2 text-center text-xs">
+                  <div>
+                    <p className="text-muted-foreground">Cal</p>
+                    <p className="font-bold text-orange-600 text-base">
+                      {analysis.totals.calories}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Protein</p>
+                    <p className="font-bold text-blue-600">{analysis.totals.protein}g</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Carbs</p>
+                    <p className="font-bold text-green-600">{analysis.totals.carbs}g</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Fat</p>
+                    <p className="font-bold text-purple-600">{analysis.totals.fat}g</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Fiber</p>
+                    <p className="font-bold">{analysis.totals.fiber}g</p>
+                  </div>
                 </div>
               </div>
+
+              <button
+                onClick={handleConfirm}
+                disabled={submitting || !analysis.ingredients.length}
+                className="w-full py-2.5 rounded-xl bg-orange-500 text-white font-medium hover:bg-orange-600 disabled:opacity-50 transition-colors"
+              >
+                {submitting ? 'Saving...' : `Confirm & Save (${analysis.totals.calories} kcal)`}
+              </button>
             </div>
           )}
 
-          {error && (
-            <p className="text-sm text-red-500">{error}</p>
-          )}
-
-          <button
-            onClick={handleSubmit}
-            disabled={!selectedFood || !grams || submitting}
-            className="w-full py-2.5 rounded-xl bg-orange-500 text-white font-medium hover:bg-orange-600 disabled:opacity-50 transition-colors"
-          >
-            {submitting ? 'Adding...' : 'Add Meal'}
-          </button>
+          {error && <p className="text-sm text-red-500">{error}</p>}
         </div>
       </div>
     </div>
