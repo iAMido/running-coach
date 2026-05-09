@@ -21,7 +21,10 @@ export async function GET(request: NextRequest) {
   const toParam = searchParams.get('to');
   const days = Math.min(parseInt(searchParams.get('days') || '7'), 365);
 
-  const now = new Date();
+  // Use Israel timezone for date calculations
+  const nowIsrael = new Date(
+    new Date().toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' })
+  );
   let startStr: string;
   let todayStr: string;
 
@@ -29,10 +32,10 @@ export async function GET(request: NextRequest) {
     startStr = fromParam;
     todayStr = toParam;
   } else {
-    const startDate = new Date(now);
+    const startDate = new Date(nowIsrael);
     startDate.setDate(startDate.getDate() - days);
     startStr = startDate.toISOString().split('T')[0];
-    todayStr = now.toISOString().split('T')[0];
+    todayStr = nowIsrael.toISOString().split('T')[0];
   }
 
   try {
@@ -58,7 +61,9 @@ export async function GET(request: NextRequest) {
           .order('measured_at', { ascending: true }),
         caltrackDb
           .from('meals')
-          .select('id,meal_type,total_calories,total_protein_g,total_carbs_g,total_fat_g,total_fiber_g,eaten_at')
+          .select(
+            'id,meal_type,total_calories,total_protein_g,total_carbs_g,total_fat_g,total_fiber_g,eaten_at'
+          )
           .eq('status', 'confirmed')
           .gte('eaten_at', `${todayStr}T00:00:00`)
           .lte('eaten_at', `${todayStr}T23:59:59`),
@@ -74,21 +79,71 @@ export async function GET(request: NextRequest) {
     const weights = weightRes.data || [];
     const todayMeals = todayMealsRes.data || [];
     const allRuns = runsRes.data || [];
+    const targetCal = profile?.target_daily_calories || 2000;
 
     // Build a map of exercise calories per day from caltrack_runs
-    const runsByDay: Record<string, { calories: number; count: number; distance: number; duration: number }> = {};
+    const runsByDay: Record<
+      string,
+      { calories: number; count: number; distance: number; duration: number }
+    > = {};
     for (const r of allRuns) {
-      const day = (r.run_date || '').split('T')[0];
+      // run_date is TIMESTAMPTZ — extract date in Israel timezone
+      const runDate = new Date(r.run_date);
+      const day = runDate
+        .toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' })
+        .split('T')[0]; // YYYY-MM-DD
       if (!day) continue;
-      if (!runsByDay[day]) runsByDay[day] = { calories: 0, count: 0, distance: 0, duration: 0 };
+      if (!runsByDay[day])
+        runsByDay[day] = { calories: 0, count: 0, distance: 0, duration: 0 };
       runsByDay[day].calories += r.calories_burned || 0;
       runsByDay[day].count += 1;
       runsByDay[day].distance += r.distance_km || 0;
       runsByDay[day].duration += r.duration_minutes || 0;
     }
 
+    // Build a map from daily_summary
+    const summaryByDay: Record<
+      string,
+      { calories_in: number; calories_out: number; target: number }
+    > = {};
+    for (const s of summaries) {
+      summaryByDay[s.date] = {
+        calories_in: s.total_calories_in || 0,
+        calories_out: s.total_calories_out || 0,
+        target: s.target_calories || targetCal,
+      };
+    }
+
+    // Merge all dates that have any data (summary OR runs)
+    const allDates = new Set<string>([
+      ...Object.keys(summaryByDay),
+      ...Object.keys(runsByDay),
+    ]);
+    const sortedDates = Array.from(allDates).sort();
+
+    const trend = sortedDates.map((date) => {
+      const summary = summaryByDay[date];
+      const runs = runsByDay[date];
+      const caloriesIn = summary?.calories_in || 0;
+      const exerciseFromSummary = summary?.calories_out || 0;
+      const exerciseFromRuns = runs?.calories || 0;
+      const exerciseCalories = Math.max(exerciseFromSummary, exerciseFromRuns);
+      return {
+        date,
+        calories_in: caloriesIn,
+        calories_out: exerciseCalories,
+        net: caloriesIn - exerciseCalories,
+        target: summary?.target || targetCal,
+      };
+    });
+
     // Today's exercise
-    const todayExercise = runsByDay[todayStr] || { calories: 0, count: 0, distance: 0, duration: 0 };
+    const todayExercise = runsByDay[todayStr] || {
+      calories: 0,
+      count: 0,
+      distance: 0,
+      duration: 0,
+    };
 
     const todayCalories = todayMeals.reduce(
       (sum: number, m: { total_calories: number }) =>
@@ -115,43 +170,20 @@ export async function GET(request: NextRequest) {
       0
     );
 
+    const daysWithMeals = summaries.filter(
+      (s: { total_calories_in: number }) => (s.total_calories_in || 0) > 0
+    ).length;
+
     const avgCalories =
-      summaries.length > 0
+      daysWithMeals > 0
         ? Math.round(
             summaries.reduce(
               (sum: number, s: { total_calories_in: number }) =>
                 sum + (s.total_calories_in || 0),
               0
-            ) / summaries.length
+            ) / daysWithMeals
           )
         : 0;
-
-    const daysWithData = summaries.filter(
-      (s: { total_calories_in: number }) => (s.total_calories_in || 0) > 0
-    ).length;
-
-    const trend = summaries.map(
-      (s: {
-        date: string;
-        total_calories_in: number;
-        total_calories_out: number;
-        net_calories: number;
-        target_calories: number;
-      }) => {
-        // Use runs data if daily_summary has no exercise calories
-        const summaryOut = s.total_calories_out || 0;
-        const runsOut = runsByDay[s.date]?.calories || 0;
-        const exerciseCalories = Math.max(summaryOut, runsOut);
-        const caloriesIn = s.total_calories_in || 0;
-        return {
-          date: s.date,
-          calories_in: caloriesIn,
-          calories_out: exerciseCalories,
-          net: caloriesIn - exerciseCalories,
-          target: s.target_calories || profile?.target_daily_calories || 2000,
-        };
-      }
-    );
 
     const weightTrend = weights.map(
       (w: { measured_at: string; weight_kg: number }) => ({
@@ -161,14 +193,20 @@ export async function GET(request: NextRequest) {
     );
 
     // Total exercise calories across the period
-    const totalExerciseCalories = Object.values(runsByDay).reduce((sum, d) => sum + d.calories, 0);
-    const totalExerciseRuns = Object.values(runsByDay).reduce((sum, d) => sum + d.count, 0);
+    const totalExerciseCalories = Object.values(runsByDay).reduce(
+      (sum, d) => sum + d.calories,
+      0
+    );
+    const totalExerciseRuns = Object.values(runsByDay).reduce(
+      (sum, d) => sum + d.count,
+      0
+    );
 
     return NextResponse.json({
       profile,
       today: {
         calories: todayCalories,
-        target: profile?.target_daily_calories || 2000,
+        target: targetCal,
         protein: Math.round(todayProtein * 10) / 10,
         carbs: Math.round(todayCarbs * 10) / 10,
         fat: Math.round(todayFat * 10) / 10,
@@ -180,7 +218,7 @@ export async function GET(request: NextRequest) {
       },
       stats: {
         avgCalories,
-        daysWithData,
+        daysWithData: daysWithMeals,
         currentWeight: profile?.current_weight_kg,
         targetWeight: profile?.target_weight_kg,
         totalExerciseCalories,

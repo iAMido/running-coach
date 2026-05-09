@@ -10,7 +10,7 @@ import {
   Footprints,
 } from 'lucide-react';
 import {
-  BarChart,
+  ComposedChart,
   Bar,
   XAxis,
   YAxis,
@@ -129,7 +129,9 @@ export default function CaltrackOverview() {
   }
 
   const { today, stats, trend, weightTrend, profile } = data;
-  const remaining = today.target - today.calories;
+  // If you exercise, you "earn back" those calories
+  const remaining = today.target + today.exercise - today.calories;
+  const netCalories = today.calories - today.exercise;
   const totalMacroG = today.protein + today.carbs + today.fat;
   const macroData = [
     {
@@ -183,7 +185,11 @@ export default function CaltrackOverview() {
         <KpiCard
           title="Eaten Today"
           value={`${today.calories.toLocaleString()} kcal`}
-          subtitle={`${remaining > 0 ? remaining.toLocaleString() : 0} remaining`}
+          subtitle={
+            today.exercise > 0
+              ? `Net: ${netCalories.toLocaleString()} · ${remaining > 0 ? remaining.toLocaleString() : 0} left`
+              : `${remaining > 0 ? remaining.toLocaleString() : 0} remaining`
+          }
           icon={Flame}
           color="orange"
         />
@@ -242,8 +248,8 @@ export default function CaltrackOverview() {
       <div className="bg-card border border-border rounded-xl p-4 md:p-6">
         <h2 className="text-lg font-semibold mb-4">Daily Calories</h2>
         {trend.length > 0 ? (
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={trend} barGap={2}>
+          <ResponsiveContainer width="100%" height={300}>
+            <ComposedChart data={trend} barGap={4}>
               <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
               <XAxis
                 dataKey="date"
@@ -260,9 +266,11 @@ export default function CaltrackOverview() {
                   fontSize: '13px',
                 }}
                 labelFormatter={formatDate}
-                formatter={(value) => [
-                  `${Number(value || 0).toLocaleString()} kcal`,
-                ]}
+                formatter={(value, name) => {
+                  const v = Number(value || 0);
+                  if (name === 'Net') return [`${v.toLocaleString()} kcal`, 'Net (intake - exercise)'];
+                  return [`${v.toLocaleString()} kcal`];
+                }}
               />
               <Legend />
               <ReferenceLine
@@ -273,25 +281,39 @@ export default function CaltrackOverview() {
               />
               <Bar
                 dataKey="calories_in"
-                name="Intake"
+                name="Eaten"
                 fill="#f97316"
                 radius={[4, 4, 0, 0]}
-                maxBarSize={60}
+                maxBarSize={50}
+                opacity={0.8}
               />
               <Bar
                 dataKey="calories_out"
                 name="Exercise"
                 fill="#22c55e"
                 radius={[4, 4, 0, 0]}
-                maxBarSize={60}
+                maxBarSize={50}
+                opacity={0.8}
               />
-            </BarChart>
+              <Line
+                type="monotone"
+                dataKey="net"
+                name="Net"
+                stroke="#ef4444"
+                strokeWidth={2}
+                dot={{ r: 4, fill: '#ef4444' }}
+                activeDot={{ r: 6 }}
+              />
+            </ComposedChart>
           </ResponsiveContainer>
         ) : (
           <div className="flex items-center justify-center h-48 text-muted-foreground">
             No data for this period
           </div>
         )}
+        <p className="text-xs text-muted-foreground mt-2">
+          Net = Eaten - Exercise. Stay below the target line to lose weight.
+        </p>
       </div>
 
       {/* Bottom Row: Macros + Weight */}
