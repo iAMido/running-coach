@@ -37,56 +37,77 @@ export function DateRangePicker({
 
   return (
     <div className="flex flex-col items-end gap-2">
-      <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-        {presets.map((preset) => (
-          <button
-            key={preset.days}
-            onClick={() => {
-              onChange(preset.days);
-              setShowCustom(false);
-            }}
-            className={cn(
-              'px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200',
-              selectedDays === preset.days && !isCustomActive
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {preset.label}
-          </button>
-        ))}
+      <div
+        className="inline-flex gap-[1px] rounded-full p-[3px]"
+        style={{
+          background: 'var(--ct-surface)',
+          border: '1px solid var(--ct-line)',
+          boxShadow: 'var(--ct-shadow-1)',
+        }}
+      >
+        {presets.map((preset) => {
+          const isOn = selectedDays === preset.days && !isCustomActive;
+          return (
+            <button
+              key={preset.days}
+              onClick={() => {
+                onChange(preset.days);
+                setShowCustom(false);
+              }}
+              className={cn(
+                'ct-mono px-[13px] py-[7px] rounded-full text-[11px] font-medium border-0 transition-colors',
+              )}
+              style={{
+                background: isOn ? 'var(--ct-ink)' : 'transparent',
+                color: isOn ? '#fff' : 'var(--ct-ink-3)',
+                letterSpacing: '0.06em',
+              }}
+            >
+              {preset.label}
+            </button>
+          );
+        })}
         <button
           onClick={() => setShowCustom(!showCustom)}
-          className={cn(
-            'px-2 py-1.5 rounded-md transition-all duration-200',
-            isCustomActive
-              ? 'bg-background text-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
-          )}
+          className="px-[10px] py-[7px] rounded-full border-0 transition-colors"
+          style={{
+            background: isCustomActive ? 'var(--ct-ink)' : 'transparent',
+            color: isCustomActive ? '#fff' : 'var(--ct-ink-3)',
+          }}
           title="Custom date range"
         >
-          <Calendar className="w-4 h-4" />
+          <Calendar className="w-3.5 h-3.5" />
         </button>
       </div>
       {showCustom && (
-        <div className="flex items-center gap-2 bg-card border border-border rounded-lg p-2">
+        <div
+          className="flex items-center gap-2 rounded-xl p-2"
+          style={{
+            background: 'var(--ct-surface)',
+            border: '1px solid var(--ct-line)',
+            boxShadow: 'var(--ct-shadow-1)',
+          }}
+        >
           <input
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
-            className="px-2 py-1 text-sm rounded-md border border-border bg-background"
+            className="px-2 py-1 text-sm rounded-lg border ct-mono"
+            style={{ borderColor: 'var(--ct-line)', background: 'var(--ct-surface-2)' }}
           />
-          <span className="text-sm text-muted-foreground">to</span>
+          <span className="text-sm" style={{ color: 'var(--ct-ink-3)' }}>to</span>
           <input
             type="date"
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            className="px-2 py-1 text-sm rounded-md border border-border bg-background"
+            className="px-2 py-1 text-sm rounded-lg border ct-mono"
+            style={{ borderColor: 'var(--ct-line)', background: 'var(--ct-surface-2)' }}
           />
           <button
             onClick={handleApply}
             disabled={!from || !to}
-            className="px-3 py-1 text-sm font-medium rounded-md bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 transition-colors"
+            className="px-3 py-1 text-sm font-semibold rounded-lg text-white disabled:opacity-50 transition-colors"
+            style={{ background: 'var(--ct-ember)' }}
           >
             Apply
           </button>

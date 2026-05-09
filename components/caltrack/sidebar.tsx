@@ -8,12 +8,10 @@ import {
   UtensilsCrossed,
   Scale,
   Apple,
-  ChevronLeft,
-  ChevronRight,
   LogOut,
   Activity,
+  ChevronLeft,
 } from 'lucide-react';
-import { useState } from 'react';
 import { signOut } from 'next-auth/react';
 
 const navItems = [
@@ -25,42 +23,58 @@ const navItems = [
 
 export function CaltrackSidebar() {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
 
   return (
     <aside
       className={cn(
-        'fixed left-0 top-0 h-screen bg-background border-r border-border transition-all duration-300 z-40',
-        'hidden md:block',
-        collapsed ? 'w-16' : 'w-64'
+        'fixed left-0 top-0 h-screen w-[248px] z-40',
+        'hidden md:flex flex-col',
       )}
+      style={{
+        background: 'var(--ct-paper)',
+        borderRight: '1px solid var(--ct-line)',
+        padding: '22px 18px',
+        gap: '6px',
+      }}
     >
-      <div className="h-16 flex items-center justify-between px-4 border-b border-border">
-        {!collapsed && (
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center">
-              <UtensilsCrossed className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-semibold text-foreground">CalTrack</span>
-          </div>
-        )}
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className={cn(
-            'p-2 rounded-lg hover:bg-accent transition-colors',
-            collapsed && 'mx-auto'
-          )}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      {/* Brand */}
+      <div
+        className="flex items-center gap-3 px-2 pb-[18px] mb-3.5"
+        style={{ borderBottom: '1px solid var(--ct-line)' }}
+      >
+        <div
+          className="w-8 h-8 rounded-[9px] grid place-items-center text-white text-[13px] font-bold"
+          style={{
+            background: 'var(--ct-ember)',
+            letterSpacing: '-0.02em',
+            boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.18), 0 1px 0 rgba(0,0,0,0.06)',
+          }}
         >
-          {collapsed ? (
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
-          ) : (
-            <ChevronLeft className="w-4 h-4 text-muted-foreground" />
-          )}
-        </button>
+          CT
+        </div>
+        <div>
+          <div className="font-bold text-[15.5px]" style={{ letterSpacing: '-0.02em', color: 'var(--ct-ink)' }}>
+            CalTrack
+          </div>
+          <div
+            className="ct-mono text-[9.5px] font-normal uppercase"
+            style={{ color: 'var(--ct-ink-3)', letterSpacing: '0.04em', marginTop: '2px' }}
+          >
+            v2 &middot; NOURISHMENT
+          </div>
+        </div>
       </div>
 
-      <nav className="p-2 space-y-1">
+      {/* Section label */}
+      <div
+        className="ct-mono text-[9.5px] font-medium uppercase px-3 pt-3.5 pb-1.5"
+        style={{ color: 'var(--ct-ink-4)', letterSpacing: '0.1em' }}
+      >
+        Tracking
+      </div>
+
+      {/* Nav links */}
+      <nav className="flex flex-col gap-[2px]">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive =
@@ -73,62 +87,59 @@ export function CaltrackSidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200',
-                isActive
-                  ? 'bg-gradient-to-r from-orange-500/10 to-red-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent',
-                collapsed && 'justify-center px-2'
+                'relative flex items-center gap-[11px] px-3 py-[9px] rounded-[10px] text-sm font-medium transition-colors',
               )}
-              title={collapsed ? item.label : undefined}
+              style={{
+                color: isActive ? 'var(--ct-ink)' : 'var(--ct-ink-2)',
+                background: isActive ? 'var(--ct-surface)' : 'transparent',
+                boxShadow: isActive ? 'var(--ct-shadow-1)' : 'none',
+              }}
             >
-              <Icon
-                className={cn(
-                  'w-5 h-5 shrink-0',
-                  isActive && 'text-orange-600 dark:text-orange-400'
-                )}
-              />
-              {!collapsed && (
-                <span className="text-sm font-medium">{item.label}</span>
+              {isActive && (
+                <span
+                  className="absolute -left-[18px] top-3 bottom-3 w-[3px] rounded-sm"
+                  style={{ background: 'var(--ct-ember)' }}
+                />
               )}
+              <Icon
+                className="w-4 h-4 shrink-0"
+                style={{ color: isActive ? 'var(--ct-ember)' : 'var(--ct-ink-3)' }}
+              />
+              <span>{item.label}</span>
             </Link>
           );
         })}
       </nav>
 
-      <div className="absolute bottom-4 left-0 right-0 px-2 space-y-1">
-        <button
-          onClick={() => signOut({ callbackUrl: '/' })}
-          className={cn(
-            'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors',
-            collapsed && 'justify-center px-2'
-          )}
-          title={collapsed ? 'Sign Out' : undefined}
-        >
-          <LogOut className="w-5 h-5 shrink-0" />
-          {!collapsed && <span className="text-sm font-medium">Sign Out</span>}
-        </button>
+      {/* Footer */}
+      <div
+        className="mt-auto pt-3.5 flex flex-col gap-0.5"
+        style={{ borderTop: '1px solid var(--ct-line)' }}
+      >
         <Link
           href="/coach"
-          className={cn(
-            'flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors',
-            collapsed && 'justify-center px-2'
-          )}
-          title={collapsed ? 'Running Coach' : undefined}
+          className="flex items-center gap-[11px] px-3 py-[9px] rounded-[10px] text-[13px] font-medium transition-colors hover:opacity-80"
+          style={{ color: 'var(--ct-ink-3)' }}
         >
-          <Activity className="w-5 h-5 shrink-0" />
-          {!collapsed && <span className="text-sm font-medium">Running Coach</span>}
+          <Activity className="w-4 h-4 shrink-0" />
+          Switch to RunCoach
         </Link>
         <Link
           href="/"
-          className={cn(
-            'flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors',
-            collapsed && 'justify-center px-2'
-          )}
-          title={collapsed ? 'Back to Portfolio' : undefined}
+          className="flex items-center gap-[11px] px-3 py-[9px] rounded-[10px] text-[13px] font-medium transition-colors hover:opacity-80"
+          style={{ color: 'var(--ct-ink-3)' }}
         >
-          <ChevronLeft className="w-5 h-5 shrink-0" />
-          {!collapsed && <span className="text-sm font-medium">Back to Portfolio</span>}
+          <ChevronLeft className="w-4 h-4 shrink-0" />
+          Back to Portfolio
         </Link>
+        <button
+          onClick={() => signOut({ callbackUrl: '/' })}
+          className="w-full flex items-center gap-[11px] px-3 py-[9px] rounded-[10px] text-[13px] font-medium transition-colors hover:opacity-80"
+          style={{ color: 'var(--ct-ink-3)' }}
+        >
+          <LogOut className="w-4 h-4 shrink-0" />
+          Sign Out
+        </button>
       </div>
     </aside>
   );

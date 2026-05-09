@@ -5,40 +5,13 @@ import type { LucideIcon } from 'lucide-react';
 
 interface KpiCardProps {
   title: string;
-  value: string | number;
+  value: React.ReactNode;
   subtitle?: string;
   icon: LucideIcon;
   trend?: { value: number; label: string };
   color?: 'orange' | 'blue' | 'green' | 'purple' | 'red';
+  progress?: number; // 0-100
 }
-
-const colorMap = {
-  orange: {
-    bg: 'bg-orange-500/10',
-    text: 'text-orange-600 dark:text-orange-400',
-    icon: 'text-orange-500',
-  },
-  blue: {
-    bg: 'bg-blue-500/10',
-    text: 'text-blue-600 dark:text-blue-400',
-    icon: 'text-blue-500',
-  },
-  green: {
-    bg: 'bg-green-500/10',
-    text: 'text-green-600 dark:text-green-400',
-    icon: 'text-green-500',
-  },
-  purple: {
-    bg: 'bg-purple-500/10',
-    text: 'text-purple-600 dark:text-purple-400',
-    icon: 'text-purple-500',
-  },
-  red: {
-    bg: 'bg-red-500/10',
-    text: 'text-red-600 dark:text-red-400',
-    icon: 'text-red-500',
-  },
-};
 
 export function KpiCard({
   title,
@@ -46,36 +19,55 @@ export function KpiCard({
   subtitle,
   icon: Icon,
   trend,
-  color = 'orange',
+  progress,
 }: KpiCardProps) {
-  const c = colorMap[color];
-
   return (
-    <div className="bg-card border border-border rounded-xl p-4 hover:shadow-md transition-shadow duration-200">
-      <div className="flex items-start justify-between">
-        <div className="space-y-1">
-          <p className="text-sm text-muted-foreground">{title}</p>
-          <p className="text-2xl font-bold tracking-tight">{value}</p>
-          {subtitle && (
-            <p className="text-xs text-muted-foreground">{subtitle}</p>
-          )}
-        </div>
-        <div className={cn('p-2 rounded-lg', c.bg)}>
-          <Icon className={cn('w-5 h-5', c.icon)} />
-        </div>
+    <div className="ct-stat relative overflow-hidden">
+      <div className="flex items-center justify-between mb-3.5">
+        <span className="ct-kicker">{title}</span>
+        <span
+          className="w-[22px] h-[22px] rounded-[7px] grid place-items-center"
+          style={{ background: 'var(--ct-ember-soft)', color: 'var(--ct-ember)' }}
+        >
+          <Icon className="w-3 h-3" />
+        </span>
       </div>
-      {trend && (
-        <div className="mt-2 flex items-center gap-1">
-          <span
-            className={cn(
-              'text-xs font-medium',
-              trend.value >= 0 ? 'text-green-600' : 'text-red-600'
-            )}
+      <div
+        className="ct-mono text-[32px] font-bold leading-none"
+        style={{ letterSpacing: '-0.025em', color: 'var(--ct-ink)' }}
+      >
+        {value}
+      </div>
+      {subtitle && (
+        <div
+          className="mt-2.5 text-xs flex items-center gap-2"
+          style={{ color: 'var(--ct-ink-3)' }}
+        >
+          {trend && (
+            <span
+              className="font-semibold"
+              style={{ color: trend.value <= 0 ? 'var(--ct-good)' : 'var(--ct-bad)' }}
+            >
+              {trend.value >= 0 ? '+' : ''}{trend.value}
+            </span>
+          )}
+          {subtitle}
+        </div>
+      )}
+      {typeof progress === 'number' && (
+        <div className="mt-3 flex items-center gap-3">
+          <div
+            className="flex-1 h-[5px] rounded-full overflow-hidden"
+            style={{ background: 'rgba(14,15,12,0.06)' }}
           >
-            {trend.value >= 0 ? '+' : ''}
-            {trend.value}
-          </span>
-          <span className="text-xs text-muted-foreground">{trend.label}</span>
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{
+                width: `${Math.min(progress, 100)}%`,
+                background: 'var(--ct-ember)',
+              }}
+            />
+          </div>
         </div>
       )}
     </div>

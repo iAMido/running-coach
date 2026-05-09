@@ -19,11 +19,11 @@ import type { CaltrackMeal, CaltrackMealItem } from '@/lib/db/caltrack-types';
 
 type MealFilter = 'all' | 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
-const mealTypeColors: Record<string, string> = {
-  breakfast: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
-  lunch: 'bg-blue-500/10 text-blue-700 dark:text-blue-400',
-  dinner: 'bg-purple-500/10 text-purple-700 dark:text-purple-400',
-  snack: 'bg-green-500/10 text-green-700 dark:text-green-400',
+const mealTypeBadge: Record<string, { bg: string; color: string }> = {
+  breakfast: { bg: 'rgba(245,158,11,0.1)', color: '#b45309' },
+  lunch: { bg: 'rgba(59,130,246,0.1)', color: '#1d4ed8' },
+  dinner: { bg: 'rgba(168,85,247,0.1)', color: '#7c3aed' },
+  snack: { bg: 'rgba(34,197,94,0.1)', color: '#15803d' },
 };
 
 const CALTRACK_STORAGE_URL =
@@ -163,34 +163,38 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-card border border-border rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <h2 className="text-lg font-semibold">Add Meal</h2>
-          <button onClick={onClose} className="p-1 hover:bg-muted rounded-lg">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(14,15,12,0.5)' }}>
+      <div
+        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl"
+        style={{ background: 'var(--ct-surface)', border: '1px solid var(--ct-line)', boxShadow: 'var(--ct-shadow-2)' }}
+      >
+        <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--ct-line)' }}>
+          <h2 className="text-lg font-semibold" style={{ color: 'var(--ct-ink)' }}>Add Meal</h2>
+          <button onClick={onClose} className="p-1 rounded-lg transition-colors" style={{ color: 'var(--ct-ink-3)' }}>
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-4 space-y-4">
+        <div className="p-5 space-y-4">
           {/* Meal type */}
           <div>
-            <label className="text-sm font-medium text-muted-foreground mb-1.5 block">
-              Meal Type
-            </label>
-            <div className="flex gap-2 flex-wrap">
+            <label className="ct-kicker block mb-2">MEAL TYPE</label>
+            <div
+              className="inline-flex gap-[1px] rounded-full p-[3px]"
+              style={{ background: 'var(--ct-surface-2)', border: '1px solid var(--ct-line)' }}
+            >
               {['breakfast', 'lunch', 'dinner', 'snack'].map((type) => (
                 <button
                   key={type}
                   onClick={() => setMealType(type)}
-                  className={cn(
-                    'px-3 py-1.5 text-sm font-medium rounded-full border transition-all',
-                    mealType === type
-                      ? 'bg-orange-500/10 text-orange-600 border-orange-500/30'
-                      : 'bg-background text-muted-foreground border-border hover:bg-muted'
-                  )}
+                  className="ct-mono px-[13px] py-[7px] rounded-full text-[11px] font-medium transition-colors"
+                  style={{
+                    background: mealType === type ? 'var(--ct-ink)' : 'transparent',
+                    color: mealType === type ? '#fff' : 'var(--ct-ink-3)',
+                    letterSpacing: '0.06em',
+                  }}
                 >
-                  {type.charAt(0).toUpperCase() + type.slice(1)}
+                  {type.toUpperCase()}
                 </button>
               ))}
             </div>
@@ -198,19 +202,22 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
 
           {/* Free-text input */}
           <div>
-            <label className="text-sm font-medium text-muted-foreground mb-1.5 block">
-              What did you eat? (Hebrew or English)
-            </label>
+            <label className="ct-kicker block mb-2">WHAT DID YOU EAT?</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder={"פיתה שווארמה פרגית\nסושי סלמון רול\nchicken breast with rice and salad"}
               rows={3}
-              className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 resize-none"
+              className="w-full px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 resize-none"
+              style={{
+                background: 'var(--ct-surface-2)',
+                border: '1px solid var(--ct-line)',
+                color: 'var(--ct-ink)',
+              }}
               dir="auto"
             />
-            <p className="text-xs text-muted-foreground mt-1">
-              Describe any dish — AI will break it down into ingredients
+            <p className="text-xs mt-1.5" style={{ color: 'var(--ct-ink-4)' }}>
+              Hebrew or English — AI will identify ingredients
             </p>
           </div>
 
@@ -218,12 +225,13 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
             <button
               onClick={handleAnalyze}
               disabled={!description.trim() || analyzing}
-              className="w-full py-2.5 rounded-xl bg-orange-500 text-white font-medium hover:bg-orange-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              className="w-full py-3 rounded-full text-white font-semibold disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              style={{ background: 'var(--ct-ember)' }}
             >
               {analyzing ? (
                 <>
                   <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Analyzing...
+                  Analyzing…
                 </>
               ) : (
                 <>
@@ -239,47 +247,42 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-semibold">{analysis.dish_name_he}</p>
-                  <p className="text-sm text-muted-foreground">{analysis.dish_name_en}</p>
+                  <p className="font-semibold" style={{ color: 'var(--ct-ink)' }}>{analysis.dish_name_he}</p>
+                  <p className="text-sm" style={{ color: 'var(--ct-ink-3)' }}>{analysis.dish_name_en}</p>
                 </div>
                 <button
                   onClick={() => setAnalysis(null)}
-                  className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-lg hover:bg-muted"
+                  className="text-xs px-2 py-1 rounded-lg transition-colors"
+                  style={{ color: 'var(--ct-ink-3)' }}
                 >
                   Re-analyze
                 </button>
               </div>
 
-              {/* Ingredients list — editable */}
               <div className="space-y-2">
                 {analysis.ingredients.map((ing, i) => (
                   <div
                     key={i}
-                    className="bg-muted/40 rounded-xl p-3 space-y-2"
+                    className="rounded-xl p-3 space-y-2"
+                    style={{ background: 'var(--ct-surface-2)', border: '1px solid var(--ct-line)' }}
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <span className="text-sm font-medium">{ing.name_he || ing.name_en}</span>
+                        <span className="text-sm font-medium" style={{ color: 'var(--ct-ink)' }}>{ing.name_he || ing.name_en}</span>
                         {ing.name_he && (
-                          <span className="text-xs text-muted-foreground ml-1.5">
-                            ({ing.name_en})
-                          </span>
+                          <span className="text-xs ml-1.5" style={{ color: 'var(--ct-ink-3)' }}>({ing.name_en})</span>
                         )}
                         <span
-                          className={cn(
-                            'text-[10px] ml-1.5 px-1.5 py-0.5 rounded-full',
-                            ing.source === 'usda'
-                              ? 'bg-green-500/10 text-green-600'
-                              : 'bg-blue-500/10 text-blue-600'
-                          )}
+                          className="ct-mono text-[10px] ml-1.5 px-1.5 py-0.5 rounded-full"
+                          style={{
+                            background: ing.source === 'usda' ? 'rgba(34,197,94,0.1)' : 'rgba(59,130,246,0.1)',
+                            color: ing.source === 'usda' ? 'var(--ct-good)' : '#3b82f6',
+                          }}
                         >
                           {ing.source === 'usda' ? 'USDA' : 'AI'}
                         </span>
                       </div>
-                      <button
-                        onClick={() => removeIngredient(i)}
-                        className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-red-500"
-                      >
+                      <button onClick={() => removeIngredient(i)} className="p-1 rounded" style={{ color: 'var(--ct-ink-4)' }}>
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -287,61 +290,35 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
                       <input
                         type="number"
                         value={ing.estimated_grams}
-                        onChange={(e) =>
-                          updateIngredientGrams(i, Math.max(1, Number(e.target.value)))
-                        }
-                        className="w-20 px-2 py-1 text-sm rounded-lg border border-border bg-background text-center"
+                        onChange={(e) => updateIngredientGrams(i, Math.max(1, Number(e.target.value)))}
+                        className="w-20 px-2 py-1 text-sm rounded-lg ct-mono text-center"
+                        style={{ border: '1px solid var(--ct-line)', background: 'var(--ct-surface)', color: 'var(--ct-ink)' }}
                         min="1"
                       />
-                      <span className="text-xs text-muted-foreground">g</span>
-                      <span className="text-xs text-muted-foreground ml-auto">
-                        {ing.calculated.calories} kcal
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        P:{ing.calculated.protein}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        C:{ing.calculated.carbs}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        F:{ing.calculated.fat}
-                      </span>
+                      <span className="text-xs ct-mono" style={{ color: 'var(--ct-ink-4)' }}>g</span>
+                      <span className="text-xs ct-mono ml-auto" style={{ color: 'var(--ct-ink-3)' }}>{ing.calculated.calories} kcal</span>
+                      <span className="text-xs ct-mono" style={{ color: 'var(--ct-ink-4)' }}>P:{ing.calculated.protein}</span>
+                      <span className="text-xs ct-mono" style={{ color: 'var(--ct-ink-4)' }}>C:{ing.calculated.carbs}</span>
+                      <span className="text-xs ct-mono" style={{ color: 'var(--ct-ink-4)' }}>F:{ing.calculated.fat}</span>
                     </div>
                   </div>
                 ))}
               </div>
 
               {/* Totals */}
-              <div className="bg-orange-500/5 rounded-xl p-3 border border-orange-500/10">
-                <p className="text-sm font-semibold mb-2">Total</p>
+              <div className="rounded-xl p-3" style={{ background: 'var(--ct-ember-soft)', border: '1px solid rgba(0,0,0,0.04)' }}>
+                <p className="text-sm font-semibold mb-2" style={{ color: 'var(--ct-ink)' }}>Total</p>
                 <div className="grid grid-cols-5 gap-2 text-center text-xs">
-                  <div>
-                    <p className="text-muted-foreground">Cal</p>
-                    <p className="font-bold text-orange-600 text-base">
-                      {analysis.totals.calories}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Protein</p>
-                    <p className="font-bold text-blue-600">{analysis.totals.protein}g</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Carbs</p>
-                    <p className="font-bold text-green-600">{analysis.totals.carbs}g</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Fat</p>
-                    <p className="font-bold text-purple-600">{analysis.totals.fat}g</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Fiber</p>
-                    <p className="font-bold">{analysis.totals.fiber}g</p>
-                  </div>
+                  <div><p style={{ color: 'var(--ct-ink-3)' }}>Cal</p><p className="font-bold text-base" style={{ color: 'var(--ct-ember)' }}>{analysis.totals.calories}</p></div>
+                  <div><p style={{ color: 'var(--ct-ink-3)' }}>Protein</p><p className="font-bold" style={{ color: '#3b82f6' }}>{analysis.totals.protein}g</p></div>
+                  <div><p style={{ color: 'var(--ct-ink-3)' }}>Carbs</p><p className="font-bold" style={{ color: 'var(--ct-good)' }}>{analysis.totals.carbs}g</p></div>
+                  <div><p style={{ color: 'var(--ct-ink-3)' }}>Fat</p><p className="font-bold" style={{ color: '#a855f7' }}>{analysis.totals.fat}g</p></div>
+                  <div><p style={{ color: 'var(--ct-ink-3)' }}>Fiber</p><p className="font-bold" style={{ color: 'var(--ct-ink)' }}>{analysis.totals.fiber}g</p></div>
                 </div>
               </div>
 
               {error && (
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-sm">
+                <div className="p-3 rounded-xl text-sm" style={{ background: 'rgba(239,83,80,0.1)', color: 'var(--ct-bad)', border: '1px solid rgba(239,83,80,0.2)' }}>
                   {error}
                 </div>
               )}
@@ -349,9 +326,10 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
               <button
                 onClick={handleConfirm}
                 disabled={submitting || !analysis.ingredients.length}
-                className="w-full py-2.5 rounded-xl bg-orange-500 text-white font-medium hover:bg-orange-600 disabled:opacity-50 transition-colors"
+                className="w-full py-3 rounded-full text-white font-semibold disabled:opacity-50 transition-colors"
+                style={{ background: 'var(--ct-ember)' }}
               >
-                {submitting ? 'Saving...' : `Confirm & Save (${analysis.totals.calories} kcal)`}
+                {submitting ? 'Saving…' : `Confirm & Save (${analysis.totals.calories} kcal)`}
               </button>
             </div>
           )}
@@ -365,12 +343,14 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
 function PhotoLightbox({ url, onClose }: { url: string; onClose: () => void }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       onClick={onClose}
+      style={{ background: 'rgba(14,15,12,0.85)' }}
     >
       <button
         onClick={onClose}
-        className="absolute top-4 right-4 p-2 bg-black/50 rounded-full text-white hover:bg-black/70"
+        className="absolute top-4 right-4 p-2 rounded-full text-white"
+        style={{ background: 'rgba(0,0,0,0.5)' }}
       >
         <X className="w-6 h-6" />
       </button>
@@ -610,34 +590,38 @@ function EditMealModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-card border border-border rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <h2 className="text-lg font-semibold">Edit Meal</h2>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(14,15,12,0.5)' }}>
+      <div
+        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl"
+        style={{ background: 'var(--ct-surface)', border: '1px solid var(--ct-line)', boxShadow: 'var(--ct-shadow-2)' }}
+      >
+        <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--ct-line)' }}>
+          <h2 className="text-lg font-semibold" style={{ color: 'var(--ct-ink)' }}>Edit Meal</h2>
+          <button onClick={onClose} className="p-1 rounded-lg" style={{ color: 'var(--ct-ink-3)' }}>
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-4 space-y-4">
+        <div className="p-5 space-y-4">
           {/* Meal type selector */}
           <div>
-            <label className="text-sm font-medium text-muted-foreground mb-1.5 block">
-              Meal Type
-            </label>
-            <div className="flex gap-2">
+            <label className="ct-kicker block mb-2">MEAL TYPE</label>
+            <div
+              className="inline-flex gap-[1px] rounded-full p-[3px]"
+              style={{ background: 'var(--ct-surface-2)', border: '1px solid var(--ct-line)' }}
+            >
               {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((type) => (
                 <button
                   key={type}
                   onClick={() => setMealType(type)}
-                  className={cn(
-                    'px-3 py-1.5 text-sm font-medium rounded-full border transition-all',
-                    mealType === type
-                      ? 'bg-orange-500/10 text-orange-600 border-orange-500/30'
-                      : 'bg-background text-muted-foreground border-border hover:bg-muted'
-                  )}
+                  className="ct-mono px-[13px] py-[7px] rounded-full text-[11px] font-medium transition-colors"
+                  style={{
+                    background: mealType === type ? 'var(--ct-ink)' : 'transparent',
+                    color: mealType === type ? '#fff' : 'var(--ct-ink-3)',
+                    letterSpacing: '0.06em',
+                  }}
                 >
-                  {type.charAt(0).toUpperCase() + type.slice(1)}
+                  {type.toUpperCase()}
                 </button>
               ))}
             </div>
@@ -645,47 +629,46 @@ function EditMealModal({
 
           {/* Ingredients */}
           <div>
-            <label className="text-sm font-medium text-muted-foreground mb-1.5 block">
-              Ingredients
-            </label>
+            <label className="ct-kicker block mb-2">INGREDIENTS</label>
             <div className="space-y-2">
               {ingredients.map((ing, idx) => (
                 <div
                   key={idx}
-                  className={cn(
-                    'flex items-center gap-2 p-2.5 rounded-lg border bg-background',
-                    ing.calories === 0
-                      ? 'border-red-500/40 bg-red-500/5'
-                      : 'border-border'
-                  )}
+                  className="flex items-center gap-2 p-3 rounded-xl"
+                  style={{
+                    background: ing.calories === 0 ? 'rgba(239,83,80,0.05)' : 'var(--ct-surface-2)',
+                    border: `1px solid ${ing.calories === 0 ? 'rgba(239,83,80,0.3)' : 'var(--ct-line)'}`,
+                  }}
                 >
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{ing.name_en}</p>
+                    <p className="text-sm font-medium truncate" style={{ color: 'var(--ct-ink)' }}>{ing.name_en}</p>
                     <div className="flex items-center gap-2 mt-1">
                       <input
                         type="number"
                         value={ing.grams}
                         onChange={(e) => updateIngredient(idx, 'grams', e.target.value)}
-                        className="w-16 px-2 py-0.5 text-xs rounded border border-border bg-muted/50 text-center"
+                        className="w-16 px-2 py-0.5 text-xs rounded-lg ct-mono text-center"
+                        style={{ border: '1px solid var(--ct-line)', background: 'var(--ct-surface)', color: 'var(--ct-ink)' }}
                       />
-                      <span className="text-xs text-muted-foreground">g</span>
+                      <span className="text-xs ct-mono" style={{ color: 'var(--ct-ink-4)' }}>g</span>
                       <input
                         type="number"
                         value={ing.calories}
                         onChange={(e) => updateIngredient(idx, 'calories', e.target.value)}
-                        className={cn(
-                          'w-16 px-2 py-0.5 text-xs rounded border text-center ml-auto',
-                          ing.calories === 0
-                            ? 'border-red-500/50 bg-red-500/10 text-red-600'
-                            : 'border-border bg-muted/50'
-                        )}
+                        className="w-16 px-2 py-0.5 text-xs rounded-lg ct-mono text-center ml-auto"
+                        style={{
+                          border: `1px solid ${ing.calories === 0 ? 'rgba(239,83,80,0.5)' : 'var(--ct-line)'}`,
+                          background: ing.calories === 0 ? 'rgba(239,83,80,0.1)' : 'var(--ct-surface)',
+                          color: ing.calories === 0 ? 'var(--ct-bad)' : 'var(--ct-ink)',
+                        }}
                       />
-                      <span className="text-xs text-muted-foreground">kcal</span>
+                      <span className="text-xs ct-mono" style={{ color: 'var(--ct-ink-4)' }}>kcal</span>
                     </div>
                   </div>
                   <button
                     onClick={() => removeIngredient(idx)}
-                    className="p-1 rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-500 shrink-0"
+                    className="p-1 rounded shrink-0"
+                    style={{ color: 'var(--ct-ink-4)' }}
                   >
                     <Minus className="w-4 h-4" />
                   </button>
@@ -693,89 +676,77 @@ function EditMealModal({
               ))}
             </div>
 
-            {/* Add new ingredient */}
             <div className="flex gap-2 mt-2">
               <input
                 type="text"
-                placeholder="Add ingredient (e.g. חומוס, rice)..."
+                placeholder="Add ingredient (e.g. חומוס, rice)…"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addIngredient()}
-                className="flex-1 px-3 py-2 text-sm rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                className="flex-1 px-3 py-2 text-sm rounded-xl focus:outline-none focus:ring-2"
+                style={{ border: '1px solid var(--ct-line)', background: 'var(--ct-surface-2)', color: 'var(--ct-ink)' }}
               />
               <button
                 onClick={addIngredient}
                 disabled={analyzing || !newName.trim()}
-                className="px-3 py-2 text-sm font-medium rounded-lg bg-muted hover:bg-muted/80 disabled:opacity-50"
+                className="px-3 py-2 text-sm font-medium rounded-xl disabled:opacity-50"
+                style={{ background: 'var(--ct-surface-2)', color: 'var(--ct-ink-3)', border: '1px solid var(--ct-line)' }}
               >
-                {analyzing ? '...' : '+ Add'}
+                {analyzing ? '…' : '+ Add'}
               </button>
             </div>
           </div>
 
           {/* Totals */}
-          <div className="grid grid-cols-5 gap-2 text-center text-xs p-3 rounded-lg bg-muted/50">
-            <div>
-              <p className="text-muted-foreground">Calories</p>
-              <p className="font-bold text-orange-600">{Math.round(totals.calories)}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Protein</p>
-              <p className="font-bold text-blue-600">{Math.round(totals.protein)}g</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Carbs</p>
-              <p className="font-bold text-green-600">{Math.round(totals.carbs)}g</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Fat</p>
-              <p className="font-bold text-purple-600">{Math.round(totals.fat)}g</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Fiber</p>
-              <p className="font-bold">{Math.round(totals.fiber)}g</p>
-            </div>
+          <div className="grid grid-cols-5 gap-2 text-center text-xs p-3 rounded-xl" style={{ background: 'var(--ct-surface-2)' }}>
+            <div><p style={{ color: 'var(--ct-ink-4)' }}>Calories</p><p className="font-bold" style={{ color: 'var(--ct-ember)' }}>{Math.round(totals.calories)}</p></div>
+            <div><p style={{ color: 'var(--ct-ink-4)' }}>Protein</p><p className="font-bold" style={{ color: '#3b82f6' }}>{Math.round(totals.protein)}g</p></div>
+            <div><p style={{ color: 'var(--ct-ink-4)' }}>Carbs</p><p className="font-bold" style={{ color: 'var(--ct-good)' }}>{Math.round(totals.carbs)}g</p></div>
+            <div><p style={{ color: 'var(--ct-ink-4)' }}>Fat</p><p className="font-bold" style={{ color: '#a855f7' }}>{Math.round(totals.fat)}g</p></div>
+            <div><p style={{ color: 'var(--ct-ink-4)' }}>Fiber</p><p className="font-bold" style={{ color: 'var(--ct-ink)' }}>{Math.round(totals.fiber)}g</p></div>
           </div>
 
           {error && (
-            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-sm">
+            <div className="p-3 rounded-xl text-sm" style={{ background: 'rgba(239,83,80,0.1)', color: 'var(--ct-bad)', border: '1px solid rgba(239,83,80,0.2)' }}>
               {error}
             </div>
           )}
 
-          {/* Actions */}
           <div className="flex gap-2">
             <button
               onClick={handleRecalculate}
               disabled={recalculating || !ingredients.length}
-              className="px-4 py-2.5 rounded-xl border border-orange-500/30 text-orange-600 font-medium hover:bg-orange-500/10 disabled:opacity-50 transition-colors"
+              className="px-4 py-2.5 rounded-full font-medium disabled:opacity-50 transition-colors"
+              style={{ border: '1px solid var(--ct-line)', color: 'var(--ct-ember)' }}
             >
-              {recalculating ? 'Calculating...' : 'Recalculate'}
+              {recalculating ? 'Calculating…' : 'Recalculate'}
             </button>
             <button
               onClick={handleSave}
               disabled={saving || !ingredients.length}
-              className="flex-1 py-2.5 rounded-xl bg-orange-500 text-white font-medium hover:bg-orange-600 disabled:opacity-50 transition-colors"
+              className="flex-1 py-2.5 rounded-full text-white font-semibold disabled:opacity-50 transition-colors"
+              style={{ background: 'var(--ct-ember)' }}
             >
-              {saving ? 'Saving...' : `Save (${Math.round(totals.calories)} kcal)`}
+              {saving ? 'Saving…' : `Save (${Math.round(totals.calories)} kcal)`}
             </button>
           </div>
 
-          {/* Delete */}
-          <div className="pt-2 border-t border-border">
+          <div className="pt-3" style={{ borderTop: '1px solid var(--ct-line)' }}>
             {confirmDelete ? (
               <div className="flex items-center gap-2">
-                <span className="text-sm text-red-500">Delete this meal?</span>
+                <span className="text-sm" style={{ color: 'var(--ct-bad)' }}>Delete this meal?</span>
                 <button
                   onClick={handleDelete}
                   disabled={deleting}
-                  className="px-3 py-1.5 text-sm font-medium rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
+                  className="px-3 py-1.5 text-sm font-medium rounded-full text-white disabled:opacity-50"
+                  style={{ background: 'var(--ct-bad)' }}
                 >
-                  {deleting ? 'Deleting...' : 'Yes, delete'}
+                  {deleting ? 'Deleting…' : 'Yes, delete'}
                 </button>
                 <button
                   onClick={() => setConfirmDelete(false)}
-                  className="px-3 py-1.5 text-sm font-medium rounded-lg border border-border hover:bg-muted"
+                  className="px-3 py-1.5 text-sm font-medium rounded-full"
+                  style={{ border: '1px solid var(--ct-line)', color: 'var(--ct-ink-3)' }}
                 >
                   Cancel
                 </button>
@@ -783,7 +754,8 @@ function EditMealModal({
             ) : (
               <button
                 onClick={() => setConfirmDelete(true)}
-                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-red-500 transition-colors"
+                className="flex items-center gap-1.5 text-sm transition-colors"
+                style={{ color: 'var(--ct-ink-3)' }}
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 Delete meal
@@ -873,15 +845,9 @@ export default function MealsPage() {
     return `${CALTRACK_STORAGE_URL}/storage/v1/object/authenticated/meals/${meal.photo_storage_path}`;
   };
 
-  const formatDateTime = (iso: string) => {
+  const formatTime = (iso: string) => {
     const d = new Date(iso);
-    return d.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
   const groupByDate = (meals: CaltrackMeal[]) => {
@@ -896,15 +862,15 @@ export default function MealsPage() {
 
   if (loading) {
     return (
-      <div className="space-y-4 max-w-4xl">
-        <Skeleton className="h-10 w-48" />
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-48" style={{ background: 'rgba(14,15,12,0.06)' }} />
         <div className="flex gap-2">
           {[...Array(5)].map((_, i) => (
-            <Skeleton key={i} className="h-8 w-20" />
+            <Skeleton key={i} className="h-8 w-20" style={{ background: 'rgba(14,15,12,0.06)' }} />
           ))}
         </div>
         {[...Array(5)].map((_, i) => (
-          <Skeleton key={i} className="h-20" />
+          <Skeleton key={i} className="h-20" style={{ background: 'rgba(14,15,12,0.06)' }} />
         ))}
       </div>
     );
@@ -913,21 +879,35 @@ export default function MealsPage() {
   const grouped = groupByDate(meals);
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Meals</h1>
-          <p className="text-muted-foreground text-sm">
-            {total} meals
+          <div className="ct-kicker mb-2">
+            <span
+              className="inline-block w-[6px] h-[6px] rounded-full mr-2"
+              style={{ background: 'var(--ct-ember)' }}
+            />
+            MEAL JOURNAL
+          </div>
+          <h1
+            className="text-[36px] md:text-[44px] font-bold leading-[1.05]"
+            style={{ letterSpacing: '-0.03em', color: 'var(--ct-ink)' }}
+          >
+            Meals <span className="font-normal italic" style={{ fontFamily: 'var(--font-serif, Georgia, serif)', color: 'var(--ct-ink-2)' }}>logged.</span>
+          </h1>
+          <p className="mt-2 text-sm" style={{ color: 'var(--ct-ink-3)' }}>
+            {total} meals ·{' '}
             {customRange
-              ? ` from ${customRange.from} to ${customRange.to}`
-              : ` in the last ${days} days`}
+              ? `${customRange.from} to ${customRange.to}`
+              : `last ${days} days`}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-semibold text-white transition-colors"
+            style={{ background: 'var(--ct-ember)' }}
           >
             <Plus className="w-4 h-4" />
             Add Meal
@@ -935,48 +915,48 @@ export default function MealsPage() {
         </div>
       </div>
 
+      {/* Toolbar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        {/* Meal type filter */}
-        <div className="flex gap-2 flex-wrap">
-          {(['all', 'breakfast', 'lunch', 'dinner', 'snack'] as const).map(
-            (type) => (
-              <button
-                key={type}
-                onClick={() => setFilter(type)}
-                className={cn(
-                  'px-3 py-1.5 text-sm font-medium rounded-full border transition-all',
-                  filter === type
-                    ? 'bg-orange-500/10 text-orange-600 border-orange-500/30'
-                    : 'bg-background text-muted-foreground border-border hover:bg-muted'
-                )}
-              >
-                {type === 'all'
-                  ? 'All'
-                  : type.charAt(0).toUpperCase() + type.slice(1)}
-              </button>
-            )
-          )}
+        <div
+          className="inline-flex gap-[1px] rounded-full p-[3px]"
+          style={{
+            background: 'var(--ct-surface)',
+            border: '1px solid var(--ct-line)',
+            boxShadow: 'var(--ct-shadow-1)',
+          }}
+        >
+          {(['all', 'breakfast', 'lunch', 'dinner', 'snack'] as const).map((type) => (
+            <button
+              key={type}
+              onClick={() => setFilter(type)}
+              className="ct-mono px-[13px] py-[7px] rounded-full text-[11px] font-medium transition-colors"
+              style={{
+                background: filter === type ? 'var(--ct-ink)' : 'transparent',
+                color: filter === type ? '#fff' : 'var(--ct-ink-3)',
+                letterSpacing: '0.06em',
+              }}
+            >
+              {type.toUpperCase()}
+            </button>
+          ))}
         </div>
 
         <DateRangePicker
           selectedDays={days}
-          onChange={(d) => {
-            setDays(d);
-            setCustomRange(undefined);
-          }}
+          onChange={(d) => { setDays(d); setCustomRange(undefined); }}
           customRange={customRange}
-          onCustomRange={(from, to) => {
-            setCustomRange({ from, to });
-            setDays(-1);
-          }}
+          onCustomRange={(from, to) => { setCustomRange({ from, to }); setDays(-1); }}
         />
       </div>
 
-      {/* Meals list grouped by date */}
+      {/* Meals grouped by date */}
       {grouped.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-          <UtensilsCrossed className="w-10 h-10 mb-2 opacity-50" />
-          <p>No meals found for this period</p>
+        <div
+          className="flex flex-col items-center justify-center py-16 rounded-2xl"
+          style={{ border: '2px dashed var(--ct-line)', color: 'var(--ct-ink-3)' }}
+        >
+          <UtensilsCrossed className="w-10 h-10 mb-3" style={{ color: 'var(--ct-ink-4)' }} />
+          <p className="text-sm">No meals found for this period</p>
         </div>
       ) : (
         grouped.map(([date, dateMeals]) => {
@@ -984,31 +964,47 @@ export default function MealsPage() {
             (sum, m) => sum + (m.total_calories || 0),
             0
           );
+          const d = new Date(date + 'T00:00:00');
           return (
             <div key={date}>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-semibold text-muted-foreground">
-                  {new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
-                    weekday: 'long',
-                    month: 'long',
-                    day: 'numeric',
-                  })}
-                </h3>
-                <span className="text-sm font-medium">
-                  {dayTotal.toLocaleString()} kcal
+              {/* Day header */}
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-baseline gap-3">
+                  <span
+                    className="ct-mono text-[28px] font-bold"
+                    style={{ color: 'var(--ct-ink)', letterSpacing: '-0.02em' }}
+                  >
+                    {d.getDate()}
+                  </span>
+                  <div>
+                    <span className="text-sm font-medium" style={{ color: 'var(--ct-ink)' }}>
+                      {d.toLocaleDateString('en-US', { weekday: 'long' })}
+                    </span>
+                    <span className="text-sm ml-1" style={{ color: 'var(--ct-ink-3)' }}>
+                      {d.toLocaleDateString('en-US', { month: 'long' })}
+                    </span>
+                  </div>
+                </div>
+                <span
+                  className="ct-mono text-sm font-bold"
+                  style={{ color: 'var(--ct-ink)' }}
+                >
+                  {dayTotal.toLocaleString()}
+                  <span className="text-xs font-medium ml-0.5" style={{ color: 'var(--ct-ink-3)' }}>kcal</span>
                 </span>
               </div>
-              <div className="space-y-2">
+
+              {/* Meal cards */}
+              <div className="space-y-2 mb-6">
                 {dateMeals.map((meal) => {
                   const photoUrl = getPhotoUrl(meal);
+                  const badge = mealTypeBadge[meal.meal_type] || { bg: 'rgba(14,15,12,0.06)', color: 'var(--ct-ink-3)' };
                   return (
-                    <div
-                      key={meal.id}
-                      className="bg-card border border-border rounded-xl overflow-hidden"
-                    >
+                    <div key={meal.id} className="ct-card overflow-hidden p-0">
                       <button
                         onClick={() => toggleMeal(meal.id)}
-                        className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/50 transition-colors"
+                        className="w-full flex items-center justify-between p-4 text-left transition-colors"
+                        style={{ background: expandedMeal === meal.id ? 'var(--ct-surface-2)' : 'transparent' }}
                       >
                         <div className="flex items-center gap-3">
                           {photoUrl && (
@@ -1017,7 +1013,8 @@ export default function MealsPage() {
                                 e.stopPropagation();
                                 setLightboxUrl(photoUrl);
                               }}
-                              className="w-10 h-10 rounded-lg overflow-hidden border border-border shrink-0 hover:ring-2 hover:ring-orange-500/30 transition-all"
+                              className="w-10 h-10 rounded-[10px] overflow-hidden shrink-0 transition-all"
+                              style={{ border: '1px solid var(--ct-line)' }}
                             >
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
@@ -1033,20 +1030,17 @@ export default function MealsPage() {
                           <div>
                             <div className="flex items-center gap-2">
                               <span
-                                className={cn(
-                                  'text-xs font-medium px-2 py-0.5 rounded-full',
-                                  mealTypeColors[meal.meal_type] ||
-                                    'bg-muted text-muted-foreground'
-                                )}
+                                className="ct-mono text-[10px] font-medium uppercase px-2 py-0.5 rounded-full"
+                                style={{ background: badge.bg, color: badge.color, letterSpacing: '0.06em' }}
                               >
                                 {meal.meal_type}
                               </span>
-                              <span className="text-sm text-muted-foreground">
-                                {formatDateTime(meal.eaten_at)}
+                              <span className="ct-mono text-xs" style={{ color: 'var(--ct-ink-4)' }}>
+                                {formatTime(meal.eaten_at)}
                               </span>
                             </div>
                             {(meal.notes || (meal.item_names && meal.item_names.length > 0)) && (
-                              <p className="text-sm font-medium mt-0.5 truncate max-w-[250px] sm:max-w-[400px]">
+                              <p className="text-sm font-medium mt-1 truncate max-w-[250px] sm:max-w-[400px]" style={{ color: 'var(--ct-ink)' }}>
                                 {meal.notes || (
                                   <>
                                     {meal.item_names!.slice(0, 3).join(', ')}
@@ -1058,65 +1052,55 @@ export default function MealsPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className="font-semibold">
-                            {meal.total_calories} kcal
+                          <span className="ct-mono font-bold" style={{ color: 'var(--ct-ink)' }}>
+                            {meal.total_calories}
+                            <span className="text-xs font-medium ml-0.5" style={{ color: 'var(--ct-ink-3)' }}>kcal</span>
                           </span>
                           {expandedMeal === meal.id ? (
-                            <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                            <ChevronUp className="w-4 h-4" style={{ color: 'var(--ct-ink-4)' }} />
                           ) : (
-                            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                            <ChevronDown className="w-4 h-4" style={{ color: 'var(--ct-ink-4)' }} />
                           )}
                         </div>
                       </button>
 
                       {expandedMeal === meal.id && (
-                        <div className="border-t border-border px-4 py-3 bg-muted/30">
+                        <div className="px-4 py-4" style={{ borderTop: '1px solid var(--ct-line)', background: 'var(--ct-surface-2)' }}>
                           {meal.notes && (
-                            <p className="text-sm font-semibold mb-2">{meal.notes}</p>
+                            <p className="text-sm font-semibold mb-3" style={{ color: 'var(--ct-ink)' }}>{meal.notes}</p>
                           )}
-                          <div className="grid grid-cols-4 gap-2 mb-3 text-center text-xs">
-                            <div>
-                              <p className="text-muted-foreground">Protein</p>
-                              <p className="font-medium">
-                                {Math.round(meal.total_protein_g || 0)}g
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-muted-foreground">Carbs</p>
-                              <p className="font-medium">
-                                {Math.round(meal.total_carbs_g || 0)}g
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-muted-foreground">Fat</p>
-                              <p className="font-medium">
-                                {Math.round(meal.total_fat_g || 0)}g
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-muted-foreground">Fiber</p>
-                              <p className="font-medium">
-                                {Math.round(meal.total_fiber_g || 0)}g
-                              </p>
-                            </div>
+                          {/* Macro summary */}
+                          <div className="grid grid-cols-4 gap-3 mb-4">
+                            {[
+                              { label: 'Protein', value: Math.round(meal.total_protein_g || 0), unit: 'g', color: '#3b82f6' },
+                              { label: 'Carbs', value: Math.round(meal.total_carbs_g || 0), unit: 'g', color: 'var(--ct-good)' },
+                              { label: 'Fat', value: Math.round(meal.total_fat_g || 0), unit: 'g', color: '#a855f7' },
+                              { label: 'Fiber', value: Math.round(meal.total_fiber_g || 0), unit: 'g', color: 'var(--ct-ink-3)' },
+                            ].map((m) => (
+                              <div key={m.label} className="text-center">
+                                <div className="ct-mono text-[9px] font-medium uppercase" style={{ color: 'var(--ct-ink-4)', letterSpacing: '0.1em' }}>{m.label}</div>
+                                <div className="ct-mono text-sm font-bold" style={{ color: m.color }}>{m.value}{m.unit}</div>
+                              </div>
+                            ))}
                           </div>
 
                           {mealItems[meal.id] ? (
-                            <div className="space-y-1">
+                            <div>
                               {mealItems[meal.id].map((item) => (
                                 <div
                                   key={item.id}
-                                  className="flex items-center justify-between py-1.5 text-sm border-b border-border/50 last:border-0"
+                                  className="flex items-center justify-between py-2.5 text-sm"
+                                  style={{ borderBottom: '1px solid var(--ct-line)' }}
                                 >
                                   <div>
-                                    <span className="font-medium">
+                                    <span className="font-medium" style={{ color: 'var(--ct-ink)' }}>
                                       {item.ingredient_name}
                                     </span>
-                                    <span className="text-muted-foreground ml-2">
+                                    <span className="ct-mono text-xs ml-2" style={{ color: 'var(--ct-ink-4)' }}>
                                       {item.weight_grams}g
                                     </span>
                                   </div>
-                                  <span className="text-muted-foreground">
+                                  <span className="ct-mono text-xs font-medium" style={{ color: 'var(--ct-ink-3)' }}>
                                     {item.calories} kcal
                                   </span>
                                 </div>
@@ -1126,14 +1110,15 @@ export default function MealsPage() {
                                   e.stopPropagation();
                                   setEditingMeal(meal);
                                 }}
-                                className="flex items-center gap-1.5 mt-2 px-3 py-1.5 text-sm font-medium rounded-lg text-orange-600 hover:bg-orange-500/10 transition-colors"
+                                className="flex items-center gap-1.5 mt-3 px-3 py-1.5 text-sm font-medium rounded-full transition-colors"
+                                style={{ color: 'var(--ct-ember)', background: 'var(--ct-ember-soft)' }}
                               >
                                 <Pencil className="w-3.5 h-3.5" />
                                 Edit meal
                               </button>
                             </div>
                           ) : (
-                            <Skeleton className="h-16" />
+                            <Skeleton className="h-16" style={{ background: 'rgba(14,15,12,0.06)' }} />
                           )}
                         </div>
                       )}

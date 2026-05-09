@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 function LoadingSkeleton() {
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8">
+    <div className="min-h-screen p-4 md:p-8" style={{ background: '#F4F1EA' }}>
       <div className="space-y-4 max-w-6xl">
         <Skeleton className="h-10 w-48 md:h-12 md:w-64" />
         <Skeleton className="h-4 w-64 md:w-96" />
@@ -40,11 +40,13 @@ export default function CaltrackLayout({
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="caltrack-theme min-h-screen">
       <CaltrackSidebar />
       <CaltrackBottomNav />
-      <main className="md:ml-64 transition-all duration-300">
-        <div className="p-4 pb-24 md:p-6 md:pb-6 lg:p-8">{children}</div>
+      <main className="md:ml-[248px] transition-all duration-300">
+        <div className="p-4 pt-[72px] md:pt-0 md:px-14 md:py-9 md:pb-20 lg:px-14 max-w-[1480px]">
+          {children}
+        </div>
       </main>
     </div>
   );
