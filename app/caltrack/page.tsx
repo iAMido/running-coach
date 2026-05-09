@@ -7,10 +7,11 @@ import {
   Scale,
   Droplets,
   UtensilsCrossed,
+  Footprints,
 } from 'lucide-react';
 import {
-  AreaChart,
-  Area,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -44,12 +45,17 @@ interface OverviewData {
     fat: number;
     fiber: number;
     meals: number;
+    exercise: number;
+    exerciseRuns: number;
+    exerciseDistance: number;
   };
   stats: {
     avgCalories: number;
     daysWithData: number;
     currentWeight: number;
     targetWeight: number;
+    totalExerciseCalories: number;
+    totalExerciseRuns: number;
   };
   trend: {
     date: string;
@@ -173,9 +179,9 @@ export default function CaltrackOverview() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
         <KpiCard
-          title="Today"
+          title="Eaten Today"
           value={`${today.calories.toLocaleString()} kcal`}
           subtitle={`${remaining > 0 ? remaining.toLocaleString() : 0} remaining`}
           icon={Flame}
@@ -189,11 +195,22 @@ export default function CaltrackOverview() {
           color="blue"
         />
         <KpiCard
+          title="Exercise"
+          value={today.exercise > 0 ? `${today.exercise} kcal` : '0 kcal'}
+          subtitle={
+            today.exerciseRuns > 0
+              ? `${today.exerciseRuns} run${today.exerciseRuns > 1 ? 's' : ''} · ${today.exerciseDistance} km`
+              : 'No runs today'
+          }
+          icon={Footprints}
+          color="green"
+        />
+        <KpiCard
           title="Avg / Day"
           value={`${stats.avgCalories.toLocaleString()} kcal`}
           subtitle={`${stats.daysWithData} days tracked`}
           icon={UtensilsCrossed}
-          color="green"
+          color="orange"
         />
         <KpiCard
           title="Weight"
@@ -223,20 +240,10 @@ export default function CaltrackOverview() {
 
       {/* Calorie Trend Chart */}
       <div className="bg-card border border-border rounded-xl p-4 md:p-6">
-        <h2 className="text-lg font-semibold mb-4">Calorie Trend</h2>
+        <h2 className="text-lg font-semibold mb-4">Daily Calories</h2>
         {trend.length > 0 ? (
           <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={trend}>
-              <defs>
-                <linearGradient id="colorCalIn" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#f97316" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="colorCalOut" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                </linearGradient>
-              </defs>
+            <BarChart data={trend} barGap={2}>
               <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
               <XAxis
                 dataKey="date"
@@ -253,6 +260,9 @@ export default function CaltrackOverview() {
                   fontSize: '13px',
                 }}
                 labelFormatter={formatDate}
+                formatter={(value) => [
+                  `${Number(value || 0).toLocaleString()} kcal`,
+                ]}
               />
               <Legend />
               <ReferenceLine
@@ -261,23 +271,21 @@ export default function CaltrackOverview() {
                 strokeDasharray="5 5"
                 label={{ value: 'Target', fill: '#3b82f6', fontSize: 11 }}
               />
-              <Area
-                type="monotone"
+              <Bar
                 dataKey="calories_in"
                 name="Intake"
-                stroke="#f97316"
-                fill="url(#colorCalIn)"
-                strokeWidth={2}
+                fill="#f97316"
+                radius={[4, 4, 0, 0]}
+                maxBarSize={60}
               />
-              <Area
-                type="monotone"
+              <Bar
                 dataKey="calories_out"
                 name="Exercise"
-                stroke="#22c55e"
-                fill="url(#colorCalOut)"
-                strokeWidth={2}
+                fill="#22c55e"
+                radius={[4, 4, 0, 0]}
+                maxBarSize={60}
               />
-            </AreaChart>
+            </BarChart>
           </ResponsiveContainer>
         ) : (
           <div className="flex items-center justify-center h-48 text-muted-foreground">
