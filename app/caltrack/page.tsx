@@ -22,8 +22,10 @@ import {
   Cell,
   LineChart,
   Line,
+  ReferenceArea,
   ReferenceLine,
   Legend,
+  Scatter,
 } from 'recharts';
 import { KpiCard } from '@/components/caltrack/kpi-card';
 import { DateRangePicker } from '@/components/caltrack/date-range-picker';
@@ -247,73 +249,174 @@ export default function CaltrackOverview() {
       {/* Calorie Trend Chart */}
       <div className="bg-card border border-border rounded-xl p-4 md:p-6">
         <h2 className="text-lg font-semibold mb-4">Daily Calories</h2>
-        {trend.length > 0 ? (
-          <ResponsiveContainer width="100%" height={300}>
-            <ComposedChart data={trend} barGap={4}>
-              <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-              <XAxis
-                dataKey="date"
-                tickFormatter={formatDate}
-                tick={{ fontSize: 12 }}
-                className="text-muted-foreground"
-              />
-              <YAxis tick={{ fontSize: 12 }} className="text-muted-foreground" />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                  fontSize: '13px',
-                }}
-                labelFormatter={formatDate}
-                formatter={(value, name) => {
-                  const v = Number(value || 0);
-                  if (name === 'Net') return [`${v.toLocaleString()} kcal`, 'Net (intake - exercise)'];
-                  return [`${v.toLocaleString()} kcal`];
-                }}
-              />
-              <Legend />
-              <ReferenceLine
-                y={today.target}
-                stroke="#3b82f6"
-                strokeDasharray="5 5"
-                label={{ value: 'Target', fill: '#3b82f6', fontSize: 11 }}
-              />
-              <Bar
-                dataKey="calories_in"
-                name="Eaten"
-                fill="#f97316"
-                radius={[4, 4, 0, 0]}
-                maxBarSize={50}
-                opacity={0.8}
-              />
-              <Bar
-                dataKey="calories_out"
-                name="Exercise"
-                fill="#22c55e"
-                radius={[4, 4, 0, 0]}
-                maxBarSize={50}
-                opacity={0.8}
-              />
-              <Line
-                type="monotone"
-                dataKey="net"
-                name="Net"
-                stroke="#ef4444"
-                strokeWidth={2}
-                dot={{ r: 4, fill: '#ef4444' }}
-                activeDot={{ r: 6 }}
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
-        ) : (
+        {trend.length > 0 ? (() => {
+          // Transform data: stacked bar = net (bottom) + exercise (top, subtracted visually)
+          // Net sits on baseline, exercise stacks on top to show total eaten
+          const chartData = trend.map((d) => ({
+            date: d.date,
+            // The net portion (eaten minus exercise)
+            net: Math.max(d.calories_in - d.calories_out, 0),
+            // Exercise stacks on top of net to reconstruct total eaten
+            exercise: d.calories_out,
+            // For the net dot indicator
+            netValue: d.calories_in - d.calories_out,
+            // Raw values for tooltip
+            eaten: d.calories_in,
+            burned: d.calories_out,
+            target: d.target,
+          }));
+
+          const maxCal = Math.max(
+            ...chartData.map((d) => d.eaten),
+            today.target
+          );
+
+          return (
+            <ResponsiveContainer width="100%" height={300}>
+              <ComposedChart data={chartData} barSize={40}>
+                {/* Fix 4: Success zone — faint green below target */}
+                <ReferenceArea
+                  y1={0}
+                  y2={today.target}
+                  fill="#22c55e"
+                  fillOpacity={0.04}
+                />
+                <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={formatDate}
+                  tick={{ fontSize: 12 }}
+                  className="text-muted-foreground"
+                />
+                <YAxis
+                  tick={{ fontSize: 12 }}
+                  className="text-muted-foreground"
+                  domain={[0, Math.ceil(maxCal * 1.15 / 100) * 100]}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--card))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                  }}
+                  labelFormatter={formatDate}
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    const d = payload[0]?.payload;
+                    if (!d) return null;
+                    const isUnder = d.netValue <= d.target;
+                    return (
+                      <div
+                        style={{
+                          backgroundColor: 'hsl(var(--card))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px',
+                          padding: '10px 14px',
+                          fontSize: '13px',
+                        }}
+                      >
+                        <p style={{ fontWeight: 600, marginBottom: 4 }}>
+                          {formatDate(label)}
+                        </p>
+                        <p>
+                          <span style={{ color: '#f97316' }}>Eaten:</span>{' '}
+                          {d.eaten.toLocaleString()} kcal
+                        </p>
+                        {d.burned > 0 && (
+                          <p>
+                            <span style={{ color: '#22c55e' }}>Exercise:</span>{' '}
+                            -{d.burned.toLocaleString()} kcal
+                          </p>
+                        )}
+                        <p style={{
+                          fontWeight: 600,
+                          color: isUnder ? '#6366f1' : '#ef4444',
+                          marginTop: 4,
+                        }}>
+                          Net: {d.netValue.toLocaleString()} kcal
+                          {isUnder ? ' ✓' : ' ▲'}
+                        </p>
+                        <p style={{ color: '#94a3b8', fontSize: '11px' }}>
+                          Target: {d.target.toLocaleString()} kcal
+                        </p>
+                      </div>
+                    );
+                  }}
+                />
+                <Legend
+                  formatter={(value) => {
+                    if (value === 'net') return 'Net calories';
+                    if (value === 'exercise') return 'Exercise (burned)';
+                    return value;
+                  }}
+                />
+
+                {/* Target line */}
+                <ReferenceLine
+                  y={today.target}
+                  stroke="#3b82f6"
+                  strokeDasharray="5 5"
+                  strokeWidth={2}
+                  label={{ value: 'Target', fill: '#3b82f6', fontSize: 11 }}
+                />
+
+                {/* Fix 1: Stacked bar — net on bottom (orange), exercise on top (green) */}
+                {/* The full height = net + exercise = total eaten */}
+                {/* Exercise visually "subtracts" from the top */}
+                <Bar
+                  dataKey="net"
+                  name="net"
+                  stackId="calories"
+                  fill="#f97316"
+                  radius={[0, 0, 0, 0]}
+                />
+                <Bar
+                  dataKey="exercise"
+                  name="exercise"
+                  stackId="calories"
+                  fill="#22c55e"
+                  opacity={0.7}
+                  radius={[4, 4, 0, 0]}
+                />
+
+                {/* Fix 2 & 3: Net dots (no connecting line) — color by target */}
+                <Scatter
+                  dataKey="netValue"
+                  name="Net"
+                  fill="#6366f1"
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  shape={(props: any) => {
+                    const isOver = props.payload.netValue > props.payload.target;
+                    return (
+                      <circle
+                        cx={props.cx}
+                        cy={props.cy}
+                        r={6}
+                        fill={isOver ? '#ef4444' : '#6366f1'}
+                        stroke="white"
+                        strokeWidth={2}
+                      />
+                    );
+                  }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          );
+        })() : (
           <div className="flex items-center justify-center h-48 text-muted-foreground">
             No data for this period
           </div>
         )}
-        <p className="text-xs text-muted-foreground mt-2">
-          Net = Eaten - Exercise. Stay below the target line to lose weight.
-        </p>
+        <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-2 h-2 rounded-full bg-[#6366f1]" /> Under target
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-2 h-2 rounded-full bg-[#ef4444]" /> Over target
+          </span>
+          <span className="ml-auto">Net = Eaten − Exercise</span>
+        </div>
       </div>
 
       {/* Bottom Row: Macros + Weight */}
