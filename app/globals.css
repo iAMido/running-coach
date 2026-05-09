@@ -245,6 +245,62 @@
   color: var(--ct-ember-deep);
 }
 
+/* ========== RUNCOACH DESIGN SYSTEM ========== */
+/* Same editorial language, electric blue accent */
+.runcoach-theme {
+  --rc-paper: #F4F1EA;
+  --rc-paper-2: #EFEBE2;
+  --rc-surface: #FFFFFF;
+  --rc-surface-2: #FBFAF6;
+  --rc-ink: #0E0F0C;
+  --rc-ink-2: #3A3B36;
+  --rc-ink-3: #6B6C66;
+  --rc-ink-4: #9C9C95;
+  --rc-ink-5: #C5C4BC;
+  --rc-line: rgba(14, 15, 12, 0.08);
+  --rc-line-2: rgba(14, 15, 12, 0.14);
+  --rc-blue: oklch(0.58 0.17 245);
+  --rc-blue-soft: oklch(0.95 0.04 245);
+  --rc-blue-deep: oklch(0.38 0.14 245);
+  --rc-good: oklch(0.62 0.13 150);
+  --rc-good-soft: oklch(0.95 0.04 150);
+  --rc-bad: oklch(0.62 0.20 25);
+  --rc-amber: oklch(0.72 0.15 75);
+  --rc-purple: oklch(0.55 0.18 305);
+  --rc-shadow-1: 0 1px 0 rgba(14,15,12,0.04), 0 1px 2px rgba(14,15,12,0.04);
+  --rc-shadow-2: 0 1px 0 rgba(14,15,12,0.04), 0 6px 18px -8px rgba(14,15,12,0.10);
+  font-family: var(--font-manrope), 'Manrope', ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01","ss02","cv11";
+  background: var(--rc-paper);
+  color: var(--rc-ink);
+  -webkit-font-smoothing: antialiased;
+}
+.runcoach-theme .rc-kicker {
+  font-family: var(--font-jetbrains), 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rc-ink-3);
+}
+.runcoach-theme .rc-card {
+  background: var(--rc-surface);
+  border: 1px solid var(--rc-line);
+  border-radius: 20px;
+  box-shadow: var(--rc-shadow-1);
+}
+.runcoach-theme .rc-stat {
+  background: var(--rc-surface);
+  border: 1px solid var(--rc-line);
+  border-radius: 20px;
+  padding: 20px 22px 22px;
+  box-shadow: var(--rc-shadow-1);
+}
+.runcoach-theme .rc-mono {
+  font-family: var(--font-jetbrains), 'JetBrains Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ========================================
    GLASS MORPHISM UTILITIES - YUV.AI
    ======================================== */

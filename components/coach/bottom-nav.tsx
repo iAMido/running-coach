@@ -19,7 +19,7 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet';
 import { signOut } from 'next-auth/react';
-import { Target, Dumbbell, RefreshCw, Settings, LogOut, ChevronLeft } from 'lucide-react';
+import { Target, Dumbbell, RefreshCw, Settings, LogOut, ChevronLeft, UtensilsCrossed } from 'lucide-react';
 
 const mainNavItems = [
   { href: '/coach', label: 'Home', icon: LayoutDashboard },
@@ -40,7 +40,14 @@ export function BottomNav() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-background/95 backdrop-blur-lg border-t border-border safe-area-inset-bottom">
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-50 md:hidden safe-area-inset-bottom"
+      style={{
+        background: 'var(--rc-paper)',
+        borderTop: '1px solid var(--rc-line)',
+        boxShadow: '0 -2px 10px rgba(14,15,12,0.04)',
+      }}
+    >
       <div className="flex items-center justify-around h-16 px-2 relative">
         {mainNavItems.map((item) => {
           const Icon = item.icon;
@@ -50,33 +57,37 @@ export function BottomNav() {
             <Link
               key={item.href}
               href={item.href}
-              className={cn(
-                'relative flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-all duration-200 min-w-[60px]',
-                isActive
-                  ? 'text-primary'
-                  : 'text-muted-foreground active:scale-95'
-              )}
+              className="relative flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-all duration-200 min-w-[60px]"
             >
-              {/* Active indicator dot */}
               {isActive && (
-                <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-primary rounded-full animate-pulse" />
+                <span
+                  className="absolute -top-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full"
+                  style={{ background: 'var(--rc-blue)' }}
+                />
               )}
 
-              {/* Icon with background on active */}
               <div className={cn(
                 'relative p-1.5 rounded-xl transition-all duration-200',
-                isActive && 'bg-primary/10'
-              )}>
-                <Icon className={cn(
-                  'w-5 h-5 transition-transform duration-200',
-                  isActive && 'text-primary scale-110'
-                )} />
+              )}
+              style={{
+                background: isActive ? 'var(--rc-blue-soft)' : 'transparent',
+              }}>
+                <Icon
+                  className="w-5 h-5 transition-transform duration-200"
+                  style={{
+                    color: isActive ? 'var(--rc-blue)' : 'var(--rc-ink-3)',
+                    transform: isActive ? 'scale(1.1)' : 'scale(1)',
+                  }}
+                />
               </div>
 
-              <span className={cn(
-                'text-[10px] font-medium transition-all duration-200',
-                isActive && 'font-semibold'
-              )}>
+              <span
+                className="text-[10px] transition-all duration-200"
+                style={{
+                  color: isActive ? 'var(--rc-blue)' : 'var(--rc-ink-3)',
+                  fontWeight: isActive ? 600 : 500,
+                }}
+              >
                 {item.label}
               </span>
             </Link>
@@ -87,38 +98,44 @@ export function BottomNav() {
         <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
           <SheetTrigger asChild>
             <button
-              className={cn(
-                'relative flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-all duration-200 min-w-[60px] active:scale-95',
-                menuOpen ? 'text-primary' : 'text-muted-foreground'
-              )}
+              className="relative flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-all duration-200 min-w-[60px] active:scale-95"
             >
-              <div className={cn(
-                'relative p-1.5 rounded-xl transition-all duration-200',
-                menuOpen && 'bg-primary/10'
-              )}>
-                <Menu className={cn(
-                  'w-5 h-5 transition-transform duration-200',
-                  menuOpen && 'rotate-90'
-                )} />
+              <div
+                className="relative p-1.5 rounded-xl transition-all duration-200"
+                style={{
+                  background: menuOpen ? 'var(--rc-blue-soft)' : 'transparent',
+                }}
+              >
+                <Menu
+                  className="w-5 h-5 transition-transform duration-200"
+                  style={{
+                    color: menuOpen ? 'var(--rc-blue)' : 'var(--rc-ink-3)',
+                    transform: menuOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                  }}
+                />
               </div>
-              <span className="text-[10px] font-medium">More</span>
+              <span
+                className="text-[10px] font-medium"
+                style={{ color: menuOpen ? 'var(--rc-blue)' : 'var(--rc-ink-3)' }}
+              >
+                More
+              </span>
             </button>
           </SheetTrigger>
-          <SheetContent side="bottom" className="h-auto max-h-[70vh] rounded-t-3xl px-4 pb-8 pt-0 border-t-0 [&>button]:hidden"
+          <SheetContent
+            side="bottom"
+            className="h-auto max-h-[70vh] rounded-t-3xl px-4 pb-8 pt-0 border-t-0 [&>button]:hidden"
             style={{
-              background: 'var(--nav-bg, rgba(255, 255, 255, 0.95))',
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)',
-              borderTop: '1px solid var(--nav-border, rgba(255, 255, 255, 0.3))',
-              boxShadow: 'var(--nav-shadow, 0 8px 32px rgba(0, 0, 0, 0.12))',
+              background: 'var(--rc-paper)',
+              borderTop: '1px solid var(--rc-line)',
+              boxShadow: 'var(--rc-shadow-2)',
             }}
           >
-            {/* Drag handle indicator */}
             <div className="flex justify-center pt-3 pb-2 cursor-pointer" onClick={() => setMenuOpen(false)}>
-              <div className="w-10 h-1 rounded-full bg-muted-foreground/40" />
+              <div className="w-10 h-1 rounded-full" style={{ background: 'var(--rc-ink-5)' }} />
             </div>
             <SheetHeader className="pb-4 mb-4">
-              <SheetTitle className="text-center text-base font-semibold text-foreground">Menu</SheetTitle>
+              <SheetTitle className="text-center text-base font-semibold" style={{ color: 'var(--rc-ink)' }}>Menu</SheetTitle>
             </SheetHeader>
             <div className="space-y-2 pb-4">
               {menuItems.map((item) => {
@@ -130,17 +147,19 @@ export function BottomNav() {
                     key={item.href}
                     href={item.href}
                     onClick={() => setMenuOpen(false)}
-                    className={cn(
-                      'flex items-center gap-4 px-4 py-4 rounded-xl transition-all active:scale-[0.98]',
-                      isActive
-                        ? 'bg-primary/15 text-primary'
-                        : 'text-foreground bg-muted/50 hover:bg-muted'
-                    )}
+                    className="flex items-center gap-4 px-4 py-4 rounded-xl transition-all active:scale-[0.98]"
+                    style={{
+                      background: isActive ? 'var(--rc-blue-soft)' : 'var(--rc-surface)',
+                      color: isActive ? 'var(--rc-blue)' : 'var(--rc-ink)',
+                      border: `1px solid ${isActive ? 'rgba(0,0,0,0.04)' : 'var(--rc-line)'}`,
+                    }}
                   >
-                    <div className={cn(
-                      'p-2 rounded-lg',
-                      isActive ? 'bg-primary/20' : 'bg-background'
-                    )}>
+                    <div
+                      className="p-2 rounded-lg"
+                      style={{
+                        background: isActive ? 'var(--rc-blue-soft)' : 'var(--rc-surface-2)',
+                      }}
+                    >
                       <Icon className="w-5 h-5" />
                     </div>
                     <span className="font-medium text-base">{item.label}</span>
@@ -148,14 +167,27 @@ export function BottomNav() {
                 );
               })}
 
-              <div className="border-t border-border my-4" />
+              <div className="my-4" style={{ borderTop: '1px solid var(--rc-line)' }} />
+
+              <Link
+                href="/caltrack"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-4 px-4 py-4 rounded-xl transition-all active:scale-[0.98]"
+                style={{ background: 'var(--rc-surface)', color: 'var(--rc-ink-2)', border: '1px solid var(--rc-line)' }}
+              >
+                <div className="p-2 rounded-lg" style={{ background: 'var(--rc-surface-2)' }}>
+                  <UtensilsCrossed className="w-5 h-5" />
+                </div>
+                <span className="font-medium text-base">Switch to CalTrack</span>
+              </Link>
 
               <Link
                 href="/"
                 onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-4 px-4 py-4 rounded-xl text-foreground bg-muted/50 hover:bg-muted transition-all active:scale-[0.98]"
+                className="flex items-center gap-4 px-4 py-4 rounded-xl transition-all active:scale-[0.98]"
+                style={{ background: 'var(--rc-surface)', color: 'var(--rc-ink-2)', border: '1px solid var(--rc-line)' }}
               >
-                <div className="p-2 rounded-lg bg-background">
+                <div className="p-2 rounded-lg" style={{ background: 'var(--rc-surface-2)' }}>
                   <ChevronLeft className="w-5 h-5" />
                 </div>
                 <span className="font-medium text-base">Back to Portfolio</span>
@@ -166,9 +198,10 @@ export function BottomNav() {
                   setMenuOpen(false);
                   signOut({ callbackUrl: '/' });
                 }}
-                className="w-full flex items-center gap-4 px-4 py-4 rounded-xl text-red-500 bg-red-500/10 hover:bg-red-500/20 transition-all active:scale-[0.98]"
+                className="w-full flex items-center gap-4 px-4 py-4 rounded-xl transition-all active:scale-[0.98]"
+                style={{ background: 'rgba(239,83,80,0.06)', color: 'var(--rc-bad)', border: '1px solid rgba(239,83,80,0.1)' }}
               >
-                <div className="p-2 rounded-lg bg-red-500/10">
+                <div className="p-2 rounded-lg" style={{ background: 'rgba(239,83,80,0.08)' }}>
                   <LogOut className="w-5 h-5" />
                 </div>
                 <span className="font-medium text-base">Sign Out</span>
