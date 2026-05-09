@@ -3,6 +3,72 @@ import { NextRequest } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { caltrackDb, isCaltrackConfigured } from '@/lib/db/supabase-caltrack';
 
+export async function POST(request: NextRequest) {
+  const auth = await getAuthenticatedUser();
+  if (!auth.authenticated) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (!isCaltrackConfigured()) {
+    return NextResponse.json(
+      { error: 'CalTrack database not configured' },
+      { status: 503 }
+    );
+  }
+
+  try {
+    const body = await request.json();
+    const weight_kg = parseFloat(body.weight_kg);
+
+    if (!weight_kg || weight_kg < 20 || weight_kg > 300) {
+      return NextResponse.json(
+        { error: 'Invalid weight. Must be 20-300 kg.' },
+        { status: 400 }
+      );
+    }
+
+    // Get user profile
+    const { data: profile } = await caltrackDb
+      .from('user_profile')
+      .select('id')
+      .limit(1)
+      .single();
+
+    if (!profile) {
+      return NextResponse.json(
+        { error: 'User profile not found' },
+        { status: 404 }
+      );
+    }
+
+    // Insert weight log
+    const { data, error } = await caltrackDb
+      .from('weight_log')
+      .insert({
+        user_id: profile.id,
+        weight_kg,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Update current weight in profile
+    await caltrackDb
+      .from('user_profile')
+      .update({ current_weight_kg: weight_kg })
+      .eq('id', profile.id);
+
+    return NextResponse.json({ success: true, entry: data });
+  } catch (error) {
+    console.error('CalTrack weight POST error:', error);
+    return NextResponse.json(
+      { error: 'Failed to log weight' },
+      { status: 500 }
+    );
+  }
+}
+
 export async function GET(request: NextRequest) {
   const auth = await getAuthenticatedUser();
   if (!auth.authenticated) {

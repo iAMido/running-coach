@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DateRangePicker } from '@/components/caltrack/date-range-picker';
-import { Scale, TrendingDown, TrendingUp } from 'lucide-react';
+import { Scale, TrendingDown, TrendingUp, Plus } from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -27,6 +27,9 @@ export default function WeightPage() {
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(30);
   const [customRange, setCustomRange] = useState<{ from: string; to: string } | undefined>();
+  const [newWeight, setNewWeight] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [showForm, setShowForm] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -51,6 +54,28 @@ export default function WeightPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const handleLogWeight = async () => {
+    const kg = parseFloat(newWeight);
+    if (!kg || kg < 20 || kg > 300) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/caltrack/weight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ weight_kg: kg }),
+      });
+      if (res.ok) {
+        setNewWeight('');
+        setShowForm(false);
+        fetchData();
+      }
+    } catch (err) {
+      console.error('Failed to log weight:', err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const formatDate = (label: unknown) => {
     const d = new Date(String(label) + 'T00:00:00');
@@ -90,13 +115,49 @@ export default function WeightPage() {
             {weights.length} measurements in the last {days} days
           </p>
         </div>
-        <DateRangePicker
-          selectedDays={days}
-          onChange={(d) => { setDays(d); setCustomRange(undefined); }}
-          customRange={customRange}
-          onCustomRange={(from, to) => { setCustomRange({ from, to }); setDays(-1); }}
-        />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Log Weight
+          </button>
+          <DateRangePicker
+            selectedDays={days}
+            onChange={(d) => { setDays(d); setCustomRange(undefined); }}
+            customRange={customRange}
+            onCustomRange={(from, to) => { setCustomRange({ from, to }); setDays(-1); }}
+          />
+        </div>
       </div>
+
+      {/* Weight Input Form */}
+      {showForm && (
+        <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+          <Scale className="w-5 h-5 text-purple-500 flex-shrink-0" />
+          <input
+            type="number"
+            step="0.1"
+            min="20"
+            max="300"
+            placeholder={currentWeight ? `${currentWeight}` : 'Weight in kg'}
+            value={newWeight}
+            onChange={(e) => setNewWeight(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleLogWeight()}
+            className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+            autoFocus
+          />
+          <span className="text-sm text-muted-foreground">kg</span>
+          <button
+            onClick={handleLogWeight}
+            disabled={submitting || !newWeight}
+            className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 disabled:opacity-50 transition-colors"
+          >
+            {submitting ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      )}
 
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
         <div className="bg-card border border-border rounded-xl p-4">

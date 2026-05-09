@@ -50,6 +50,8 @@ interface OverviewData {
     exercise: number;
     exerciseRuns: number;
     exerciseDistance: number;
+    water_ml: number;
+    water_target_ml: number;
   };
   stats: {
     avgCalories: number;
@@ -76,6 +78,25 @@ export default function CaltrackOverview() {
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(7);
   const [customRange, setCustomRange] = useState<{ from: string; to: string } | undefined>();
+  const [addingWater, setAddingWater] = useState(false);
+
+  const addWater = async (ml: number) => {
+    setAddingWater(true);
+    try {
+      const res = await fetch('/api/caltrack/water', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount_ml: ml }),
+      });
+      if (res.ok) {
+        fetchData();
+      }
+    } catch (err) {
+      console.error('Failed to log water:', err);
+    } finally {
+      setAddingWater(false);
+    }
+  };
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -533,43 +554,75 @@ export default function CaltrackOverview() {
         </div>
       </div>
 
-      {/* Today's Meals Quick View */}
-      <div className="bg-card border border-border rounded-xl p-4 md:p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">
+      {/* Today's Meals + Water */}
+      <div className="grid gap-4 md:grid-cols-3">
+        {/* Meals Summary */}
+        <div className="bg-card border border-border rounded-xl p-4 md:p-6 md:col-span-2">
+          <h2 className="text-lg font-semibold mb-4">
             Today ({today.meals} meals)
           </h2>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <Droplets className="w-4 h-4 text-blue-500" />
-              Water: check /status
-            </span>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-orange-500/5 rounded-lg p-3 text-center">
+              <p className="text-xs text-muted-foreground">Calories</p>
+              <p className="text-xl font-bold text-orange-600">
+                {today.calories}
+              </p>
+            </div>
+            <div className="bg-blue-500/5 rounded-lg p-3 text-center">
+              <p className="text-xs text-muted-foreground">Protein</p>
+              <p className="text-xl font-bold text-blue-600">
+                {Math.round(today.protein)}g
+              </p>
+            </div>
+            <div className="bg-green-500/5 rounded-lg p-3 text-center">
+              <p className="text-xs text-muted-foreground">Carbs</p>
+              <p className="text-xl font-bold text-green-600">
+                {Math.round(today.carbs)}g
+              </p>
+            </div>
+            <div className="bg-purple-500/5 rounded-lg p-3 text-center">
+              <p className="text-xs text-muted-foreground">Fat</p>
+              <p className="text-xl font-bold text-purple-600">
+                {Math.round(today.fat)}g
+              </p>
+            </div>
           </div>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="bg-orange-500/5 rounded-lg p-3 text-center">
-            <p className="text-xs text-muted-foreground">Calories</p>
-            <p className="text-xl font-bold text-orange-600">
-              {today.calories}
-            </p>
+
+        {/* Water Tracker */}
+        <div className="bg-card border border-border rounded-xl p-4 md:p-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <Droplets className="w-5 h-5 text-blue-500" />
+              Water
+            </h2>
+            <span className="text-sm text-muted-foreground">
+              {((today.water_ml || 0) / 1000).toFixed(1)} / {((today.water_target_ml || 2500) / 1000).toFixed(1)}L
+            </span>
           </div>
-          <div className="bg-blue-500/5 rounded-lg p-3 text-center">
-            <p className="text-xs text-muted-foreground">Protein</p>
-            <p className="text-xl font-bold text-blue-600">
-              {Math.round(today.protein)}g
-            </p>
+
+          {/* Progress bar */}
+          <div className="w-full bg-muted rounded-full h-3 mb-4">
+            <div
+              className="bg-blue-500 h-3 rounded-full transition-all duration-500"
+              style={{
+                width: `${Math.min(((today.water_ml || 0) / (today.water_target_ml || 2500)) * 100, 100)}%`,
+              }}
+            />
           </div>
-          <div className="bg-green-500/5 rounded-lg p-3 text-center">
-            <p className="text-xs text-muted-foreground">Carbs</p>
-            <p className="text-xl font-bold text-green-600">
-              {Math.round(today.carbs)}g
-            </p>
-          </div>
-          <div className="bg-purple-500/5 rounded-lg p-3 text-center">
-            <p className="text-xs text-muted-foreground">Fat</p>
-            <p className="text-xl font-bold text-purple-600">
-              {Math.round(today.fat)}g
-            </p>
+
+          {/* Quick-add buttons */}
+          <div className="grid grid-cols-3 gap-2">
+            {[250, 500, 750].map((ml) => (
+              <button
+                key={ml}
+                onClick={() => addWater(ml)}
+                disabled={addingWater}
+                className="px-2 py-2 rounded-lg border border-border bg-blue-500/5 text-sm font-medium text-blue-600 hover:bg-blue-500/15 disabled:opacity-50 transition-colors"
+              >
+                +{ml}ml
+              </button>
+            ))}
           </div>
         </div>
       </div>

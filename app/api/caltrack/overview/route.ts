@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [profileRes, summariesRes, weightRes, todayMealsRes, runsRes] =
+    const [profileRes, summariesRes, weightRes, todayMealsRes, runsRes, waterRes] =
       await Promise.all([
         caltrackDb
           .from('user_profile')
@@ -73,6 +73,11 @@ export async function GET(request: NextRequest) {
           .select('calories_burned,run_date,distance_km,duration_minutes')
           .gte('run_date', `${startStr}T00:00:00`)
           .lte('run_date', `${todayStr}T23:59:59`),
+        caltrackDb
+          .from('water_log')
+          .select('amount_ml,logged_at')
+          .gte('logged_at', `${todayStr}T00:00:00`)
+          .lte('logged_at', `${todayStr}T23:59:59`),
       ]);
 
     const profile = profileRes.data;
@@ -80,7 +85,14 @@ export async function GET(request: NextRequest) {
     const weights = weightRes.data || [];
     const todayMeals = todayMealsRes.data || [];
     const allRuns = runsRes.data || [];
+    const todayWaterLogs = waterRes.data || [];
     const targetCal = profile?.target_daily_calories || 2000;
+
+    // Today's water total
+    const todayWaterMl = todayWaterLogs.reduce(
+      (sum: number, w: { amount_ml: number }) => sum + w.amount_ml,
+      0
+    );
 
     // Build a map of exercise calories per day from caltrack_runs
     const runsByDay: Record<
@@ -214,6 +226,8 @@ export async function GET(request: NextRequest) {
         exercise: todayExercise.calories,
         exerciseRuns: todayExercise.count,
         exerciseDistance: Math.round(todayExercise.distance * 10) / 10,
+        water_ml: todayWaterMl,
+        water_target_ml: 2500,
       },
       stats: {
         avgCalories,
