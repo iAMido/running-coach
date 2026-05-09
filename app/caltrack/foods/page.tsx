@@ -111,13 +111,13 @@ export default function FoodsPage() {
             className="inline-block w-[6px] h-[6px] rounded-full mr-2"
             style={{ background: 'var(--ct-ember)' }}
           />
-          NUTRITION DATABASE
+          PANTRY · {foods.length} UNIQUE FOODS
         </div>
         <h1
           className="text-[36px] md:text-[44px] font-bold leading-[1.05]"
           style={{ letterSpacing: '-0.03em', color: 'var(--ct-ink)' }}
         >
-          My Foods <span className="font-normal italic" style={{ fontFamily: 'var(--font-serif, Georgia, serif)', color: 'var(--ct-ink-2)' }}>library.</span>
+          My foods, <span className="font-normal italic" style={{ fontFamily: 'var(--font-serif, Georgia, serif)', color: 'var(--ct-ink-2)' }}>by frequency.</span>
         </h1>
         <p className="mt-2 text-sm" style={{ color: 'var(--ct-ink-3)' }}>
           {foods.length} unique foods
@@ -195,30 +195,36 @@ export default function FoodsPage() {
         <div className="ct-card overflow-hidden p-0">
           {/* Table Header */}
           <div
-            className="grid grid-cols-[1fr_55px_65px_90px_32px] gap-2 px-5 py-3 text-[10px] font-medium ct-mono uppercase"
+            className="hidden sm:grid gap-3.5 px-[22px] py-[14px]"
             style={{
-              color: 'var(--ct-ink-4)',
-              letterSpacing: '0.1em',
-              borderBottom: '1px solid var(--ct-line)',
+              gridTemplateColumns: '32px 1fr 80px 100px 100px 60px',
               background: 'var(--ct-surface-2)',
+              borderBottom: '1px solid var(--ct-line)',
             }}
           >
-            <span>FOOD</span>
-            <span className="text-center">COUNT</span>
-            <span className="text-center">AVG WT</span>
-            <span className="text-center">AVG CAL</span>
-            <span />
+            {['', 'FOOD', 'TIMES', 'AVG WEIGHT', 'AVG KCAL', 'DENSITY'].map((h, i) => (
+              <span
+                key={i}
+                className="ct-mono text-[10.5px] font-medium uppercase"
+                style={{
+                  color: 'var(--ct-ink-3)',
+                  letterSpacing: '0.1em',
+                  textAlign: i > 1 ? 'right' : 'left',
+                }}
+              >
+                {h}
+              </span>
+            ))}
           </div>
 
           {/* Rows */}
           {filtered.map((food, idx) => (
             <div key={food.ingredient_name}>
               <div
-                className="grid grid-cols-[1fr_55px_65px_90px_32px] gap-2 px-5 py-3.5 text-sm transition-colors cursor-pointer"
+                className="grid items-center gap-3.5 px-[22px] py-[12px] transition-colors cursor-pointer"
                 style={{
-                  borderBottom: idx < filtered.length - 1 || expandedFood === food.ingredient_name
-                    ? '1px solid var(--ct-line)'
-                    : 'none',
+                  gridTemplateColumns: '32px 1fr 80px 100px 100px 60px',
+                  borderBottom: '1px solid var(--ct-line)',
                   background: expandedFood === food.ingredient_name ? 'var(--ct-surface-2)' : 'transparent',
                 }}
                 onClick={() =>
@@ -227,46 +233,52 @@ export default function FoodsPage() {
                   )
                 }
               >
-                <span className="font-medium truncate flex items-center gap-1.5" style={{ color: 'var(--ct-ink)' }}>
+                {/* Rank */}
+                <span className="ct-mono text-[11px] font-medium" style={{ color: 'var(--ct-ink-4)' }}>
+                  {String(idx + 1).padStart(2, '0')}
+                </span>
+                {/* Name */}
+                <span className="text-[14px] font-medium truncate flex items-center gap-1.5" style={{ color: 'var(--ct-ink)', letterSpacing: '-0.005em' }}>
                   {food.is_personal && (
                     <Star className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--ct-ember)', fill: 'var(--ct-ember)' }} />
                   )}
                   {food.ingredient_name}
                 </span>
-                <span className="text-center ct-mono text-xs" style={{ color: 'var(--ct-ink-3)' }}>
-                  {food.total_count}×
+                {/* Frequency badge */}
+                <span className="text-right">
+                  <span
+                    className="ct-mono text-[12px] font-semibold inline-block px-2 py-0.5 rounded-[5px]"
+                    style={{
+                      background: food.total_count > 1 ? 'var(--ct-ember-soft)' : 'rgba(14,15,12,0.05)',
+                      color: food.total_count > 1 ? 'var(--ct-ember-deep)' : 'var(--ct-ink-3)',
+                    }}
+                  >
+                    {food.total_count}×
+                  </span>
                 </span>
-                <span className="text-center ct-mono text-xs" style={{ color: 'var(--ct-ink-3)' }}>
-                  {food.avg_weight}g
+                {/* Avg weight */}
+                <span className="ct-mono text-right font-medium" style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--ct-ink)' }}>
+                  {food.avg_weight} <span className="text-[11px]" style={{ color: 'var(--ct-ink-3)' }}>g</span>
                 </span>
-                <span className="text-center">
-                  <div className="flex flex-col items-center gap-1">
-                    <span className="ct-mono text-xs font-bold" style={{ color: 'var(--ct-ink)' }}>
-                      {food.avg_calories}
-                    </span>
-                    {/* Density bar */}
+                {/* Avg kcal */}
+                <span className="ct-mono text-right font-medium" style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--ct-ink)' }}>
+                  {food.avg_calories} <span className="text-[11px]" style={{ color: 'var(--ct-ink-3)' }}>kcal</span>
+                </span>
+                {/* Density bar */}
+                <div className="flex justify-end">
+                  <div
+                    className="w-[56px] h-[4px] rounded-full overflow-hidden relative"
+                    style={{ background: 'rgba(14,15,12,0.06)' }}
+                  >
                     <div
-                      className="w-full h-[3px] rounded-full overflow-hidden"
-                      style={{ background: 'rgba(14,15,12,0.06)' }}
-                    >
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${(food.avg_calories / maxCal) * 100}%`,
-                          background: 'var(--ct-ember)',
-                          opacity: 0.6,
-                        }}
-                      />
-                    </div>
+                      className="absolute left-0 top-0 bottom-0 rounded-full"
+                      style={{
+                        width: `${(food.avg_calories / maxCal) * 100}%`,
+                        background: 'var(--ct-ember)',
+                      }}
+                    />
                   </div>
-                </span>
-                <span className="text-center grid place-items-center" style={{ color: 'var(--ct-ink-4)' }}>
-                  {expandedFood === food.ingredient_name ? (
-                    <ChevronUp className="w-4 h-4" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4" />
-                  )}
-                </span>
+                </div>
               </div>
 
               {/* Expanded Detail */}

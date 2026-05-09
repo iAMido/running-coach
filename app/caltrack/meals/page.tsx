@@ -20,10 +20,10 @@ import type { CaltrackMeal, CaltrackMealItem } from '@/lib/db/caltrack-types';
 type MealFilter = 'all' | 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
 const mealTypeBadge: Record<string, { bg: string; color: string }> = {
-  breakfast: { bg: 'rgba(245,158,11,0.1)', color: '#b45309' },
-  lunch: { bg: 'rgba(59,130,246,0.1)', color: '#1d4ed8' },
-  dinner: { bg: 'rgba(168,85,247,0.1)', color: '#7c3aed' },
-  snack: { bg: 'rgba(34,197,94,0.1)', color: '#15803d' },
+  breakfast: { bg: 'oklch(0.96 0.04 75)', color: 'oklch(0.50 0.15 75)' },
+  lunch: { bg: 'oklch(0.96 0.03 240)', color: 'oklch(0.42 0.13 240)' },
+  dinner: { bg: 'oklch(0.96 0.03 305)', color: 'oklch(0.42 0.16 305)' },
+  snack: { bg: 'oklch(0.96 0.04 150)', color: 'oklch(0.42 0.10 150)' },
 };
 
 const CALTRACK_STORAGE_URL =
@@ -847,7 +847,9 @@ export default function MealsPage() {
 
   const formatTime = (iso: string) => {
     const d = new Date(iso);
-    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const h = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const parts = h.split(' ');
+    return { time: parts[0], period: parts[1] || '' };
   };
 
   const groupByDate = (meals: CaltrackMeal[]) => {
@@ -888,19 +890,16 @@ export default function MealsPage() {
               className="inline-block w-[6px] h-[6px] rounded-full mr-2"
               style={{ background: 'var(--ct-ember)' }}
             />
-            MEAL JOURNAL
+            MEAL LOG · {days === -1 ? 'CUSTOM' : `${days} DAYS`}
           </div>
           <h1
             className="text-[36px] md:text-[44px] font-bold leading-[1.05]"
-            style={{ letterSpacing: '-0.03em', color: 'var(--ct-ink)' }}
+            style={{ letterSpacing: '-0.025em', color: 'var(--ct-ink)' }}
           >
-            Meals <span className="font-normal italic" style={{ fontFamily: 'var(--font-serif, Georgia, serif)', color: 'var(--ct-ink-2)' }}>logged.</span>
+            Meals, <span className="font-normal italic" style={{ fontFamily: 'var(--font-serif, Georgia, serif)', fontWeight: 500, letterSpacing: '-0.01em', color: 'var(--ct-ink)' }}>in order.</span>
           </h1>
-          <p className="mt-2 text-sm" style={{ color: 'var(--ct-ink-3)' }}>
-            {total} meals ·{' '}
-            {customRange
-              ? `${customRange.from} to ${customRange.to}`
-              : `last ${days} days`}
+          <p className="mt-2.5 text-sm" style={{ color: 'var(--ct-ink-3)', maxWidth: 620 }}>
+            {total} meals across the last {days === -1 ? 'selected period' : `${days} days`}.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -917,28 +916,26 @@ export default function MealsPage() {
 
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div
-          className="inline-flex gap-[1px] rounded-full p-[3px]"
-          style={{
-            background: 'var(--ct-surface)',
-            border: '1px solid var(--ct-line)',
-            boxShadow: 'var(--ct-shadow-1)',
-          }}
-        >
-          {(['all', 'breakfast', 'lunch', 'dinner', 'snack'] as const).map((type) => (
-            <button
-              key={type}
-              onClick={() => setFilter(type)}
-              className="ct-mono px-[13px] py-[7px] rounded-full text-[11px] font-medium transition-colors"
-              style={{
-                background: filter === type ? 'var(--ct-ink)' : 'transparent',
-                color: filter === type ? '#fff' : 'var(--ct-ink-3)',
-                letterSpacing: '0.06em',
-              }}
-            >
-              {type.toUpperCase()}
-            </button>
-          ))}
+        <div className="inline-flex gap-[6px] flex-wrap">
+          {(['all', 'breakfast', 'lunch', 'dinner', 'snack'] as const).map((type) => {
+            const count = type === 'all' ? meals.length : meals.filter(m => m.meal_type === type).length;
+            return (
+              <button
+                key={type}
+                onClick={() => setFilter(type)}
+                className="px-[14px] py-[8px] rounded-full text-[12.5px] font-medium transition-colors"
+                style={{
+                  background: filter === type ? 'var(--ct-ember)' : 'var(--ct-surface)',
+                  color: filter === type ? '#fff' : 'var(--ct-ink-3)',
+                  border: `1px solid ${filter === type ? 'var(--ct-ember)' : 'var(--ct-line)'}`,
+                  boxShadow: 'var(--ct-shadow-1)',
+                }}
+              >
+                {type === 'all' ? 'All' : type.charAt(0).toUpperCase() + type.slice(1)}
+                <span className="ct-mono ml-1 text-[11px]" style={{ opacity: 0.6 }}>{count}</span>
+              </button>
+            );
+          })}
         </div>
 
         <DateRangePicker
@@ -968,30 +965,44 @@ export default function MealsPage() {
           return (
             <div key={date}>
               {/* Day header */}
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-baseline gap-3">
+              <div
+                className="flex items-center justify-between pb-3.5 mb-3.5"
+                style={{ borderBottom: '1px solid var(--ct-line)' }}
+              >
+                <div className="flex items-baseline gap-3.5">
                   <span
-                    className="ct-mono text-[28px] font-bold"
-                    style={{ color: 'var(--ct-ink)', letterSpacing: '-0.02em' }}
+                    className="text-[36px] leading-none"
+                    style={{
+                      fontFamily: 'var(--font-serif, Georgia, serif)',
+                      fontStyle: 'italic',
+                      fontWeight: 400,
+                      letterSpacing: '-0.02em',
+                      color: 'var(--ct-ink)',
+                    }}
                   >
-                    {d.getDate()}
+                    {String(d.getDate()).padStart(2, '0')}
                   </span>
-                  <div>
-                    <span className="text-sm font-medium" style={{ color: 'var(--ct-ink)' }}>
+                  <div className="flex flex-col">
+                    <span className="text-[18px] font-semibold" style={{ letterSpacing: '-0.01em', color: 'var(--ct-ink)' }}>
                       {d.toLocaleDateString('en-US', { weekday: 'long' })}
                     </span>
-                    <span className="text-sm ml-1" style={{ color: 'var(--ct-ink-3)' }}>
-                      {d.toLocaleDateString('en-US', { month: 'long' })}
+                    <span
+                      className="ct-mono text-[11px] font-medium uppercase"
+                      style={{ color: 'var(--ct-ink-3)', letterSpacing: '0.1em' }}
+                    >
+                      {d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()} {d.getDate()} · {dateMeals.length} MEALS
                     </span>
                   </div>
                 </div>
-                <span
-                  className="ct-mono text-sm font-bold"
-                  style={{ color: 'var(--ct-ink)' }}
-                >
-                  {dayTotal.toLocaleString()}
-                  <span className="text-xs font-medium ml-0.5" style={{ color: 'var(--ct-ink-3)' }}>kcal</span>
-                </span>
+                <div className="flex items-baseline gap-3.5">
+                  <span
+                    className="text-[24px] font-bold"
+                    style={{ letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', color: 'var(--ct-ink)' }}
+                  >
+                    {dayTotal.toLocaleString()}
+                    <span className="text-[13px] font-medium ml-0.5" style={{ color: 'var(--ct-ink-3)' }}>kcal</span>
+                  </span>
+                </div>
               </div>
 
               {/* Meal cards */}
@@ -1000,67 +1011,75 @@ export default function MealsPage() {
                   const photoUrl = getPhotoUrl(meal);
                   const badge = mealTypeBadge[meal.meal_type] || { bg: 'rgba(14,15,12,0.06)', color: 'var(--ct-ink-3)' };
                   return (
-                    <div key={meal.id} className="ct-card overflow-hidden p-0">
+                    <div
+                      key={meal.id}
+                      className="rounded-[14px] overflow-hidden transition-all"
+                      style={{
+                        background: 'var(--ct-surface)',
+                        border: '1px solid var(--ct-line)',
+                        boxShadow: 'var(--ct-shadow-1)',
+                      }}
+                    >
                       <button
                         onClick={() => toggleMeal(meal.id)}
-                        className="w-full flex items-center justify-between p-4 text-left transition-colors"
+                        className="w-full text-left transition-colors"
                         style={{ background: expandedMeal === meal.id ? 'var(--ct-surface-2)' : 'transparent' }}
                       >
-                        <div className="flex items-center gap-3">
-                          {photoUrl && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setLightboxUrl(photoUrl);
-                              }}
-                              className="w-10 h-10 rounded-[10px] overflow-hidden shrink-0 transition-all"
-                              style={{ border: '1px solid var(--ct-line)' }}
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={photoUrl}
-                                alt=""
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).parentElement!.style.display = 'none';
-                                }}
-                              />
-                            </button>
-                          )}
+                        <div
+                          className="grid items-center gap-4 px-[18px] py-[14px]"
+                          style={{ gridTemplateColumns: '56px 1fr auto auto' }}
+                        >
+                          {/* Time column */}
+                          <div className="ct-mono text-right" style={{ lineHeight: 1.3 }}>
+                            <span className="text-[15px] font-medium block" style={{ color: 'var(--ct-ink)' }}>
+                              {(() => { const t = formatTime(meal.eaten_at); return t.time; })()}
+                            </span>
+                            <span className="text-[11px] font-medium" style={{ color: 'var(--ct-ink-3)' }}>
+                              {(() => { const t = formatTime(meal.eaten_at); return t.period; })()}
+                            </span>
+                          </div>
+
+                          {/* Content */}
                           <div>
-                            <div className="flex items-center gap-2">
-                              <span
-                                className="ct-mono text-[10px] font-medium uppercase px-2 py-0.5 rounded-full"
-                                style={{ background: badge.bg, color: badge.color, letterSpacing: '0.06em' }}
-                              >
-                                {meal.meal_type}
-                              </span>
-                              <span className="ct-mono text-xs" style={{ color: 'var(--ct-ink-4)' }}>
-                                {formatTime(meal.eaten_at)}
-                              </span>
-                            </div>
+                            <span
+                              className="ct-mono text-[10.5px] font-medium uppercase inline-flex items-center gap-1.5 px-2 py-1 rounded-[5px] mb-1.5"
+                              style={{ background: badge.bg, color: badge.color, letterSpacing: '0.08em' }}
+                            >
+                              {meal.meal_type}
+                            </span>
                             {(meal.notes || (meal.item_names && meal.item_names.length > 0)) && (
-                              <p className="text-sm font-medium mt-1 truncate max-w-[250px] sm:max-w-[400px]" style={{ color: 'var(--ct-ink)' }}>
+                              <div className="text-[14.5px] font-medium truncate max-w-[400px]" style={{ color: 'var(--ct-ink)', letterSpacing: '-0.005em' }}>
                                 {meal.notes || (
                                   <>
                                     {meal.item_names!.slice(0, 3).join(', ')}
-                                    {meal.item_names!.length > 3 && ` +${meal.item_names!.length - 3}`}
+                                    {meal.item_names!.length > 3 && (
+                                      <span className="ct-mono text-[11px] ml-1.5 px-1.5 py-0.5 rounded" style={{ background: 'rgba(14,15,12,0.05)', color: 'var(--ct-ink-3)' }}>
+                                        +{meal.item_names!.length - 3}
+                                      </span>
+                                    )}
                                   </>
                                 )}
-                              </p>
+                              </div>
                             )}
                           </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="ct-mono font-bold" style={{ color: 'var(--ct-ink)' }}>
+
+                          {/* Calories */}
+                          <div className="ct-mono text-[16px] font-semibold" style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--ct-ink)' }}>
                             {meal.total_calories}
-                            <span className="text-xs font-medium ml-0.5" style={{ color: 'var(--ct-ink-3)' }}>kcal</span>
-                          </span>
-                          {expandedMeal === meal.id ? (
-                            <ChevronUp className="w-4 h-4" style={{ color: 'var(--ct-ink-4)' }} />
-                          ) : (
-                            <ChevronDown className="w-4 h-4" style={{ color: 'var(--ct-ink-4)' }} />
-                          )}
+                            <span className="text-[11px] font-medium ml-0.5" style={{ color: 'var(--ct-ink-3)' }}>kcal</span>
+                          </div>
+
+                          {/* Toggle */}
+                          <div
+                            className="w-[30px] h-[30px] grid place-items-center rounded-lg"
+                            style={{ background: 'var(--ct-surface-2)', border: '1px solid var(--ct-line)', color: 'var(--ct-ink-3)' }}
+                          >
+                            {expandedMeal === meal.id ? (
+                              <ChevronUp className="w-3.5 h-3.5" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            )}
+                          </div>
                         </div>
                       </button>
 
