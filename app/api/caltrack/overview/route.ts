@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { NextRequest } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { caltrackDb, isCaltrackConfigured } from '@/lib/db/supabase-caltrack';
-import { supabase as runcoachDb } from '@/lib/db/supabase';
+// RunCoach DB no longer needed — CalTrack has its own Strava sync
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthenticatedUser();
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [profileRes, summariesRes, weightRes, todayMealsRes, runsRes, stravaRunsRes] =
+    const [profileRes, summariesRes, weightRes, todayMealsRes, runsRes] =
       await Promise.all([
         caltrackDb
           .from('user_profile')
@@ -68,74 +68,36 @@ export async function GET(request: NextRequest) {
           .eq('status', 'confirmed')
           .gte('eaten_at', `${todayStr}T00:00:00`)
           .lte('eaten_at', `${todayStr}T23:59:59`),
-        // CalTrack manual runs
         caltrackDb
           .from('caltrack_runs')
           .select('calories_burned,run_date,distance_km,duration_minutes')
           .gte('run_date', `${startStr}T00:00:00`)
           .lte('run_date', `${todayStr}T23:59:59`),
-        // RunCoach Strava-synced runs (separate Supabase project)
-        runcoachDb
-          .from('runs')
-          .select('distance_km,duration_min,avg_hr,date,calories')
-          .gte('date', `${startStr}T00:00:00`)
-          .lte('date', `${todayStr}T23:59:59`),
       ]);
 
     const profile = profileRes.data;
     const summaries = summariesRes.data || [];
     const weights = weightRes.data || [];
     const todayMeals = todayMealsRes.data || [];
-    const caltrackRuns = runsRes.data || [];
-    const stravaRuns = stravaRunsRes.data || [];
+    const allRuns = runsRes.data || [];
     const targetCal = profile?.target_daily_calories || 2000;
-    const userWeightKg = profile?.current_weight_kg || 80;
 
-    // Estimate calories burned from running: ~1 kcal/kg/km (standard formula)
-    function estimateRunCalories(distanceKm: number, durationMin: number, weightKg: number): number {
-      // MET-based: running ~8-10 MET depending on pace
-      const paceMinPerKm = durationMin / (distanceKm || 1);
-      let met = 10; // default ~6:00/km
-      if (paceMinPerKm > 8) met = 7;       // slow jog
-      else if (paceMinPerKm > 7) met = 8;  // easy
-      else if (paceMinPerKm > 6) met = 9.5; // moderate
-      else if (paceMinPerKm > 5) met = 11; // fast
-      else met = 12.5;                      // race pace
-      return Math.round(met * weightKg * (durationMin / 60));
-    }
-
-    // Build a map of exercise calories per day
+    // Build a map of exercise calories per day from caltrack_runs
     const runsByDay: Record<
       string,
       { calories: number; count: number; distance: number; duration: number }
     > = {};
 
-    // Helper to add a run to the map
-    function addRun(day: string, calories: number, distance: number, duration: number) {
-      if (!day) return;
-      if (!runsByDay[day])
-        runsByDay[day] = { calories: 0, count: 0, distance: 0, duration: 0 };
-      runsByDay[day].calories += calories;
-      runsByDay[day].count += 1;
-      runsByDay[day].distance += distance;
-      runsByDay[day].duration += duration;
-    }
-
-    // CalTrack manual runs
-    for (const r of caltrackRuns) {
+    for (const r of allRuns) {
       const runDate = new Date(r.run_date);
       const day = runDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
-      addRun(day, r.calories_burned || 0, r.distance_km || 0, r.duration_minutes || 0);
-    }
-
-    // RunCoach Strava-synced runs
-    for (const r of stravaRuns) {
-      const runDate = new Date(r.date);
-      const day = runDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
-      const dist = Number(r.distance_km) || 0;
-      const dur = Number(r.duration_min) || 0;
-      const cal = r.calories || estimateRunCalories(dist, dur, userWeightKg);
-      addRun(day, cal, dist, dur);
+      if (!day) continue;
+      if (!runsByDay[day])
+        runsByDay[day] = { calories: 0, count: 0, distance: 0, duration: 0 };
+      runsByDay[day].calories += r.calories_burned || 0;
+      runsByDay[day].count += 1;
+      runsByDay[day].distance += Number(r.distance_km) || 0;
+      runsByDay[day].duration += r.duration_minutes || 0;
     }
 
     // Build a map from daily_summary
