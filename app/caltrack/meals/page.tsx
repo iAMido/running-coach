@@ -781,6 +781,8 @@ export default function MealsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingMeal, setEditingMeal] = useState<CaltrackMeal | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [calorieTarget, setCalorieTarget] = useState(2285);
+  const [mealSearch, setMealSearch] = useState('');
 
   const fetchMeals = useCallback(async () => {
     setLoading(true);
@@ -819,6 +821,14 @@ export default function MealsPage() {
   useEffect(() => {
     fetchMeals();
   }, [fetchMeals]);
+
+  // Fetch calorie target from overview
+  useEffect(() => {
+    fetch('/api/caltrack/overview?days=7')
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d?.today?.target) setCalorieTarget(d.today.target); })
+      .catch(() => {});
+  }, []);
 
   const toggleMeal = async (mealId: string) => {
     if (expandedMeal === mealId) {
@@ -878,7 +888,18 @@ export default function MealsPage() {
     );
   }
 
-  const grouped = groupByDate(meals);
+  // Apply search filter
+  const filteredMeals = mealSearch
+    ? meals.filter((m) => {
+        const q = mealSearch.toLowerCase();
+        return (
+          m.notes?.toLowerCase().includes(q) ||
+          m.item_names?.some((n) => n.toLowerCase().includes(q)) ||
+          m.meal_type.toLowerCase().includes(q)
+        );
+      })
+    : meals;
+  const grouped = groupByDate(filteredMeals);
 
   return (
     <div className="space-y-8">
@@ -938,13 +959,77 @@ export default function MealsPage() {
           })}
         </div>
 
-        <DateRangePicker
-          selectedDays={days}
-          onChange={(d) => { setDays(d); setCustomRange(undefined); }}
-          customRange={customRange}
-          onCustomRange={(from, to) => { setCustomRange({ from, to }); setDays(-1); }}
-        />
+        <div className="flex items-center gap-3">
+          <div className="relative hidden sm:block" style={{ width: 280 }}>
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--ct-ink-4)' }} />
+            <input
+              type="text"
+              placeholder="Search meals…"
+              value={mealSearch}
+              onChange={(e) => setMealSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 rounded-full text-sm focus:outline-none focus:ring-2"
+              style={{
+                background: 'var(--ct-surface)',
+                border: '1px solid var(--ct-line)',
+                color: 'var(--ct-ink)',
+                boxShadow: 'var(--ct-shadow-1)',
+              }}
+            />
+          </div>
+          <DateRangePicker
+            selectedDays={days}
+            onChange={(d) => { setDays(d); setCustomRange(undefined); }}
+            customRange={customRange}
+            onCustomRange={(from, to) => { setCustomRange({ from, to }); setDays(-1); }}
+          />
+        </div>
       </div>
+
+      {/* Summary Strip */}
+      {meals.length > 0 && (() => {
+        const totalIntake = meals.reduce((s, m) => s + (m.total_calories || 0), 0);
+        const uniqueDays = new Set(meals.map(m => m.eaten_at.split('T')[0])).size;
+        const dailyAvg = uniqueDays > 0 ? Math.round(totalIntake / uniqueDays) : 0;
+        // Find most-logged food name
+        const foodCounts: Record<string, number> = {};
+        meals.forEach(m => {
+          if (m.item_names) m.item_names.forEach(n => { foodCounts[n] = (foodCounts[n] || 0) + 1; });
+        });
+        const mostLogged = Object.entries(foodCounts).sort((a, b) => b[1] - a[1])[0];
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: 'Logged meals', value: String(meals.length), unit: '' },
+              { label: 'Total intake', value: totalIntake.toLocaleString(), unit: 'kcal' },
+              { label: 'Daily average', value: dailyAvg.toLocaleString(), unit: 'kcal' },
+              { label: 'Most-logged', value: mostLogged ? mostLogged[0] : '—', unit: '', isText: true },
+            ].map((cell) => (
+              <div
+                key={cell.label}
+                className="rounded-[14px] px-[18px] py-4"
+                style={{ background: 'var(--ct-surface)', border: '1px solid var(--ct-line)', boxShadow: 'var(--ct-shadow-1)' }}
+              >
+                <div className="ct-mono text-[10.5px] font-medium uppercase" style={{ color: 'var(--ct-ink-3)', letterSpacing: '0.1em' }}>
+                  {cell.label}
+                </div>
+                <div
+                  className="mt-1.5 font-bold"
+                  style={{
+                    fontSize: cell.isText ? '16px' : '26px',
+                    lineHeight: cell.isText ? '1.3' : '1',
+                    letterSpacing: '-0.02em',
+                    fontVariantNumeric: 'tabular-nums',
+                    color: 'var(--ct-ink)',
+                  }}
+                >
+                  {cell.value}
+                  {cell.unit && <span className="text-[12px] font-medium ml-[3px]" style={{ color: 'var(--ct-ink-3)' }}>{cell.unit}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Meals grouped by date */}
       {grouped.length === 0 ? (
@@ -995,6 +1080,21 @@ export default function MealsPage() {
                   </div>
                 </div>
                 <div className="flex items-baseline gap-3.5">
+                  {(() => {
+                    const diff = dayTotal - calorieTarget;
+                    const isUnder = diff <= 0;
+                    return (
+                      <span
+                        className="ct-mono text-[11px] py-1 px-2 rounded-[6px]"
+                        style={{
+                          background: isUnder ? 'var(--ct-ember-soft)' : 'rgba(239,83,80,0.08)',
+                          color: isUnder ? 'var(--ct-ember-deep)' : 'oklch(0.45 0.18 25)',
+                        }}
+                      >
+                        {isUnder ? '−' : '+'}{Math.abs(diff).toLocaleString()} kcal · {isUnder ? 'under' : 'over'} target
+                      </span>
+                    );
+                  })()}
                   <span
                     className="text-[24px] font-bold"
                     style={{ letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', color: 'var(--ct-ink)' }}
