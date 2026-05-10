@@ -248,6 +248,8 @@
 /* ========== RUNCOACH DESIGN SYSTEM ========== */
 /* Same editorial language, electric blue accent */
 .runcoach-theme {
+  --background: #F4F1EA;
+  --foreground: #0E0F0C;
   --rc-paper: #F4F1EA;
   --rc-paper-2: #EFEBE2;
   --rc-surface: #FFFFFF;
