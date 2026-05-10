@@ -1,9 +1,5 @@
 'use client';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import { MessageSquare, Send, Trash2, User, Bot, Wand2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import type { ChatMessage, TrainingPlan } from '@/lib/db/types';
@@ -14,7 +10,6 @@ export default function AskCoachPage() {
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Plan adjustment state
   const [activePlan, setActivePlan] = useState<TrainingPlan | null>(null);
   const [showAdjustPanel, setShowAdjustPanel] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
@@ -95,11 +90,9 @@ export default function AskCoachPage() {
     setShowAdjustPanel(false);
   };
 
-  // Extract the last user message as the adjustment request
   const getConversationContext = (): string => {
     const userMessages = messages.filter(m => m.role === 'user');
     if (userMessages.length === 0) return '';
-    // Get last few messages for context
     const recentMessages = messages.slice(-4);
     return recentMessages.map(m => `${m.role}: ${m.content}`).join('\n');
   };
@@ -135,10 +128,8 @@ export default function AskCoachPage() {
         planUpdated: data.planUpdated,
       });
 
-      // Refresh the plan data
       if (data.planUpdated) {
         fetchActivePlan();
-        // Add a system message about the adjustment
         const adjustmentMessage: ChatMessage = {
           role: 'assistant',
           content: `✅ I've updated your training plan!\n\n**Summary:** ${data.adjustment?.adjustment_summary || 'Plan adjusted based on our discussion.'}\n\n${data.adjustment?.recommendations ? `**Changes:**\n${data.adjustment.recommendations.map((r: string) => `• ${r}`).join('\n')}` : ''}`,
@@ -157,104 +148,119 @@ export default function AskCoachPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="coach-heading text-3xl tracking-tight">Ask Coach</h1>
-          <p className="text-muted-foreground mt-2">
-            Chat with your AI running coach powered by Claude.
-          </p>
+          <div className="rc-kicker flex items-center gap-2.5 mb-2">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--rc-blue)' }} />
+            ASK COACH
+          </div>
+          <h1
+            className="text-[36px] font-bold leading-[1.05]"
+            style={{ letterSpacing: '-0.03em', color: 'var(--rc-ink)' }}
+          >
+            Chat with{' '}
+            <span className="font-normal italic" style={{ fontFamily: 'var(--font-serif, Georgia, serif)', color: 'var(--rc-ink-2)' }}>
+              your coach.
+            </span>
+          </h1>
         </div>
         {messages.length > 0 && (
-          <Button variant="outline" size="sm" onClick={handleClear} className="coach-button-focus">
-            <Trash2 className="w-4 h-4 mr-2" />
-            Clear Chat
-          </Button>
+          <button
+            onClick={handleClear}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium transition-colors"
+            style={{ background: 'var(--rc-surface)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink-3)' }}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Clear
+          </button>
         )}
       </div>
 
-      {/* Plan Adjustment Panel - Show when there's an active plan and messages */}
+      {/* Plan Adjustment Panel */}
       {activePlan && messages.length > 0 && (
-        <Card className={`coach-card border-2 transition-all ${showAdjustPanel ? 'border-blue-500/50' : 'border-dashed border-primary/30'}`}>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg bg-gradient-to-br from-blue-500/15 to-cyan-500/15 ${adjusting ? 'animate-pulse' : ''}`}>
-                  <Wand2 className="w-4 h-4 text-blue-500" />
-                </div>
-                <div>
-                  <p className="font-medium text-sm">Want to adjust your plan?</p>
-                  <p className="text-xs text-muted-foreground">
-                    <Badge variant="outline" className="mr-2">
-                      Week {activePlan.current_week_num} of {activePlan.duration_weeks}
-                    </Badge>
-                    AI can modify your training based on this conversation
-                  </p>
-                </div>
+        <div className="rc-card relative overflow-hidden p-4">
+          <span className="absolute left-0 top-0 bottom-0 w-[3px] rounded-r-[3px]" style={{ background: 'var(--rc-amber)' }} />
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-xl ${adjusting ? 'animate-pulse' : ''}`} style={{ background: 'oklch(0.96 0.05 75)', color: 'oklch(0.50 0.13 75)' }}>
+                <Wand2 className="w-4 h-4" />
               </div>
-              <Button
-                onClick={handleAdjustPlan}
-                disabled={adjusting}
-                size="sm"
-                className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shrink-0"
-              >
-                <Wand2 className="w-4 h-4 mr-2" />
-                {adjusting ? 'Adjusting...' : 'Adjust Plan'}
-              </Button>
+              <div>
+                <p className="font-medium text-sm" style={{ color: 'var(--rc-ink)' }}>Want to adjust your plan?</p>
+                <p className="text-xs" style={{ color: 'var(--rc-ink-3)' }}>
+                  <span
+                    className="rc-mono text-[10px] px-2 py-0.5 rounded-[5px] mr-2"
+                    style={{ background: 'oklch(0.96 0.05 75)', color: 'oklch(0.50 0.13 75)', letterSpacing: '0.06em' }}
+                  >
+                    WK {activePlan.current_week_num}/{activePlan.duration_weeks}
+                  </span>
+                  AI can modify based on this conversation
+                </p>
+              </div>
             </div>
+            <button
+              onClick={handleAdjustPlan}
+              disabled={adjusting}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold shrink-0 transition-colors disabled:opacity-50"
+              style={{ background: 'var(--rc-amber)', color: '#fff' }}
+            >
+              <Wand2 className="w-3.5 h-3.5" />
+              {adjusting ? 'Adjusting...' : 'Adjust Plan'}
+            </button>
+          </div>
 
-            {/* Adjustment Error */}
-            {adjustmentError && (
-              <div className="mt-3 p-3 rounded-lg bg-red-500/10 text-red-500 text-sm border border-red-500/20">
-                {adjustmentError}
-              </div>
-            )}
+          {adjustmentError && (
+            <div className="mt-3 p-3 rounded-xl text-sm" style={{ background: 'oklch(0.95 0.05 25)', color: 'var(--rc-bad)' }}>
+              {adjustmentError}
+            </div>
+          )}
 
-            {/* Adjustment Result */}
-            {adjustmentResult && (
-              <div className="mt-3 space-y-3 p-3 bg-gradient-to-br from-blue-500/5 to-cyan-500/5 rounded-lg border border-blue-500/20">
-                {adjustmentResult.planUpdated && (
-                  <div className="flex items-center gap-2 text-green-600">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span className="font-semibold text-sm">Plan Updated!</span>
-                  </div>
-                )}
-
-                {adjustmentResult.warnings && adjustmentResult.warnings.length > 0 && (
-                  <div className="flex items-start gap-2 text-amber-600">
-                    <AlertTriangle className="w-4 h-4 mt-0.5" />
-                    <ul className="text-xs space-y-1">
-                      {adjustmentResult.warnings.map((warn, i) => (
-                        <li key={i}>{warn}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          {adjustmentResult && (
+            <div className="mt-3 space-y-2 p-3 rounded-xl" style={{ background: 'oklch(0.96 0.05 75)', border: '1px solid oklch(0.90 0.08 75)' }}>
+              {adjustmentResult.planUpdated && (
+                <div className="flex items-center gap-2" style={{ color: 'var(--rc-good)' }}>
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span className="font-semibold text-sm">Plan Updated!</span>
+                </div>
+              )}
+              {adjustmentResult.warnings && adjustmentResult.warnings.length > 0 && (
+                <div className="flex items-start gap-2" style={{ color: 'var(--rc-amber)' }}>
+                  <AlertTriangle className="w-4 h-4 mt-0.5" />
+                  <ul className="text-xs space-y-0.5">
+                    {adjustmentResult.warnings.map((warn, i) => (
+                      <li key={i}>{warn}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Chat Container */}
-      <Card className="coach-card flex-1 flex flex-col overflow-hidden">
-        <CardHeader className="border-b border-border/50">
-          <CardTitle className="coach-heading flex items-center gap-2 text-lg">
-            <div className={`ai-icon-container w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-green-500 flex items-center justify-center ${loading ? 'active ai-pulse' : ''}`}>
-              <Bot className="w-5 h-5 text-white" />
-            </div>
-            AI Running Coach
-          </CardTitle>
-          <CardDescription>
-            Ask about your training, plan adjustments, pace recommendations, and more.
-          </CardDescription>
-        </CardHeader>
+      <div className="rc-card p-0 overflow-hidden flex-1 flex flex-col">
+        {/* Chat Header */}
+        <div className="flex items-center gap-3 px-6 py-4" style={{ background: 'var(--rc-surface-2)', borderBottom: '1px solid var(--rc-line)' }}>
+          <div
+            className={`w-10 h-10 rounded-xl flex items-center justify-center ${loading ? 'animate-pulse' : ''}`}
+            style={{ background: 'linear-gradient(135deg, var(--rc-blue), var(--rc-good))' }}
+          >
+            <Bot className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 className="text-[15px] font-bold" style={{ letterSpacing: '-0.01em', color: 'var(--rc-ink)' }}>AI Running Coach</h3>
+            <p className="text-xs" style={{ color: 'var(--rc-ink-4)' }}>Ask about training, pace, recovery, and more.</p>
+          </div>
+        </div>
 
-        <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {messages.length === 0 ? (
             <div className="h-full flex items-center justify-center">
-              <div className="text-center text-muted-foreground">
-                <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>Start a conversation with your coach.</p>
-                <p className="text-sm mt-2">Try asking:</p>
-                <div className="mt-4 space-y-2">
+              <div className="text-center" style={{ color: 'var(--rc-ink-3)' }}>
+                <MessageSquare className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--rc-ink-4)' }} />
+                <p className="font-medium text-sm">Start a conversation with your coach.</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--rc-ink-4)' }}>Try asking:</p>
+                <div className="mt-4 space-y-2 max-w-md mx-auto">
                   {[
                     'How should I adjust my easy run pace?',
                     'I have a busy week - can you reduce my training?',
@@ -264,7 +270,12 @@ export default function AskCoachPage() {
                     <button
                       key={example}
                       onClick={() => setInput(example)}
-                      className="block w-full text-sm px-4 py-2 rounded-lg bg-muted hover:bg-muted/80 transition-colors text-left"
+                      className="block w-full text-sm text-left px-4 py-2.5 rounded-xl transition-colors"
+                      style={{
+                        background: 'var(--rc-surface-2)',
+                        border: '1px solid var(--rc-line)',
+                        color: 'var(--rc-ink-2)',
+                      }}
                     >
                       {example}
                     </button>
@@ -277,24 +288,30 @@ export default function AskCoachPage() {
               {messages.map((message, index) => (
                 <div
                   key={index}
-                  className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'
-                    }`}
+                  className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   {message.role === 'assistant' && (
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-green-500 flex items-center justify-center shrink-0">
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                      style={{ background: 'linear-gradient(135deg, var(--rc-blue), var(--rc-good))' }}
+                    >
                       <Bot className="w-4 h-4 text-white" />
                     </div>
                   )}
                   <div
-                    className={`max-w-[80%] rounded-2xl px-4 py-3 ${message.role === 'user'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-muted'
-                      }`}
+                    className="max-w-[80%] rounded-2xl px-4 py-3"
+                    style={{
+                      background: message.role === 'user' ? 'var(--rc-blue)' : 'var(--rc-surface-2)',
+                      color: message.role === 'user' ? '#fff' : 'var(--rc-ink)',
+                    }}
                   >
                     <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                   </div>
                   {message.role === 'user' && (
-                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                      style={{ background: 'var(--rc-surface-2)', color: 'var(--rc-ink-3)' }}
+                    >
                       <User className="w-4 h-4" />
                     </div>
                   )}
@@ -302,14 +319,17 @@ export default function AskCoachPage() {
               ))}
               {loading && (
                 <div className="flex gap-3 justify-start">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-green-500 flex items-center justify-center shrink-0">
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                    style={{ background: 'linear-gradient(135deg, var(--rc-blue), var(--rc-good))' }}
+                  >
                     <Bot className="w-4 h-4 text-white" />
                   </div>
-                  <div className="bg-muted rounded-2xl px-4 py-3">
+                  <div className="rounded-2xl px-4 py-3" style={{ background: 'var(--rc-surface-2)' }}>
                     <div className="flex gap-1">
-                      <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '300ms' }} />
+                      <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: 'var(--rc-ink-4)', animationDelay: '0ms' }} />
+                      <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: 'var(--rc-ink-4)', animationDelay: '150ms' }} />
+                      <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: 'var(--rc-ink-4)', animationDelay: '300ms' }} />
                     </div>
                   </div>
                 </div>
@@ -317,17 +337,22 @@ export default function AskCoachPage() {
               <div ref={messagesEndRef} />
             </>
           )}
-        </CardContent>
+        </div>
 
         {/* Input Area */}
-        <div className="border-t border-border/50 p-4">
+        <div className="p-4" style={{ borderTop: '1px solid var(--rc-line)' }}>
           <div className="flex gap-2">
-            <Textarea
+            <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask your coach..."
               rows={1}
-              className="resize-none coach-input-focus"
+              className="flex-1 px-4 py-2.5 rounded-xl text-sm resize-none focus:outline-none focus:ring-2"
+              style={{
+                background: 'var(--rc-surface-2)',
+                border: '1px solid var(--rc-line)',
+                color: 'var(--rc-ink)',
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -335,17 +360,18 @@ export default function AskCoachPage() {
                 }
               }}
             />
-            <Button
+            <button
               onClick={handleSend}
               disabled={!input.trim() || loading}
-              className="btn-gradient-primary shrink-0 coach-button-accessible"
+              className="w-10 h-10 rounded-full grid place-items-center shrink-0 transition-colors disabled:opacity-40"
+              style={{ background: 'var(--rc-blue)', color: '#fff' }}
               aria-label="Send message"
             >
               <Send className="w-4 h-4" />
-            </Button>
+            </button>
           </div>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

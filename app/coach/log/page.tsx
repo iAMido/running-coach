@@ -1,11 +1,7 @@
 'use client';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
-import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Slider } from '@/components/ui/slider';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ClipboardList, CheckCircle, Save, Activity, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
@@ -69,7 +65,6 @@ export default function LogRunsPage() {
 
       if (response.ok) {
         setSubmitted(true);
-        // Reset form
         setRating([5]);
         setEffort([5]);
         setFeeling('');
@@ -87,7 +82,6 @@ export default function LogRunsPage() {
 
   const handleRunSelect = (runId: string) => {
     setSelectedRun(runId);
-    // On mobile, open the sheet
     if (window.innerWidth < 1024) {
       setMobileSheetOpen(true);
     }
@@ -98,175 +92,199 @@ export default function LogRunsPage() {
       {/* Rating */}
       <div className="space-y-3">
         <div className="flex justify-between items-center">
-          <label className="text-sm font-medium">Overall Rating</label>
-          <span className="metric-value text-sm font-bold">{rating[0]}/10</span>
+          <label className="text-sm font-medium" style={{ color: 'var(--rc-ink)' }}>Overall Rating</label>
+          <span
+            className="rc-mono text-[12px] font-semibold px-2.5 py-1 rounded-full"
+            style={{ background: 'var(--rc-blue-soft)', color: 'var(--rc-blue-deep)' }}
+          >
+            {rating[0]}/10
+          </span>
         </div>
-        <Slider
-          value={rating}
-          onValueChange={setRating}
-          max={10}
-          min={1}
-          step={1}
-          className="coach-slider touch-target-min"
-        />
+        <Slider value={rating} onValueChange={setRating} max={10} min={1} step={1} />
       </div>
 
       {/* Effort */}
       <div className="space-y-3">
         <div className="flex justify-between items-center">
-          <label className="text-sm font-medium">Effort Level (RPE)</label>
-          <span className="metric-value text-sm font-bold">{effort[0]}/10</span>
+          <label className="text-sm font-medium" style={{ color: 'var(--rc-ink)' }}>Effort Level (RPE)</label>
+          <span
+            className="rc-mono text-[12px] font-semibold px-2.5 py-1 rounded-full"
+            style={{ background: 'var(--rc-blue-soft)', color: 'var(--rc-blue-deep)' }}
+          >
+            {effort[0]}/10
+          </span>
         </div>
-        <Slider
-          value={effort}
-          onValueChange={setEffort}
-          max={10}
-          min={1}
-          step={1}
-          className="coach-slider touch-target-min"
-        />
+        <Slider value={effort} onValueChange={setEffort} max={10} min={1} step={1} />
       </div>
 
-      {/* Feeling */}
+      {/* Feeling — pill buttons */}
       <div className="space-y-3">
-        <label className="text-sm font-medium">How did you feel?</label>
-        <Select value={feeling} onValueChange={setFeeling}>
-          <SelectTrigger className="coach-select-trigger">
-            <SelectValue placeholder="Select feeling..." />
-          </SelectTrigger>
-          <SelectContent>
-            {feelingOptions.map((opt) => (
-              <SelectItem key={opt} value={opt.toLowerCase()}>
-                {opt}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <label className="text-sm font-medium" style={{ color: 'var(--rc-ink)' }}>How did you feel?</label>
+        <div className="flex flex-wrap gap-2">
+          {feelingOptions.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => setFeeling(opt.toLowerCase())}
+              className="rc-mono px-3.5 py-[7px] rounded-full text-[11px] font-medium transition-colors"
+              style={{
+                background: feeling === opt.toLowerCase() ? 'var(--rc-ink)' : 'var(--rc-surface-2)',
+                color: feeling === opt.toLowerCase() ? '#fff' : 'var(--rc-ink-3)',
+                border: `1px solid ${feeling === opt.toLowerCase() ? 'var(--rc-ink)' : 'var(--rc-line)'}`,
+                letterSpacing: '0.06em',
+              }}
+            >
+              {opt.toUpperCase()}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Comment */}
       <div className="space-y-3">
-        <label className="text-sm font-medium">Notes (optional)</label>
-        <Textarea
+        <label className="text-sm font-medium" style={{ color: 'var(--rc-ink)' }}>Notes (optional)</label>
+        <textarea
           value={comment}
           onChange={(e) => setComment(e.target.value)}
           placeholder="Any notes about the run..."
           rows={3}
-          className="coach-input-focus"
+          className="w-full px-4 py-3 rounded-xl text-sm resize-none focus:outline-none focus:ring-2"
+          style={{
+            background: 'var(--rc-surface-2)',
+            border: '1px solid var(--rc-line)',
+            color: 'var(--rc-ink)',
+          }}
         />
       </div>
 
       {/* Submit */}
-      <Button
+      <button
         onClick={handleSubmit}
-        className="w-full btn-gradient-primary coach-button-accessible"
         disabled={!selectedRun || submitting}
+        className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-full text-sm font-semibold transition-all disabled:opacity-50"
+        style={{ background: 'var(--rc-blue)', color: '#fff' }}
       >
-        {submitted ? (
-          <CheckCircle className="w-4 h-4 mr-2" />
-        ) : (
-          <Save className="w-4 h-4 mr-2" />
-        )}
+        {submitted ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
         {submitting ? 'Saving...' : submitted ? 'Saved!' : 'Save Feedback'}
-      </Button>
+      </button>
     </div>
   );
 
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-48" style={{ background: 'rgba(14,15,12,0.06)' }} />
+        <Skeleton className="h-10 w-full" style={{ background: 'rgba(14,15,12,0.06)' }} />
+        {[...Array(6)].map((_, i) => (
+          <Skeleton key={i} className="h-16 w-full" style={{ background: 'rgba(14,15,12,0.06)' }} />
+        ))}
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6 md:space-y-8">
+    <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="coach-heading text-2xl md:text-3xl tracking-tight">Log Runs</h1>
-        <p className="text-muted-foreground mt-1 md:mt-2 text-sm md:text-base">
+        <div className="rc-kicker flex items-center gap-2.5 mb-2">
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--rc-blue)' }} />
+          LOG RUNS
+        </div>
+        <h1
+          className="text-[36px] md:text-[44px] font-bold leading-[1.05]"
+          style={{ letterSpacing: '-0.03em', color: 'var(--rc-ink)' }}
+        >
+          Run feedback,{' '}
+          <span
+            className="font-normal italic"
+            style={{ fontFamily: 'var(--font-serif, Georgia, serif)', color: 'var(--rc-ink-2)' }}
+          >
+            post-run.
+          </span>
+        </h1>
+        <p className="mt-2 text-sm" style={{ color: 'var(--rc-ink-3)' }}>
           Record your post-run feedback and ratings.
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-5 lg:grid-cols-2">
         {/* Run Selector */}
-        <Card className="coach-card lg:row-span-2">
-          <CardHeader>
-            <CardTitle className="coach-heading text-xl flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <ClipboardList className="w-4 h-4 text-primary" />
-              </div>
-              Select Run
-            </CardTitle>
-            <CardDescription>Choose a recent run to log feedback for</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="space-y-2">
-                {[...Array(8)].map((_, i) => (
-                  <Skeleton key={i} className="h-16 w-full rounded-lg" />
-                ))}
-              </div>
-            ) : runs.length > 0 ? (
-              <div className="scrollable-list space-y-2 pr-2" style={{ maxHeight: '500px' }}>
-                {runs.map((run) => (
+        <div className="rc-card p-0 overflow-hidden lg:row-span-2">
+          <div className="flex items-center justify-between px-6 pt-5 pb-3.5" style={{ borderBottom: '1px solid var(--rc-line)' }}>
+            <div>
+              <div className="rc-kicker mb-1">Select a run</div>
+              <h3 className="text-[18px] font-bold" style={{ letterSpacing: '-0.015em', color: 'var(--rc-ink)' }}>Recent runs</h3>
+            </div>
+            <div className="p-2.5 rounded-xl" style={{ background: 'var(--rc-blue-soft)', color: 'var(--rc-blue-deep)' }}>
+              <ClipboardList className="w-4 h-4" />
+            </div>
+          </div>
+          {runs.length > 0 ? (
+            <div className="overflow-y-auto" style={{ maxHeight: '500px' }}>
+              {runs.map((run, idx) => (
+                <div
+                  key={run.id}
+                  onClick={() => handleRunSelect(run.id)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === 'Enter' && handleRunSelect(run.id)}
+                  className="grid items-center gap-4 px-6 py-4 transition-colors cursor-pointer"
+                  style={{
+                    gridTemplateColumns: '36px 1fr auto',
+                    borderBottom: '1px solid var(--rc-line)',
+                    background: selectedRun === run.id ? 'var(--rc-blue-soft)' : 'transparent',
+                  }}
+                >
                   <div
-                    key={run.id}
-                    onClick={() => handleRunSelect(run.id)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => e.key === 'Enter' && handleRunSelect(run.id)}
-                    className={`run-list-item flex items-center justify-between cursor-pointer touch-target-min ${
-                      selectedRun === run.id ? 'selected' : ''
-                    }`}
+                    className="w-9 h-9 rounded-[10px] grid place-items-center"
+                    style={{
+                      background: selectedRun === run.id ? 'var(--rc-blue)' : 'oklch(0.96 0.04 240)',
+                      color: selectedRun === run.id ? '#fff' : 'var(--rc-blue-deep)',
+                    }}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2.5 rounded-xl transition-colors ${
-                        selectedRun === run.id
-                          ? 'bg-gradient-to-br from-primary/30 to-secondary/30'
-                          : 'bg-gradient-to-br from-primary/15 to-secondary/15'
-                      }`}>
-                        <Activity className="w-4 h-4 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-semibold">{run.workout_name || 'Run'}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(run.date).toLocaleDateString('en-US', {
-                            weekday: 'short',
-                            month: 'short',
-                            day: 'numeric',
-                          })}
-                        </p>
-                      </div>
+                    <Activity className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-[14.5px] font-semibold" style={{ letterSpacing: '-0.005em', color: 'var(--rc-ink)' }}>
+                      {run.workout_name || 'Run'}
                     </div>
-                    <div className="text-right">
-                      <p className="metric-value text-lg font-bold">{run.distance_km.toFixed(1)} km</p>
-                      <p className="text-sm text-muted-foreground font-mono">{run.avg_pace_str || '-'}</p>
+                    <div className="rc-mono text-[11px] uppercase mt-0.5" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.06em' }}>
+                      {new Date(run.date).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()} · {new Date(run.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()}
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="empty-state">
-                <ClipboardList className="empty-state-icon" />
-                <p className="font-medium">No runs available to log</p>
-                <p className="text-sm mt-1">
-                  Sync from Strava to see your recent runs.
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  <div className="text-right">
+                    <div className="rc-mono font-semibold text-[16px]" style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--rc-ink)' }}>
+                      {run.distance_km.toFixed(1)}<span className="text-[11px] font-medium ml-0.5" style={{ color: 'var(--rc-ink-3)' }}>km</span>
+                    </div>
+                    <div className="rc-mono text-[12px]" style={{ color: 'var(--rc-ink-3)' }}>{run.avg_pace_str || '-'}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-16" style={{ color: 'var(--rc-ink-3)' }}>
+              <ClipboardList className="w-10 h-10 mb-3" style={{ color: 'var(--rc-ink-4)' }} />
+              <p className="text-sm font-medium">No runs available to log</p>
+              <p className="text-xs mt-1">Sync from Strava to see your recent runs.</p>
+            </div>
+          )}
+        </div>
 
-        {/* Feedback Form - Desktop Only */}
-        <Card className="coach-card hidden lg:block">
-          <CardHeader>
-            <CardTitle className="coach-heading text-xl flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-secondary/10">
-                <Save className="w-4 h-4 text-secondary" />
-              </div>
-              Run Feedback
-            </CardTitle>
-            <CardDescription>How did the run feel?</CardDescription>
-          </CardHeader>
-          <CardContent>
+        {/* Feedback Form — Desktop */}
+        <div className="rc-card p-0 overflow-hidden hidden lg:block">
+          <div className="flex items-center justify-between px-6 pt-5 pb-3.5" style={{ borderBottom: '1px solid var(--rc-line)' }}>
+            <div>
+              <div className="rc-kicker mb-1">Feedback</div>
+              <h3 className="text-[18px] font-bold" style={{ letterSpacing: '-0.015em', color: 'var(--rc-ink)' }}>How did it feel?</h3>
+            </div>
+            <div className="p-2.5 rounded-xl" style={{ background: 'var(--rc-good-soft)', color: 'oklch(0.42 0.10 150)' }}>
+              <Save className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="p-6">
             <FeedbackFormContent />
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
       {/* Mobile Feedback Sheet */}
@@ -275,14 +293,14 @@ export default function LogRunsPage() {
           <SheetHeader className="pb-4">
             <div className="flex items-center justify-between">
               <SheetTitle className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-secondary/10">
-                  <Save className="w-4 h-4 text-secondary" />
+                <div className="p-2 rounded-xl" style={{ background: 'var(--rc-good-soft)', color: 'oklch(0.42 0.10 150)' }}>
+                  <Save className="w-4 h-4" />
                 </div>
-                Run Feedback
+                <span style={{ color: 'var(--rc-ink)' }}>Run Feedback</span>
               </SheetTitle>
             </div>
             {selectedRun && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm" style={{ color: 'var(--rc-ink-3)' }}>
                 {runs.find(r => r.id === selectedRun)?.workout_name || 'Run'} - {' '}
                 {runs.find(r => r.id === selectedRun)?.distance_km?.toFixed(1)} km
               </p>

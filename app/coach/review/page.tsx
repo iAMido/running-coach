@@ -1,11 +1,7 @@
 'use client';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Slider } from '@/components/ui/slider';
-import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
+import { Slider } from '@/components/ui/slider';
 import { Calendar, Brain, Activity, TrendingUp, Wand2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { Run, TrainingPlan } from '@/lib/db/types';
@@ -22,7 +18,6 @@ export default function WeeklyReviewPage() {
   const [weeklyRuns, setWeeklyRuns] = useState<Run[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // Plan adjustment state
   const [activePlan, setActivePlan] = useState<TrainingPlan | null>(null);
   const [adjustmentRequest, setAdjustmentRequest] = useState('');
   const [adjusting, setAdjusting] = useState(false);
@@ -99,10 +94,9 @@ export default function WeeklyReviewPage() {
   const totalDistance = weeklyRuns.reduce((sum, run) => sum + (run.distance_km || 0), 0);
   const totalDuration = weeklyRuns.reduce((sum, run) => sum + (run.duration_min || 0), 0);
 
-  // Week starts on Sunday
   const getWeekDateRange = (): string => {
     const now = new Date();
-    const dayOfWeek = now.getDay(); // 0 = Sunday
+    const dayOfWeek = now.getDay();
     const sunday = new Date(now);
     sunday.setDate(now.getDate() - dayOfWeek);
     const saturday = new Date(sunday);
@@ -110,7 +104,6 @@ export default function WeeklyReviewPage() {
     return `${sunday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${saturday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
   };
 
-  // Handle plan adjustment
   const handleAdjustPlan = async () => {
     if (!activePlan) return;
 
@@ -147,7 +140,6 @@ export default function WeeklyReviewPage() {
         planUpdated: data.planUpdated,
       });
 
-      // Refresh the plan data
       if (data.planUpdated) {
         fetchActivePlan();
       }
@@ -162,163 +154,162 @@ export default function WeeklyReviewPage() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="coach-heading text-2xl md:text-3xl tracking-tight">Weekly Review</h1>
-        <p className="text-muted-foreground mt-1 md:mt-2 text-sm md:text-base">
-          Reflect on your training week and get AI-powered insights.
+        <div className="rc-kicker flex items-center gap-2.5 mb-2">
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--rc-blue)' }} />
+          WEEKLY REVIEW
+        </div>
+        <h1
+          className="text-[36px] md:text-[44px] font-bold leading-[1.05]"
+          style={{ letterSpacing: '-0.03em', color: 'var(--rc-ink)' }}
+        >
+          Reflect on{' '}
+          <span className="font-normal italic" style={{ fontFamily: 'var(--font-serif, Georgia, serif)', color: 'var(--rc-ink-2)' }}>
+            this week.
+          </span>
+        </h1>
+        <p className="mt-2 text-sm" style={{ color: 'var(--rc-ink-3)' }}>
+          Rate your training week and get AI-powered insights.
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-5 lg:grid-cols-2">
         {/* This Week's Runs */}
-        <Card className="coach-card">
-          <CardHeader>
-            <CardTitle className="coach-heading text-xl flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Calendar className="w-4 h-4 text-primary" />
-              </div>
-              This Week&apos;s Runs
-            </CardTitle>
-            <CardDescription>{getWeekDateRange()}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {runsLoading ? (
-              <div className="space-y-2">
-                {[...Array(3)].map((_, i) => (
-                  <Skeleton key={i} className="h-16 w-full" />
+        <div className="rc-card p-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 pt-5 pb-3.5" style={{ borderBottom: '1px solid var(--rc-line)' }}>
+            <div>
+              <div className="rc-kicker mb-1">{getWeekDateRange()}</div>
+              <h3 className="text-[18px] font-bold" style={{ letterSpacing: '-0.015em', color: 'var(--rc-ink)' }}>This week&apos;s runs</h3>
+            </div>
+            <div className="p-2.5 rounded-xl" style={{ background: 'var(--rc-blue-soft)', color: 'var(--rc-blue-deep)' }}>
+              <Calendar className="w-4 h-4" />
+            </div>
+          </div>
+
+          {runsLoading ? (
+            <div className="p-6 space-y-2">
+              {[...Array(3)].map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full" style={{ background: 'rgba(14,15,12,0.06)' }} />
+              ))}
+            </div>
+          ) : weeklyRuns.length > 0 ? (
+            <>
+              {/* Summary Stats */}
+              <div className="grid grid-cols-3 gap-3 px-6 pt-5 pb-4">
+                {[
+                  { label: 'RUNS', value: weeklyRuns.length, unit: '', accent: 'var(--rc-blue)' },
+                  { label: 'DISTANCE', value: totalDistance.toFixed(1), unit: 'km', accent: 'var(--rc-amber)' },
+                  { label: 'DURATION', value: Math.round(totalDuration), unit: 'min', accent: 'var(--rc-purple)' },
+                ].map((s) => (
+                  <div
+                    key={s.label}
+                    className="relative overflow-hidden rounded-xl p-4 text-center"
+                    style={{ background: 'var(--rc-surface-2)', border: '1px solid var(--rc-line)' }}
+                  >
+                    <span className="absolute left-0 top-0 bottom-0 w-[3px] rounded-r-[3px]" style={{ background: s.accent }} />
+                    <div className="rc-kicker mb-1.5">{s.label}</div>
+                    <div className="text-[22px] font-bold" style={{ letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', color: 'var(--rc-ink)' }}>
+                      {s.value}
+                      {s.unit && <span className="text-[11px] font-medium ml-1" style={{ color: 'var(--rc-ink-3)' }}>{s.unit}</span>}
+                    </div>
+                  </div>
                 ))}
               </div>
-            ) : weeklyRuns.length > 0 ? (
-              <>
-                {/* Summary Stats */}
-                <div className="grid grid-cols-3 gap-4 mb-4 p-4 bg-gradient-to-r from-blue-500/5 to-green-500/5 rounded-xl border border-border/50">
-                  <div className="text-center">
-                    <p className="metric-value text-2xl">{weeklyRuns.length}</p>
-                    <p className="metric-label text-xs">Runs</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="metric-value text-2xl">{totalDistance.toFixed(1)}</p>
-                    <p className="metric-label text-xs">km</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="metric-value text-2xl">{Math.round(totalDuration)}</p>
-                    <p className="metric-label text-xs">min</p>
-                  </div>
-                </div>
 
-                {/* Run List */}
-                <div className="space-y-2">
-                  {weeklyRuns.map((run) => (
-                    <div
-                      key={run.id}
-                      className="run-list-item flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20">
-                          <Activity className="w-4 h-4 text-primary" />
-                        </div>
-                        <div>
-                          <p className="font-semibold text-sm">{run.workout_name || run.run_type || 'Run'}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(run.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="metric-value text-sm">{run.distance_km?.toFixed(1)} km</p>
-                        <p className="text-xs text-muted-foreground font-mono">{run.avg_pace_str || '-'}</p>
-                      </div>
+              {/* Run List */}
+              {weeklyRuns.map((run, idx) => (
+                <div
+                  key={run.id}
+                  className="grid items-center gap-4 px-6 py-3.5"
+                  style={{
+                    gridTemplateColumns: '36px 1fr auto',
+                    borderTop: '1px solid var(--rc-line)',
+                  }}
+                >
+                  <div className="w-9 h-9 rounded-[10px] grid place-items-center" style={{ background: 'oklch(0.96 0.04 240)', color: 'var(--rc-blue-deep)' }}>
+                    <Activity className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-[14px] font-semibold" style={{ letterSpacing: '-0.005em', color: 'var(--rc-ink)' }}>
+                      {run.workout_name || run.run_type || 'Run'}
                     </div>
-                  ))}
+                    <div className="rc-mono text-[11px] uppercase mt-0.5" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.06em' }}>
+                      {new Date(run.date).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()} · {new Date(run.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="rc-mono font-semibold text-[15px]" style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--rc-ink)' }}>
+                      {run.distance_km?.toFixed(1)}<span className="text-[11px] font-medium ml-0.5" style={{ color: 'var(--rc-ink-3)' }}>km</span>
+                    </div>
+                    <div className="rc-mono text-[11px]" style={{ color: 'var(--rc-ink-4)' }}>{run.avg_pace_str || '-'}</div>
+                  </div>
                 </div>
-              </>
-            ) : (
-              <div className="empty-state">
-                <Calendar className="empty-state-icon" />
-                <p className="font-medium">No runs this week yet</p>
-                <p className="text-sm mt-1">
-                  Sync from Strava or log a run manually.
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              ))}
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-16" style={{ color: 'var(--rc-ink-3)' }}>
+              <Calendar className="w-10 h-10 mb-3" style={{ color: 'var(--rc-ink-4)' }} />
+              <p className="text-sm font-medium">No runs this week yet</p>
+              <p className="text-xs mt-1">Sync from Strava or log a run manually.</p>
+            </div>
+          )}
+        </div>
 
         {/* Weekly Check-in Form */}
-        <Card className="coach-card">
-          <CardHeader>
-            <CardTitle className="coach-heading text-xl flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-secondary/10">
-                <TrendingUp className="w-4 h-4 text-secondary" />
-              </div>
-              Weekly Check-in
-            </CardTitle>
-            <CardDescription>Rate your week on each metric (1-10)</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Sliders - 2 column layout */}
+        <div className="rc-card p-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 pt-5 pb-3.5" style={{ borderBottom: '1px solid var(--rc-line)' }}>
+            <div>
+              <div className="rc-kicker mb-1">Check-in</div>
+              <h3 className="text-[18px] font-bold" style={{ letterSpacing: '-0.015em', color: 'var(--rc-ink)' }}>Weekly check-in</h3>
+            </div>
+            <div className="p-2.5 rounded-xl" style={{ background: 'var(--rc-good-soft)', color: 'oklch(0.42 0.10 150)' }}>
+              <TrendingUp className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="p-6 space-y-6">
+            {/* Sliders */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Left Column */}
               <div className="space-y-6">
                 {/* Overall Feeling */}
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <label className="text-sm font-medium">Overall Feeling</label>
-                    <span className="metric-value text-sm font-bold bg-primary/10 px-2 py-1 rounded">{overallFeeling[0]}/10</span>
+                    <label className="text-sm font-medium" style={{ color: 'var(--rc-ink)' }}>Overall Feeling</label>
+                    <span className="rc-mono text-[12px] font-semibold px-2.5 py-1 rounded-full" style={{ background: 'var(--rc-blue-soft)', color: 'var(--rc-blue-deep)' }}>
+                      {overallFeeling[0]}/10
+                    </span>
                   </div>
-                  <Slider
-                    value={overallFeeling}
-                    onValueChange={setOverallFeeling}
-                    max={10}
-                    min={1}
-                    step={1}
-                    className="coach-slider touch-target-min"
-                  />
-                  <div className="flex justify-between text-xs md:text-sm text-muted-foreground">
-                    <span>Poor</span>
-                    <span>Excellent</span>
+                  <Slider value={overallFeeling} onValueChange={setOverallFeeling} max={10} min={1} step={1} />
+                  <div className="flex justify-between text-[11px]" style={{ color: 'var(--rc-ink-4)' }}>
+                    <span>Poor</span><span>Excellent</span>
                   </div>
                 </div>
 
                 {/* Sleep Quality */}
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <label className="text-sm font-medium">Sleep Quality</label>
-                    <span className="metric-value text-sm font-bold bg-primary/10 px-2 py-1 rounded">{sleepQuality[0]}/10</span>
+                    <label className="text-sm font-medium" style={{ color: 'var(--rc-ink)' }}>Sleep Quality</label>
+                    <span className="rc-mono text-[12px] font-semibold px-2.5 py-1 rounded-full" style={{ background: 'var(--rc-blue-soft)', color: 'var(--rc-blue-deep)' }}>
+                      {sleepQuality[0]}/10
+                    </span>
                   </div>
-                  <Slider
-                    value={sleepQuality}
-                    onValueChange={setSleepQuality}
-                    max={10}
-                    min={1}
-                    step={1}
-                    className="coach-slider touch-target-min"
-                  />
-                  <div className="flex justify-between text-xs md:text-sm text-muted-foreground">
-                    <span>Poor</span>
-                    <span>Excellent</span>
+                  <Slider value={sleepQuality} onValueChange={setSleepQuality} max={10} min={1} step={1} />
+                  <div className="flex justify-between text-[11px]" style={{ color: 'var(--rc-ink-4)' }}>
+                    <span>Poor</span><span>Excellent</span>
                   </div>
                 </div>
               </div>
 
-              {/* Right Column */}
               <div className="space-y-6">
                 {/* Stress Level */}
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <label className="text-sm font-medium">Stress Level</label>
-                    <span className="metric-value text-sm font-bold bg-primary/10 px-2 py-1 rounded">{stressLevel[0]}/10</span>
+                    <label className="text-sm font-medium" style={{ color: 'var(--rc-ink)' }}>Stress Level</label>
+                    <span className="rc-mono text-[12px] font-semibold px-2.5 py-1 rounded-full" style={{ background: 'var(--rc-blue-soft)', color: 'var(--rc-blue-deep)' }}>
+                      {stressLevel[0]}/10
+                    </span>
                   </div>
-                  <Slider
-                    value={stressLevel}
-                    onValueChange={setStressLevel}
-                    max={10}
-                    min={1}
-                    step={1}
-                    className="coach-slider touch-target-min"
-                  />
-                  <div className="flex justify-between text-xs md:text-sm text-muted-foreground">
-                    <span>Low</span>
-                    <span>High</span>
+                  <Slider value={stressLevel} onValueChange={setStressLevel} max={10} min={1} step={1} />
+                  <div className="flex justify-between text-[11px]" style={{ color: 'var(--rc-ink-4)' }}>
+                    <span>Low</span><span>High</span>
                   </div>
                 </div>
               </div>
@@ -326,155 +317,158 @@ export default function WeeklyReviewPage() {
 
             {/* Injury Notes */}
             <div className="space-y-3">
-              <label className="text-sm font-medium">Injuries / Niggles</label>
-              <Textarea
+              <label className="text-sm font-medium" style={{ color: 'var(--rc-ink)' }}>Injuries / Niggles</label>
+              <textarea
                 value={injuryNotes}
                 onChange={(e) => setInjuryNotes(e.target.value)}
                 placeholder="Any pain or discomfort..."
                 rows={2}
+                className="w-full px-4 py-3 rounded-xl text-sm resize-none focus:outline-none focus:ring-2"
+                style={{ background: 'var(--rc-surface-2)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink)' }}
               />
             </div>
 
             {/* Achievements */}
             <div className="space-y-3">
-              <label className="text-sm font-medium">Achievements</label>
-              <Textarea
+              <label className="text-sm font-medium" style={{ color: 'var(--rc-ink)' }}>Achievements</label>
+              <textarea
                 value={achievements}
                 onChange={(e) => setAchievements(e.target.value)}
                 placeholder="What went well this week..."
                 rows={2}
+                className="w-full px-4 py-3 rounded-xl text-sm resize-none focus:outline-none focus:ring-2"
+                style={{ background: 'var(--rc-surface-2)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink)' }}
               />
             </div>
 
             {error && (
-              <div className="p-3 rounded-lg bg-red-500/10 text-red-500 text-sm border border-red-500/20">
+              <div className="p-3 rounded-xl text-sm" style={{ background: 'oklch(0.95 0.05 25)', color: 'var(--rc-bad)', border: '1px solid oklch(0.90 0.08 25)' }}>
                 {error}
               </div>
             )}
 
             {/* Analyze Button */}
-            <Button
+            <button
               onClick={handleAnalyze}
-              className="w-full btn-gradient-primary coach-button-accessible"
               disabled={loading}
+              className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-full text-sm font-semibold transition-all disabled:opacity-50"
+              style={{ background: 'var(--rc-blue)', color: '#fff' }}
             >
-              <div className={`ai-icon-container ${loading ? 'active' : ''}`}>
-                <Brain className="w-4 h-4 mr-2" />
-              </div>
+              <Brain className={`w-4 h-4 ${loading ? 'animate-pulse' : ''}`} />
               {loading ? 'Analyzing...' : 'Get AI Analysis'}
-            </Button>
-          </CardContent>
-        </Card>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* AI Analysis */}
       {(aiAnalysis || loading) && (
-        <Card className="coach-card">
-          <CardHeader>
-            <CardTitle className="coach-heading text-xl flex items-center gap-2">
-              <div className={`ai-icon-container p-2 rounded-lg bg-gradient-to-br from-primary/15 to-secondary/15 ${loading ? 'active ai-pulse' : ''}`}>
-                <Brain className="w-5 h-5 text-primary" />
-              </div>
-              Coach&apos;s Analysis
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+        <div
+          className="relative rounded-[28px] overflow-hidden"
+          style={{ background: 'var(--rc-ink)', color: '#FBFAF6' }}
+        >
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: 'radial-gradient(700px 320px at 105% 110%, oklch(0.45 0.16 245 / 0.55), transparent 60%)',
+            }}
+          />
+          <div className="relative p-8">
+            <div className="rc-kicker mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>
+              <Brain className={`w-4 h-4 inline mr-2 ${loading ? 'animate-pulse' : ''}`} />
+              COACH&apos;S ANALYSIS
+            </div>
             {loading ? (
               <div className="space-y-3">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-4 w-5/6" />
-                <Skeleton className="h-4 w-2/3" />
-                <Skeleton className="h-4 w-4/5" />
+                {[...Array(5)].map((_, i) => (
+                  <Skeleton key={i} className="h-4" style={{ background: 'rgba(255,255,255,0.08)', width: `${90 - i * 10}%` }} />
+                ))}
               </div>
             ) : (
-              <div className="prose dark:prose-invert max-w-none">
-                <div className="whitespace-pre-wrap text-sm leading-relaxed bg-gradient-to-br from-primary/5 to-secondary/5 p-4 rounded-lg border border-border/50">{aiAnalysis}</div>
+              <div className="whitespace-pre-wrap text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.85)' }}>
+                {aiAnalysis}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
-      {/* Plan Adjustment Section */}
+      {/* Plan Adjustment */}
       {activePlan && (
-        <Card className="coach-card border-2 border-dashed border-primary/30">
-          <CardHeader>
-            <CardTitle className="coach-heading text-xl flex items-center gap-2">
-              <div className={`ai-icon-container p-2 rounded-lg bg-gradient-to-br from-amber-500/15 to-orange-500/15 ${adjusting ? 'active ai-pulse' : ''}`}>
-                <Wand2 className="w-5 h-5 text-amber-500" />
-              </div>
-              Adjust Training Plan
-            </CardTitle>
-            <CardDescription>
-              Based on your feedback, the AI coach can modify your remaining training weeks.
-              <br />
-              <Badge variant="outline" className="mt-2">
-                {activePlan.plan_type} - Week {activePlan.current_week_num} of {activePlan.duration_weeks}
-              </Badge>
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-3">
-              <label className="text-sm font-medium">Special Requests (Optional)</label>
-              <Textarea
-                value={adjustmentRequest}
-                onChange={(e) => setAdjustmentRequest(e.target.value)}
-                placeholder="e.g., 'I have a work trip next week, need lighter training' or 'Feeling strong, can we increase intensity?' or 'My knee is bothering me, reduce mileage'"
-                rows={3}
-              />
+        <div className="rc-card relative overflow-hidden p-6">
+          <span className="absolute left-0 top-0 bottom-0 w-[3px] rounded-r-[3px]" style={{ background: 'var(--rc-amber)' }} />
+          <div className="flex items-center gap-3 mb-4">
+            <div className={`p-2.5 rounded-xl ${adjusting ? 'animate-pulse' : ''}`} style={{ background: 'oklch(0.96 0.05 75)', color: 'oklch(0.50 0.13 75)' }}>
+              <Wand2 className="w-4 h-4" />
             </div>
+            <div>
+              <h3 className="text-[17px] font-bold" style={{ letterSpacing: '-0.015em', color: 'var(--rc-ink)' }}>Adjust Training Plan</h3>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--rc-ink-3)' }}>
+                <span className="rc-mono text-[10.5px] px-2 py-0.5 rounded-[5px] mr-2" style={{ background: 'oklch(0.96 0.05 75)', color: 'oklch(0.50 0.13 75)', letterSpacing: '0.06em' }}>
+                  {activePlan.plan_type} · WK {activePlan.current_week_num}/{activePlan.duration_weeks}
+                </span>
+                AI coach can modify your remaining weeks.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <textarea
+              value={adjustmentRequest}
+              onChange={(e) => setAdjustmentRequest(e.target.value)}
+              placeholder="e.g., 'I have a work trip next week, need lighter training'..."
+              rows={3}
+              className="w-full px-4 py-3 rounded-xl text-sm resize-none focus:outline-none focus:ring-2"
+              style={{ background: 'var(--rc-surface-2)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink)' }}
+            />
 
             {adjustmentError && (
-              <div className="p-3 rounded-lg bg-red-500/10 text-red-500 text-sm border border-red-500/20">
+              <div className="p-3 rounded-xl text-sm" style={{ background: 'oklch(0.95 0.05 25)', color: 'var(--rc-bad)' }}>
                 {adjustmentError}
               </div>
             )}
 
-            <Button
+            <button
               onClick={handleAdjustPlan}
-              className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
               disabled={adjusting}
+              className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-full text-sm font-semibold transition-all disabled:opacity-50"
+              style={{ background: 'var(--rc-amber)', color: '#fff' }}
             >
-              <Wand2 className="w-4 h-4 mr-2" />
+              <Wand2 className="w-4 h-4" />
               {adjusting ? 'Adjusting Plan...' : 'Adjust My Plan'}
-            </Button>
+            </button>
 
-            {/* Adjustment Result */}
             {adjustmentResult && (
-              <div className="space-y-4 mt-4 p-4 bg-gradient-to-br from-amber-500/5 to-orange-500/5 rounded-lg border border-amber-500/20">
+              <div className="space-y-3 p-4 rounded-xl" style={{ background: 'oklch(0.96 0.05 75)', border: '1px solid oklch(0.90 0.08 75)' }}>
                 {adjustmentResult.planUpdated && (
-                  <div className="flex items-center gap-2 text-green-600">
-                    <CheckCircle2 className="w-5 h-5" />
-                    <span className="font-semibold">Plan Updated Successfully!</span>
+                  <div className="flex items-center gap-2" style={{ color: 'var(--rc-good)' }}>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span className="font-semibold text-sm">Plan Updated!</span>
                   </div>
                 )}
-
                 {adjustmentResult.summary && (
                   <div>
-                    <h4 className="font-semibold mb-2">Summary</h4>
-                    <p className="text-sm text-muted-foreground">{adjustmentResult.summary}</p>
+                    <div className="rc-kicker mb-1.5">Summary</div>
+                    <p className="text-sm" style={{ color: 'var(--rc-ink-2)' }}>{adjustmentResult.summary}</p>
                   </div>
                 )}
-
                 {adjustmentResult.recommendations && adjustmentResult.recommendations.length > 0 && (
                   <div>
-                    <h4 className="font-semibold mb-2">Changes Made</h4>
-                    <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
+                    <div className="rc-kicker mb-1.5">Changes</div>
+                    <ul className="text-sm space-y-1" style={{ color: 'var(--rc-ink-2)' }}>
                       {adjustmentResult.recommendations.map((rec, i) => (
-                        <li key={i}>{rec}</li>
+                        <li key={i} className="flex gap-2"><span style={{ color: 'var(--rc-ink-4)' }}>·</span> {rec}</li>
                       ))}
                     </ul>
                   </div>
                 )}
-
                 {adjustmentResult.warnings && adjustmentResult.warnings.length > 0 && (
-                  <div className="p-3 bg-amber-500/10 rounded-lg">
-                    <div className="flex items-center gap-2 text-amber-600 mb-2">
-                      <AlertTriangle className="w-4 h-4" />
-                      <span className="font-semibold">Warnings</span>
+                  <div className="p-3 rounded-lg" style={{ background: 'oklch(0.95 0.06 75)' }}>
+                    <div className="flex items-center gap-2 mb-1.5" style={{ color: 'var(--rc-amber)' }}>
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      <span className="rc-kicker" style={{ color: 'var(--rc-amber)' }}>WARNINGS</span>
                     </div>
-                    <ul className="list-disc list-inside text-sm text-amber-700 dark:text-amber-400 space-y-1">
+                    <ul className="text-xs space-y-1" style={{ color: 'oklch(0.50 0.13 75)' }}>
                       {adjustmentResult.warnings.map((warn, i) => (
                         <li key={i}>{warn}</li>
                       ))}
@@ -483,48 +477,39 @@ export default function WeeklyReviewPage() {
                 )}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
-      {/* Weekly Trend */}
+      {/* Week Summary */}
       {weeklyRuns.length > 0 && (
-        <Card className="coach-card">
-          <CardHeader>
-            <CardTitle className="coach-heading text-xl flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <TrendingUp className="w-4 h-4 text-primary" />
+        <div>
+          <div className="rc-kicker mb-4">WEEK SUMMARY</div>
+          <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4">
+            {[
+              { label: 'Total runs', value: weeklyRuns.length, unit: '', accent: 'var(--rc-blue)' },
+              { label: 'Total distance', value: totalDistance.toFixed(1), unit: 'km', accent: 'var(--rc-good)' },
+              { label: 'Avg distance', value: (totalDistance / weeklyRuns.length).toFixed(1), unit: 'km', accent: 'var(--rc-purple)' },
+              {
+                label: 'Avg HR',
+                value: weeklyRuns.filter(r => r.avg_hr).length > 0
+                  ? Math.round(weeklyRuns.reduce((sum, r) => sum + (r.avg_hr || 0), 0) / weeklyRuns.filter(r => r.avg_hr).length)
+                  : '-',
+                unit: weeklyRuns.filter(r => r.avg_hr).length > 0 ? 'bpm' : '',
+                accent: 'var(--rc-bad)',
+              },
+            ].map((card) => (
+              <div key={card.label} className="rc-card relative overflow-hidden p-5">
+                <span className="absolute left-0 top-0 bottom-0 w-[3px] rounded-r-[3px]" style={{ background: card.accent }} />
+                <div className="rc-kicker mb-2">{card.label}</div>
+                <div className="text-[28px] font-bold" style={{ letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', color: 'var(--rc-ink)' }}>
+                  {card.value}
+                  {card.unit && <span className="text-[12px] font-medium ml-1" style={{ color: 'var(--rc-ink-3)' }}>{card.unit}</span>}
+                </div>
               </div>
-              Week Summary
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-3 md:gap-4 md:grid-cols-4">
-              <div className="text-center p-3 md:p-4 bg-gradient-to-br from-blue-500/5 to-green-500/5 rounded-xl border border-border/50">
-                <p className="metric-value text-2xl md:text-3xl">{weeklyRuns.length}</p>
-                <p className="metric-label text-xs md:text-sm">Total Runs</p>
-              </div>
-              <div className="text-center p-3 md:p-4 bg-gradient-to-br from-blue-500/5 to-green-500/5 rounded-xl border border-border/50">
-                <p className="metric-value text-2xl md:text-3xl">{totalDistance.toFixed(1)}</p>
-                <p className="metric-label text-xs md:text-sm">Total km</p>
-              </div>
-              <div className="text-center p-3 md:p-4 bg-gradient-to-br from-blue-500/5 to-green-500/5 rounded-xl border border-border/50">
-                <p className="metric-value text-2xl md:text-3xl">
-                  {weeklyRuns.length > 0 ? (totalDistance / weeklyRuns.length).toFixed(1) : 0}
-                </p>
-                <p className="metric-label text-xs md:text-sm">Avg Dist</p>
-              </div>
-              <div className="text-center p-3 md:p-4 bg-gradient-to-br from-blue-500/5 to-green-500/5 rounded-xl border border-border/50">
-                <p className="metric-value text-2xl md:text-3xl">
-                  {weeklyRuns.filter(r => r.avg_hr).length > 0
-                    ? Math.round(weeklyRuns.reduce((sum, r) => sum + (r.avg_hr || 0), 0) / weeklyRuns.filter(r => r.avg_hr).length)
-                    : '-'}
-                </p>
-                <p className="metric-label text-xs md:text-sm">Avg HR</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
