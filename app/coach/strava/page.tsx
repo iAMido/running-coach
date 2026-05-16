@@ -22,7 +22,7 @@ export default function StravaSyncPage() {
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [daysBack, setDaysBack] = useState('7');
-  const [syncResult, setSyncResult] = useState<{ success: boolean; count: number; lapsBackfilled: number; debug?: string[] } | null>(null);
+  const [syncResult, setSyncResult] = useState<{ success: boolean; count: number; lapsBackfilled: number } | null>(null);
 
   // File upload state
   const [uploading, setUploading] = useState(false);
@@ -80,7 +80,7 @@ export default function StravaSyncPage() {
       const data = await response.json();
 
       if (response.ok) {
-        setSyncResult({ success: true, count: data.newRunsCount || 0, lapsBackfilled: data.lapsBackfilledCount || 0, debug: data.debug });
+        setSyncResult({ success: true, count: data.newRunsCount || 0, lapsBackfilled: data.lapsBackfilledCount || 0 });
       } else {
         setSyncResult({ success: false, count: 0, lapsBackfilled: 0 });
       }
@@ -290,11 +290,6 @@ export default function StravaSyncPage() {
                   {syncResult.success
                     ? `Synced ${syncResult.count} new run${syncResult.count !== 1 ? 's' : ''}.${syncResult.lapsBackfilled > 0 ? ` Backfilled laps for ${syncResult.lapsBackfilled} existing run${syncResult.lapsBackfilled !== 1 ? 's' : ''}.` : ''}`
                     : 'There was an error syncing your runs. Please try again.'}
-                  {syncResult.debug && syncResult.debug.length > 0 && (
-                    <pre className="mt-2 text-xs whitespace-pre-wrap opacity-60" style={{ maxHeight: '200px', overflow: 'auto' }}>
-                      {syncResult.debug.join('\n')}
-                    </pre>
-                  )}
                 </AlertDescription>
               </Alert>
             )}
