@@ -31,10 +31,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { meal_type, ingredients, description } = body as {
+    const { meal_type, ingredients, description, eaten_at } = body as {
       meal_type: string;
       ingredients: IngredientInput[];
       description?: string;
+      eaten_at?: string;
     };
 
     if (!meal_type || !ingredients || !ingredients.length) {
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     const userId = profileRes.data.id;
     const mealId = randomUUID();
-    const now = new Date().toISOString();
+    const now = eaten_at && !isNaN(Date.parse(eaten_at)) ? new Date(eaten_at).toISOString() : new Date().toISOString();
 
     const totals = ingredients.reduce(
       (acc, ing) => ({

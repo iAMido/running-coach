@@ -48,7 +48,11 @@ interface AnalysisResult {
 }
 
 function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+  const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+  const nowStr = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); // HH:MM
   const [mealType, setMealType] = useState<string>('lunch');
+  const [mealDate, setMealDate] = useState(todayStr);
+  const [mealTime, setMealTime] = useState(nowStr);
   const [description, setDescription] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
@@ -129,11 +133,13 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
     setSubmitting(true);
     setError('');
     try {
+      const eaten_at = new Date(`${mealDate}T${mealTime}:00`).toISOString();
       const res = await fetch('/api/caltrack/meals/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           meal_type: mealType,
+          eaten_at,
           description,
           ingredients: analysis.ingredients.map((ing) => ({
             name_en: ing.name_en,
@@ -176,6 +182,39 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
         </div>
 
         <div className="p-5 space-y-4">
+          {/* Date & Time */}
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="ct-kicker block mb-2">DATE</label>
+              <input
+                type="date"
+                value={mealDate}
+                max={todayStr}
+                onChange={(e) => setMealDate(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 ct-mono"
+                style={{
+                  background: 'var(--ct-surface-2)',
+                  border: '1px solid var(--ct-line)',
+                  color: 'var(--ct-ink)',
+                }}
+              />
+            </div>
+            <div className="flex-1">
+              <label className="ct-kicker block mb-2">TIME</label>
+              <input
+                type="time"
+                value={mealTime}
+                onChange={(e) => setMealTime(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 ct-mono"
+                style={{
+                  background: 'var(--ct-surface-2)',
+                  border: '1px solid var(--ct-line)',
+                  color: 'var(--ct-ink)',
+                }}
+              />
+            </div>
+          </div>
+
           {/* Meal type */}
           <div>
             <label className="ct-kicker block mb-2">MEAL TYPE</label>
