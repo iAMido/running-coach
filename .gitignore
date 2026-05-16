@@ -54,3 +54,6 @@ nul
 
 # npm lock file (project uses bun)
 package-lock.json
+
+# Claude Code worktrees
+.claude/worktrees/
