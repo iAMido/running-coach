@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { callOpenRouter } from '@/lib/ai/openrouter';
 import {

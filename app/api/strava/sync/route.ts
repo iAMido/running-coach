@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { classifyRun } from '@/lib/utils/run-classifier';
@@ -60,7 +62,12 @@ export async function POST(request: NextRequest) {
       });
 
       if (!refreshResponse.ok) {
-        return NextResponse.json({ error: 'Failed to refresh token' }, { status: 500 });
+        const errorBody = await refreshResponse.text().catch(() => '');
+        if (refreshResponse.status === 401) {
+          await supabase.from('strava_tokens').delete().eq('user_id', userId);
+          return NextResponse.json({ error: 'Strava authorization expired. Please reconnect.' }, { status: 401 });
+        }
+        return NextResponse.json({ error: `Failed to refresh token (${refreshResponse.status}): ${errorBody}` }, { status: 500 });
       }
 
       const newTokens = await refreshResponse.json();

@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { generateEmbedding, formatEmbeddingForStorage, countTokens } from '@/lib/rag/embeddings';

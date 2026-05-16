@@ -4,12 +4,13 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
 
-// Server-side client with service role key - bypasses RLS for authenticated server operations
-// This should be used in all API routes where we've already verified the user via NextAuth
+// Use service role key, fall back to anon key only during build (no env vars available)
+const effectiveKey = supabaseServiceKey || supabaseAnonKey;
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const supabase: SupabaseClient<any> = createClient(
   supabaseUrl,
-  supabaseServiceKey || supabaseAnonKey,
+  effectiveKey,
   {
     auth: {
       autoRefreshToken: false,
