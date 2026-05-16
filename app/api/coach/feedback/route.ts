@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('run_feedback')
-      .select('*')
+      .select('*, run_id')
       .eq('user_id', userId)
       .gte('run_date', startDate.toISOString().split('T')[0])
       .order('run_date', { ascending: false });
@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
       .from('run_feedback')
       .insert({
         user_id: userId,
+        run_id: validation.data.run_id || null,
         run_date: validation.data.run_date,
         rating: validation.data.rating,
         effort_level: validation.data.effort_level,

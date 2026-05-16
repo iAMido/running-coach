@@ -69,6 +69,7 @@ export const chatRequestSchema = z.object({
 
 // Feedback validation
 export const runFeedbackSchema = z.object({
+  run_id: z.string().uuid().optional(),
   run_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   rating: rating.optional(),
   effort_level: rating.optional(),

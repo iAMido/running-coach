@@ -9,111 +9,31 @@ import type { Run } from '@/lib/db/types';
 
 const feelingOptions = ['Great', 'Good', 'Okay', 'Tired', 'Exhausted'];
 
-export default function LogRunsPage() {
-  const [runs, setRuns] = useState<Run[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [rating, setRating] = useState([5]);
-  const [effort, setEffort] = useState([5]);
-  const [feeling, setFeeling] = useState('');
-  const [preRunFeeling, setPreRunFeeling] = useState('');
-  const [followedPlan, setFollowedPlan] = useState('');
-  const [comment, setComment] = useState('');
-  const [selectedRun, setSelectedRun] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
-  const [loggedDates, setLoggedDates] = useState<Set<string>>(new Set());
+interface FeedbackFormProps {
+  rating: number[];
+  setRating: (v: number[]) => void;
+  effort: number[];
+  setEffort: (v: number[]) => void;
+  feeling: string;
+  setFeeling: (v: string) => void;
+  preRunFeeling: string;
+  setPreRunFeeling: (v: string) => void;
+  followedPlan: string;
+  setFollowedPlan: (v: string) => void;
+  comment: string;
+  setComment: (v: string) => void;
+  selectedRun: string;
+  submitting: boolean;
+  submitted: boolean;
+  onSubmit: () => void;
+}
 
-  useEffect(() => {
-    fetchRuns();
-    fetchLoggedDates();
-  }, []);
-
-  const fetchRuns = async () => {
-    try {
-      const response = await fetch('/api/coach/runs?limit=30');
-      const data = await response.json();
-      setRuns(data.runs || []);
-    } catch (error) {
-      console.error('Failed to fetch runs:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchLoggedDates = async () => {
-    try {
-      const response = await fetch('/api/coach/feedback?days=60');
-      const data = await response.json();
-      const dates = new Set<string>(
-        (data.feedback || []).map((f: { run_date: string }) => f.run_date)
-      );
-      setLoggedDates(dates);
-    } catch (error) {
-      console.error('Failed to fetch feedback:', error);
-    }
-  };
-
-  const getSelectedRunData = () => {
-    return runs.find(r => r.id === selectedRun);
-  };
-
-  const handleSubmit = async () => {
-    if (!selectedRun) return;
-
-    const runData = getSelectedRunData();
-    if (!runData) return;
-
-    setSubmitting(true);
-    setSubmitted(false);
-
-    try {
-      const response = await fetch('/api/coach/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          run_date: runData.date,
-          rating: rating[0],
-          effort_level: effort[0],
-          feeling,
-          comment,
-          followed_plan: followedPlan || undefined,
-          pre_run_feeling: preRunFeeling || undefined,
-        }),
-      });
-
-      if (response.ok) {
-        setSubmitted(true);
-        setRating([5]);
-        setEffort([5]);
-        setFeeling('');
-        setPreRunFeeling('');
-        setFollowedPlan('');
-        setComment('');
-        setMobileSheetOpen(false);
-        // Mark this date as logged
-        const runDate = runData.date.split('T')[0];
-        setLoggedDates(prev => new Set([...prev, runDate]));
-        setSelectedRun('');
-        setTimeout(() => setSubmitted(false), 3000);
-      }
-    } catch (error) {
-      console.error('Failed to submit feedback:', error);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const isLogged = (run: Run) => loggedDates.has(run.date.split('T')[0]);
-
-  const handleRunSelect = (runId: string) => {
-    setSelectedRun(runId);
-    if (window.innerWidth < 1024) {
-      setMobileSheetOpen(true);
-    }
-  };
-
-  const FeedbackFormContent = () => (
+function FeedbackFormContent({
+  rating, setRating, effort, setEffort, feeling, setFeeling,
+  preRunFeeling, setPreRunFeeling, followedPlan, setFollowedPlan,
+  comment, setComment, selectedRun, submitting, submitted, onSubmit,
+}: FeedbackFormProps) {
+  return (
     <div className="space-y-6">
       {/* Rating */}
       <div className="space-y-3">
@@ -245,7 +165,7 @@ export default function LogRunsPage() {
 
       {/* Submit */}
       <button
-        onClick={handleSubmit}
+        onClick={onSubmit}
         disabled={!selectedRun || submitting}
         className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-full text-sm font-semibold transition-all disabled:opacity-50"
         style={{ background: 'var(--rc-blue)', color: '#fff' }}
@@ -255,6 +175,119 @@ export default function LogRunsPage() {
       </button>
     </div>
   );
+}
+
+export default function LogRunsPage() {
+  const [runs, setRuns] = useState<Run[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [rating, setRating] = useState([5]);
+  const [effort, setEffort] = useState([5]);
+  const [feeling, setFeeling] = useState('');
+  const [preRunFeeling, setPreRunFeeling] = useState('');
+  const [followedPlan, setFollowedPlan] = useState('');
+  const [comment, setComment] = useState('');
+  const [selectedRun, setSelectedRun] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+  const [loggedRunIds, setLoggedRunIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    fetchRuns();
+    fetchLoggedRuns();
+  }, []);
+
+  const fetchRuns = async () => {
+    try {
+      const response = await fetch('/api/coach/runs?limit=30');
+      const data = await response.json();
+      setRuns(data.runs || []);
+    } catch (error) {
+      console.error('Failed to fetch runs:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchLoggedRuns = async () => {
+    try {
+      const response = await fetch('/api/coach/feedback?days=60');
+      const data = await response.json();
+      const ids = new Set<string>(
+        (data.feedback || [])
+          .filter((f: { run_id: string | null }) => f.run_id)
+          .map((f: { run_id: string }) => f.run_id)
+      );
+      setLoggedRunIds(ids);
+    } catch (error) {
+      console.error('Failed to fetch feedback:', error);
+    }
+  };
+
+  const getSelectedRunData = () => {
+    return runs.find(r => r.id === selectedRun);
+  };
+
+  const handleSubmit = async () => {
+    if (!selectedRun) return;
+
+    const runData = getSelectedRunData();
+    if (!runData) return;
+
+    setSubmitting(true);
+    setSubmitted(false);
+
+    try {
+      const response = await fetch('/api/coach/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          run_id: runData.id,
+          run_date: runData.date.split('T')[0],
+          rating: rating[0],
+          effort_level: effort[0],
+          feeling,
+          comment,
+          followed_plan: followedPlan || undefined,
+          pre_run_feeling: preRunFeeling || undefined,
+        }),
+      });
+
+      if (response.ok) {
+        setSubmitted(true);
+        setRating([5]);
+        setEffort([5]);
+        setFeeling('');
+        setPreRunFeeling('');
+        setFollowedPlan('');
+        setComment('');
+        setMobileSheetOpen(false);
+        setLoggedRunIds(prev => new Set([...prev, runData.id]));
+        setSelectedRun('');
+        setTimeout(() => setSubmitted(false), 3000);
+      }
+    } catch (error) {
+      console.error('Failed to submit feedback:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const isLogged = (run: Run) => loggedRunIds.has(run.id);
+
+  const handleRunSelect = (runId: string) => {
+    setSelectedRun(runId);
+    if (window.innerWidth < 1024) {
+      setMobileSheetOpen(true);
+    }
+  };
+
+  const formProps: FeedbackFormProps = {
+    rating, setRating, effort, setEffort, feeling, setFeeling,
+    preRunFeeling, setPreRunFeeling, followedPlan, setFollowedPlan,
+    comment, setComment, selectedRun, submitting, submitted,
+    onSubmit: handleSubmit,
+  };
 
   if (loading) {
     return (
@@ -386,7 +419,7 @@ export default function LogRunsPage() {
             </div>
           </div>
           <div className="p-6">
-            <FeedbackFormContent />
+            <FeedbackFormContent {...formProps} />
           </div>
         </div>
       </div>
@@ -411,7 +444,7 @@ export default function LogRunsPage() {
             )}
           </SheetHeader>
           <div className="pb-8">
-            <FeedbackFormContent />
+            <FeedbackFormContent {...formProps} />
           </div>
         </SheetContent>
       </Sheet>
