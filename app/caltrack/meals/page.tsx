@@ -511,18 +511,32 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
                 </p>
               ) : (
                 templates.map((tmpl) => (
-                  <button key={tmpl.id} onClick={() => loadTemplate(tmpl)}
-                    className="w-full flex items-center justify-between p-3 rounded-xl text-left transition-colors hover:opacity-80"
+                  <div key={tmpl.id} className="flex items-center gap-2 p-3 rounded-xl"
                     style={{ background: 'var(--ct-surface-2)', border: '1px solid var(--ct-line)' }}>
-                    <div>
-                      <p className="text-sm font-medium" style={{ color: 'var(--ct-ink)' }}>{tmpl.name}</p>
-                      <p className="text-xs ct-mono mt-0.5" style={{ color: 'var(--ct-ink-4)' }}>
-                        {tmpl.total_calories} kcal · {tmpl.items.length} items
-                      </p>
-                    </div>
-                    <span className="text-xs font-medium px-2.5 py-1 rounded-full"
-                      style={{ background: 'var(--ct-ember-soft)', color: 'var(--ct-ember)' }}>Use</span>
-                  </button>
+                    <button onClick={() => loadTemplate(tmpl)}
+                      className="flex-1 flex items-center justify-between text-left transition-colors hover:opacity-80">
+                      <div>
+                        <p className="text-sm font-medium" style={{ color: 'var(--ct-ink)' }}>{tmpl.name}</p>
+                        <p className="text-xs ct-mono mt-0.5" style={{ color: 'var(--ct-ink-4)' }}>
+                          {tmpl.total_calories} kcal · {tmpl.items.length} items
+                        </p>
+                      </div>
+                      <span className="text-xs font-medium px-2.5 py-1 rounded-full"
+                        style={{ background: 'var(--ct-ember-soft)', color: 'var(--ct-ember)' }}>Use</span>
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`Delete "${tmpl.name}"?`)) return;
+                        await fetch(`/api/caltrack/templates?id=${tmpl.id}`, { method: 'DELETE' });
+                        setTemplates((prev) => prev.filter((t) => t.id !== tmpl.id));
+                      }}
+                      className="shrink-0 w-7 h-7 grid place-items-center rounded-lg transition-colors hover:opacity-70"
+                      style={{ color: 'var(--ct-ink-4)', background: 'var(--ct-surface)' }}
+                      title="Delete template"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 ))
               )}
             </div>
