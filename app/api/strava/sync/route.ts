@@ -106,6 +106,7 @@ export async function POST(request: NextRequest) {
     console.log('Filtered runs:', runs.length);
 
     let newRunsCount = 0;
+    let lapsBackfilledCount = 0;
 
     for (const activity of runs) {
       const filename = `strava_${activity.id}`;
@@ -149,6 +150,7 @@ export async function POST(request: NextRequest) {
                     : null,
                 }));
                 await supabase.from('laps').insert(lapsToInsert);
+                lapsBackfilledCount++;
                 console.log(`  Backfilled ${lapsToInsert.length} laps`);
               }
             }
@@ -242,7 +244,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, newRunsCount });
+    return NextResponse.json({ success: true, newRunsCount, lapsBackfilledCount });
   } catch (error) {
     console.error('Error syncing Strava:', error);
     return NextResponse.json({ error: 'Failed to sync' }, { status: 500 });
