@@ -15,6 +15,8 @@ export default function LogRunsPage() {
   const [rating, setRating] = useState([5]);
   const [effort, setEffort] = useState([5]);
   const [feeling, setFeeling] = useState('');
+  const [preRunFeeling, setPreRunFeeling] = useState('');
+  const [followedPlan, setFollowedPlan] = useState('');
   const [comment, setComment] = useState('');
   const [selectedRun, setSelectedRun] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -75,6 +77,8 @@ export default function LogRunsPage() {
           effort_level: effort[0],
           feeling,
           comment,
+          followed_plan: followedPlan || undefined,
+          pre_run_feeling: preRunFeeling || undefined,
         }),
       });
 
@@ -83,6 +87,8 @@ export default function LogRunsPage() {
         setRating([5]);
         setEffort([5]);
         setFeeling('');
+        setPreRunFeeling('');
+        setFollowedPlan('');
         setComment('');
         setMobileSheetOpen(false);
         // Mark this date as logged
@@ -155,6 +161,66 @@ export default function LogRunsPage() {
               }}
             >
               {opt.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Pre-run feeling */}
+      <div className="space-y-3">
+        <label className="text-sm font-medium" style={{ color: 'var(--rc-ink)' }}>Before the run, you felt…</label>
+        <div className="flex flex-wrap gap-2">
+          {([
+            { value: 'fresh', label: 'Fresh' },
+            { value: 'good', label: 'Good' },
+            { value: 'tired', label: 'Tired' },
+            { value: 'sore_legs', label: 'Sore legs' },
+            { value: 'stressed', label: 'Stressed' },
+          ] as const).map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setPreRunFeeling(preRunFeeling === value ? '' : value)}
+              className="rc-mono px-3.5 py-[7px] rounded-full text-[11px] font-medium transition-colors"
+              style={{
+                background: preRunFeeling === value ? 'var(--rc-ink)' : 'var(--rc-surface-2)',
+                color: preRunFeeling === value ? '#fff' : 'var(--rc-ink-3)',
+                border: `1px solid ${preRunFeeling === value ? 'var(--rc-ink)' : 'var(--rc-line)'}`,
+                letterSpacing: '0.06em',
+              }}
+            >
+              {label.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Followed plan */}
+      <div className="space-y-3">
+        <label className="text-sm font-medium" style={{ color: 'var(--rc-ink)' }}>Did you follow the plan?</label>
+        <div className="flex gap-2">
+          {([
+            { value: 'yes', label: 'Yes' },
+            { value: 'modified', label: 'Modified it' },
+            { value: 'no', label: 'No' },
+          ] as const).map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setFollowedPlan(followedPlan === value ? '' : value)}
+              className="flex-1 rc-mono py-[9px] rounded-xl text-[11px] font-medium transition-colors"
+              style={{
+                background: followedPlan === value
+                  ? value === 'yes' ? 'oklch(0.96 0.08 150)' : value === 'no' ? 'oklch(0.95 0.05 25)' : 'oklch(0.96 0.05 75)'
+                  : 'var(--rc-surface-2)',
+                color: followedPlan === value
+                  ? value === 'yes' ? '#059669' : value === 'no' ? 'var(--rc-bad)' : 'oklch(0.50 0.13 75)'
+                  : 'var(--rc-ink-3)',
+                border: `1px solid ${followedPlan === value ? 'transparent' : 'var(--rc-line)'}`,
+                letterSpacing: '0.06em',
+              }}
+            >
+              {label.toUpperCase()}
             </button>
           ))}
         </div>
