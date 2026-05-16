@@ -99,6 +99,9 @@ export async function POST(request: NextRequest) {
 
     // Save the analysis
     const weekStart = monday.toISOString().split('T')[0];
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    const weekEnd = sunday.toISOString().split('T')[0];
 
     await supabase
       .from('weekly_summaries')
@@ -111,6 +114,28 @@ export async function POST(request: NextRequest) {
         injury_notes: injuryNotes,
         achievements,
         ai_analysis: response.content,
+      }, { onConflict: 'user_id,week_start' });
+
+    // Save to coach_reports for history
+    const titleMatch = response.content.match(/^##?\s+(.+)/m);
+    const title = titleMatch ? titleMatch[1].replace(/\*+/g, '').trim() : `Weekly Review: ${weekStart}`;
+
+    await supabase
+      .from('coach_reports')
+      .upsert({
+        user_id: userId,
+        report_type: 'weekly_review',
+        title,
+        content: response.content,
+        week_start: weekStart,
+        week_end: weekEnd,
+        metadata: {
+          runs_count: (runs || []).length,
+          total_km: (runs || []).reduce((s: number, r: { distance_km?: number }) => s + (r.distance_km || 0), 0),
+          overall_feeling: overallFeeling,
+          sleep_quality: sleepQuality,
+          stress_level: stressLevel,
+        },
       }, { onConflict: 'user_id,week_start' });
 
     return NextResponse.json({ analysis: response.content });

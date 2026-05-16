@@ -10,6 +10,7 @@ import {
   Target,
   MessageSquare,
   Dumbbell,
+  FileText,
   RefreshCw,
   Settings,
   ChevronLeft,
@@ -25,6 +26,7 @@ const navItems = [
   { href: '/coach/plan', label: 'Training Plan', icon: Target },
   { href: '/coach/ask', label: 'Ask Coach', icon: MessageSquare },
   { href: '/coach/grocky', label: 'Grocky', icon: Dumbbell },
+  { href: '/coach/reports', label: 'Coach Reports', icon: FileText },
   { href: '/coach/strava', label: 'Sync Strava', icon: RefreshCw },
   { href: '/coach/settings', label: 'Settings', icon: Settings },
 ];
