@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
           .select('*', { count: 'exact', head: true })
           .eq('run_id', existing.id);
 
-        if (count === 0) {
+        if (!count) {
           try {
             const lapsResponse = await fetch(
               `https://www.strava.com/api/v3/activities/${activity.id}/laps`,
