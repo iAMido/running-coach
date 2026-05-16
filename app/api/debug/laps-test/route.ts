@@ -3,6 +3,15 @@ import { supabase } from '@/lib/db/supabase';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { formatPace } from '@/lib/utils/pace';
 
+interface StravaLap {
+  lap_index: number;
+  distance: number;
+  moving_time: number;
+  average_heartrate?: number;
+  max_heartrate?: number;
+  average_speed: number;
+}
+
 export async function GET() {
   const auth = await getAuthenticatedUser();
   if (!auth.authenticated || !auth.userId) {
@@ -42,8 +51,7 @@ export async function GET() {
       });
 
       if (!refreshResponse.ok) {
-        const refreshBody = await refreshResponse.text();
-        return NextResponse.json({ error: 'Token refresh failed', status: refreshResponse.status, body: refreshBody });
+        return NextResponse.json({ error: 'Token refresh failed' });
       }
 
       const newTokens = await refreshResponse.json();
@@ -59,80 +67,81 @@ export async function GET() {
         .eq('user_id', userId);
     }
 
-    // Get one run
-    const { data: run } = await supabase
+    // Get all strava runs without laps
+    const { data: runs } = await supabase
       .from('runs')
       .select('id, filename')
       .eq('user_id', userId)
       .like('filename', 'strava_%')
-      .order('date', { ascending: false })
-      .limit(1)
-      .single();
+      .order('date', { ascending: false });
 
-    if (!run) {
-      return NextResponse.json({ error: 'No strava runs found' });
+    if (!runs || runs.length === 0) {
+      return NextResponse.json({ message: 'No strava runs found' });
     }
 
-    const activityId = run.filename.replace('strava_', '');
+    const results: { activityId: string; status: string; laps?: number; error?: string }[] = [];
 
-    // Check existing laps count
-    const { count: existingLapCount, error: countError } = await supabase
-      .from('laps')
-      .select('*', { count: 'exact', head: true })
-      .eq('run_id', run.id);
-
-    // Fetch laps from Strava
-    const lapsUrl = `https://www.strava.com/api/v3/activities/${activityId}/laps`;
-    const lapsResponse = await fetch(lapsUrl, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-
-    const lapsStatus = lapsResponse.status;
-    const lapsBody = await lapsResponse.json();
-
-    // Try to insert laps
-    let insertResult = null;
-    if (Array.isArray(lapsBody) && lapsBody.length > 0) {
-      const lapsToInsert = lapsBody.map((lap: { lap_index: number; distance: number; moving_time: number; average_heartrate?: number; max_heartrate?: number; average_speed: number }) => ({
-        run_id: run.id,
-        lap_number: lap.lap_index,
-        distance_km: Math.round((lap.distance / 1000) * 1000) / 1000,
-        duration_sec: Math.round(lap.moving_time),
-        avg_hr: lap.average_heartrate ? Math.round(lap.average_heartrate) : null,
-        max_hr: lap.max_heartrate ? Math.round(lap.max_heartrate) : null,
-        avg_pace_str: lap.average_speed > 0
-          ? formatPace(1 / (lap.average_speed * 60 / 1000))
-          : null,
-      }));
-
-      // First delete any existing laps for this run to avoid unique constraint issues
-      const { error: deleteError } = await supabase
+    for (const run of runs) {
+      const { count } = await supabase
         .from('laps')
-        .delete()
+        .select('*', { count: 'exact', head: true })
         .eq('run_id', run.id);
 
-      const { data: insertData, error: insertError } = await supabase
-        .from('laps')
-        .insert(lapsToInsert)
-        .select();
+      if (count && count > 0) {
+        results.push({ activityId: run.filename.replace('strava_', ''), status: 'already_has_laps', laps: count });
+        continue;
+      }
 
-      insertResult = {
-        deleteError: deleteError ? deleteError.message : null,
-        insertError: insertError ? { message: insertError.message, details: insertError.details, hint: insertError.hint, code: insertError.code } : null,
-        insertedCount: insertData ? insertData.length : 0,
-        firstInserted: insertData && insertData.length > 0 ? insertData[0] : null,
-        samplePayload: lapsToInsert[0],
-      };
+      const activityId = run.filename.replace('strava_', '');
+
+      try {
+        const lapsResponse = await fetch(
+          `https://www.strava.com/api/v3/activities/${activityId}/laps`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+
+        if (!lapsResponse.ok) {
+          results.push({ activityId, status: 'strava_error', error: `HTTP ${lapsResponse.status}` });
+          continue;
+        }
+
+        const lapsData = await lapsResponse.json();
+        if (!Array.isArray(lapsData) || lapsData.length === 0) {
+          results.push({ activityId, status: 'no_laps_from_strava' });
+          continue;
+        }
+
+        const lapsToInsert = lapsData.map((lap: StravaLap) => ({
+          run_id: run.id,
+          lap_number: lap.lap_index,
+          distance_km: Math.round((lap.distance / 1000) * 1000) / 1000,
+          duration_sec: Math.round(lap.moving_time),
+          avg_hr: lap.average_heartrate ? Math.round(lap.average_heartrate) : null,
+          max_hr: lap.max_heartrate ? Math.round(lap.max_heartrate) : null,
+          avg_pace_str: lap.average_speed > 0
+            ? formatPace(1 / (lap.average_speed * 60 / 1000))
+            : null,
+        }));
+
+        const { error: insertError } = await supabase.from('laps').insert(lapsToInsert);
+
+        if (insertError) {
+          results.push({ activityId, status: 'insert_error', error: insertError.message });
+        } else {
+          results.push({ activityId, status: 'backfilled', laps: lapsToInsert.length });
+        }
+      } catch (err) {
+        results.push({ activityId, status: 'error', error: String(err) });
+      }
     }
 
+    const backfilled = results.filter(r => r.status === 'backfilled').length;
+    const alreadyHad = results.filter(r => r.status === 'already_has_laps').length;
+    const failed = results.filter(r => r.status === 'insert_error' || r.status === 'strava_error' || r.status === 'error').length;
+
     return NextResponse.json({
-      runId: run.id,
-      activityId,
-      existingLapCount,
-      countError: countError ? countError.message : null,
-      lapsStatus,
-      lapsCount: Array.isArray(lapsBody) ? lapsBody.length : 'not-array',
-      insertResult,
+      summary: { total: runs.length, backfilled, alreadyHad, failed },
+      details: results,
     });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
