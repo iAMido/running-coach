@@ -74,6 +74,8 @@ export const runFeedbackSchema = z.object({
   effort_level: rating.optional(),
   feeling: z.enum(['great', 'good', 'okay', 'tired', 'exhausted']).optional(),
   comment: safeText.max(2000).optional(),
+  followed_plan: z.enum(['yes', 'no', 'modified']).optional(),
+  pre_run_feeling: z.enum(['fresh', 'good', 'tired', 'sore_legs', 'stressed']).optional(),
 });
 
 // Weekly summary validation

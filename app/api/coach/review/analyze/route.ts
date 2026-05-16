@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { callOpenRouter } from '@/lib/ai/openrouter';
-import { buildCoachSystemPrompt, buildWeeklyAnalysisPrompt } from '@/lib/ai/coach-prompts';
+import { buildEnhancedWeeklyAnalysisPrompt, buildEnhancedCoachSystemPrompt } from '@/lib/ai/coach-prompts';
+import { buildContext } from '@/lib/rag/context-builder';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { reviewAnalysisSchema, validateInput } from '@/lib/validation/schemas';
 
@@ -29,13 +30,6 @@ export async function POST(request: NextRequest) {
 
     const { overallFeeling, sleepQuality, stressLevel, injuryNotes, achievements } = validation.data;
 
-    // Get athlete profile
-    const { data: profile } = await supabase
-      .from('athlete_profile')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
-
     // Get this week's runs
     const now = new Date();
     const dayOfWeek = now.getDay();
@@ -57,10 +51,29 @@ export async function POST(request: NextRequest) {
       .eq('user_id', userId)
       .gte('run_date', monday.toISOString().split('T')[0]);
 
-    // Build prompts
-    const systemPrompt = buildCoachSystemPrompt({ profile });
-    const userPrompt = buildWeeklyAnalysisPrompt({
-      runs: runs || [],
+    // Fetch laps for this week's runs
+    const runIds = (runs || []).map((r: { id: string }) => r.id);
+    const { data: laps } = runIds.length > 0
+      ? await supabase.from('laps').select('*').in('run_id', runIds).order('lap_number', { ascending: true })
+      : { data: [] };
+
+    // Attach laps to each run
+    const runsWithLaps = (runs || []).map((run: { id: string }) => ({
+      ...run,
+      laps: (laps || []).filter((l: { run_id: string }) => l.run_id === run.id),
+    }));
+
+    // Build 3-layer RAG context
+    const context = await buildContext(
+      userId,
+      'weekly review analysis',
+      'plan_review'
+    );
+
+    // Build prompts using enhanced system
+    const systemPrompt = buildEnhancedCoachSystemPrompt(context);
+    const userPrompt = buildEnhancedWeeklyAnalysisPrompt(context, {
+      runs: runsWithLaps,
       feedback: feedback || [],
       overallFeeling,
       sleepQuality,

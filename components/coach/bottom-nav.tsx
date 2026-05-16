@@ -126,16 +126,16 @@ export function BottomNav() {
             side="bottom"
             className="h-auto max-h-[70vh] rounded-t-3xl px-4 pb-8 pt-0 border-t-0 [&>button]:hidden"
             style={{
-              background: 'var(--rc-paper)',
-              borderTop: '1px solid var(--rc-line)',
-              boxShadow: 'var(--rc-shadow-2)',
+              background: '#F4F1EA',
+              borderTop: '1px solid rgba(14,15,12,0.08)',
+              boxShadow: '0 -4px 24px rgba(14,15,12,0.10)',
             }}
           >
             <div className="flex justify-center pt-3 pb-2 cursor-pointer" onClick={() => setMenuOpen(false)}>
               <div className="w-10 h-1 rounded-full" style={{ background: 'var(--rc-ink-5)' }} />
             </div>
             <SheetHeader className="pb-4 mb-4">
-              <SheetTitle className="text-center text-base font-semibold" style={{ color: 'var(--rc-ink)' }}>Menu</SheetTitle>
+              <SheetTitle className="text-center text-base font-semibold" style={{ color: '#0E0F0C' }}>Menu</SheetTitle>
             </SheetHeader>
             <div className="space-y-2 pb-4">
               {menuItems.map((item) => {
@@ -149,15 +149,15 @@ export function BottomNav() {
                     onClick={() => setMenuOpen(false)}
                     className="flex items-center gap-4 px-4 py-4 rounded-xl transition-all active:scale-[0.98]"
                     style={{
-                      background: isActive ? 'var(--rc-blue-soft)' : 'var(--rc-surface)',
-                      color: isActive ? 'var(--rc-blue)' : 'var(--rc-ink)',
-                      border: `1px solid ${isActive ? 'rgba(0,0,0,0.04)' : 'var(--rc-line)'}`,
+                      background: isActive ? 'rgba(37,99,235,0.08)' : '#FFFFFF',
+                      color: isActive ? '#1D4ED8' : '#0E0F0C',
+                      border: `1px solid ${isActive ? 'rgba(0,0,0,0.04)' : 'rgba(14,15,12,0.08)'}`,
                     }}
                   >
                     <div
                       className="p-2 rounded-lg"
                       style={{
-                        background: isActive ? 'var(--rc-blue-soft)' : 'var(--rc-surface-2)',
+                        background: isActive ? 'rgba(37,99,235,0.08)' : '#FBFAF6',
                       }}
                     >
                       <Icon className="w-5 h-5" />
@@ -167,15 +167,15 @@ export function BottomNav() {
                 );
               })}
 
-              <div className="my-4" style={{ borderTop: '1px solid var(--rc-line)' }} />
+              <div className="my-4" style={{ borderTop: '1px solid rgba(14,15,12,0.08)' }} />
 
               <Link
                 href="/caltrack"
                 onClick={() => setMenuOpen(false)}
                 className="flex items-center gap-4 px-4 py-4 rounded-xl transition-all active:scale-[0.98]"
-                style={{ background: 'var(--rc-surface)', color: 'var(--rc-ink-2)', border: '1px solid var(--rc-line)' }}
+                style={{ background: '#FFFFFF', color: '#3D3E3A', border: '1px solid rgba(14,15,12,0.08)' }}
               >
-                <div className="p-2 rounded-lg" style={{ background: 'var(--rc-surface-2)' }}>
+                <div className="p-2 rounded-lg" style={{ background: '#FBFAF6' }}>
                   <UtensilsCrossed className="w-5 h-5" />
                 </div>
                 <span className="font-medium text-base">Switch to CalTrack</span>
@@ -185,9 +185,9 @@ export function BottomNav() {
                 href="/"
                 onClick={() => setMenuOpen(false)}
                 className="flex items-center gap-4 px-4 py-4 rounded-xl transition-all active:scale-[0.98]"
-                style={{ background: 'var(--rc-surface)', color: 'var(--rc-ink-2)', border: '1px solid var(--rc-line)' }}
+                style={{ background: '#FFFFFF', color: '#3D3E3A', border: '1px solid rgba(14,15,12,0.08)' }}
               >
-                <div className="p-2 rounded-lg" style={{ background: 'var(--rc-surface-2)' }}>
+                <div className="p-2 rounded-lg" style={{ background: '#FBFAF6' }}>
                   <ChevronLeft className="w-5 h-5" />
                 </div>
                 <span className="font-medium text-base">Back to Portfolio</span>
@@ -199,7 +199,7 @@ export function BottomNav() {
                   signOut({ callbackUrl: '/' });
                 }}
                 className="w-full flex items-center gap-4 px-4 py-4 rounded-xl transition-all active:scale-[0.98]"
-                style={{ background: 'rgba(239,83,80,0.06)', color: 'var(--rc-bad)', border: '1px solid rgba(239,83,80,0.1)' }}
+                style={{ background: 'rgba(239,83,80,0.06)', color: '#EF5350', border: '1px solid rgba(239,83,80,0.1)' }}
               >
                 <div className="p-2 rounded-lg" style={{ background: 'rgba(239,83,80,0.08)' }}>
                   <LogOut className="w-5 h-5" />

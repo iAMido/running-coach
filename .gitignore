@@ -51,3 +51,6 @@ ido mosseri.jpg
 
 # Windows artifacts
 nul
+
+# npm lock file (project uses bun)
+package-lock.json

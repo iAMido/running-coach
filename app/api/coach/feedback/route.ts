@@ -59,6 +59,8 @@ export async function POST(request: NextRequest) {
         effort_level: validation.data.effort_level,
         feeling: validation.data.feeling,
         comment: validation.data.comment,
+        followed_plan: validation.data.followed_plan,
+        pre_run_feeling: validation.data.pre_run_feeling,
       })
       .select()
       .single();

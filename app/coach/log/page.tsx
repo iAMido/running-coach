@@ -3,7 +3,7 @@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Slider } from '@/components/ui/slider';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { ClipboardList, CheckCircle, Save, Activity, X } from 'lucide-react';
+import { ClipboardList, CheckCircle, Save, Activity } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { Run } from '@/lib/db/types';
 
@@ -15,14 +15,18 @@ export default function LogRunsPage() {
   const [rating, setRating] = useState([5]);
   const [effort, setEffort] = useState([5]);
   const [feeling, setFeeling] = useState('');
+  const [preRunFeeling, setPreRunFeeling] = useState('');
+  const [followedPlan, setFollowedPlan] = useState('');
   const [comment, setComment] = useState('');
   const [selectedRun, setSelectedRun] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+  const [loggedDates, setLoggedDates] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchRuns();
+    fetchLoggedDates();
   }, []);
 
   const fetchRuns = async () => {
@@ -34,6 +38,19 @@ export default function LogRunsPage() {
       console.error('Failed to fetch runs:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchLoggedDates = async () => {
+    try {
+      const response = await fetch('/api/coach/feedback?days=60');
+      const data = await response.json();
+      const dates = new Set<string>(
+        (data.feedback || []).map((f: { run_date: string }) => f.run_date)
+      );
+      setLoggedDates(dates);
+    } catch (error) {
+      console.error('Failed to fetch feedback:', error);
     }
   };
 
@@ -60,6 +77,8 @@ export default function LogRunsPage() {
           effort_level: effort[0],
           feeling,
           comment,
+          followed_plan: followedPlan || undefined,
+          pre_run_feeling: preRunFeeling || undefined,
         }),
       });
 
@@ -68,9 +87,14 @@ export default function LogRunsPage() {
         setRating([5]);
         setEffort([5]);
         setFeeling('');
+        setPreRunFeeling('');
+        setFollowedPlan('');
         setComment('');
-        setSelectedRun('');
         setMobileSheetOpen(false);
+        // Mark this date as logged
+        const runDate = runData.date.split('T')[0];
+        setLoggedDates(prev => new Set([...prev, runDate]));
+        setSelectedRun('');
         setTimeout(() => setSubmitted(false), 3000);
       }
     } catch (error) {
@@ -79,6 +103,8 @@ export default function LogRunsPage() {
       setSubmitting(false);
     }
   };
+
+  const isLogged = (run: Run) => loggedDates.has(run.date.split('T')[0]);
 
   const handleRunSelect = (runId: string) => {
     setSelectedRun(runId);
@@ -135,6 +161,66 @@ export default function LogRunsPage() {
               }}
             >
               {opt.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Pre-run feeling */}
+      <div className="space-y-3">
+        <label className="text-sm font-medium" style={{ color: 'var(--rc-ink)' }}>Before the run, you felt…</label>
+        <div className="flex flex-wrap gap-2">
+          {([
+            { value: 'fresh', label: 'Fresh' },
+            { value: 'good', label: 'Good' },
+            { value: 'tired', label: 'Tired' },
+            { value: 'sore_legs', label: 'Sore legs' },
+            { value: 'stressed', label: 'Stressed' },
+          ] as const).map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setPreRunFeeling(preRunFeeling === value ? '' : value)}
+              className="rc-mono px-3.5 py-[7px] rounded-full text-[11px] font-medium transition-colors"
+              style={{
+                background: preRunFeeling === value ? 'var(--rc-ink)' : 'var(--rc-surface-2)',
+                color: preRunFeeling === value ? '#fff' : 'var(--rc-ink-3)',
+                border: `1px solid ${preRunFeeling === value ? 'var(--rc-ink)' : 'var(--rc-line)'}`,
+                letterSpacing: '0.06em',
+              }}
+            >
+              {label.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Followed plan */}
+      <div className="space-y-3">
+        <label className="text-sm font-medium" style={{ color: 'var(--rc-ink)' }}>Did you follow the plan?</label>
+        <div className="flex gap-2">
+          {([
+            { value: 'yes', label: 'Yes' },
+            { value: 'modified', label: 'Modified it' },
+            { value: 'no', label: 'No' },
+          ] as const).map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setFollowedPlan(followedPlan === value ? '' : value)}
+              className="flex-1 rc-mono py-[9px] rounded-xl text-[11px] font-medium transition-colors"
+              style={{
+                background: followedPlan === value
+                  ? value === 'yes' ? 'oklch(0.96 0.08 150)' : value === 'no' ? 'oklch(0.95 0.05 25)' : 'oklch(0.96 0.05 75)'
+                  : 'var(--rc-surface-2)',
+                color: followedPlan === value
+                  ? value === 'yes' ? '#059669' : value === 'no' ? 'var(--rc-bad)' : 'oklch(0.50 0.13 75)'
+                  : 'var(--rc-ink-3)',
+                border: `1px solid ${followedPlan === value ? 'transparent' : 'var(--rc-line)'}`,
+                letterSpacing: '0.06em',
+              }}
+            >
+              {label.toUpperCase()}
             </button>
           ))}
         </div>
@@ -221,45 +307,63 @@ export default function LogRunsPage() {
           </div>
           {runs.length > 0 ? (
             <div className="overflow-y-auto" style={{ maxHeight: '500px' }}>
-              {runs.map((run, idx) => (
-                <div
-                  key={run.id}
-                  onClick={() => handleRunSelect(run.id)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => e.key === 'Enter' && handleRunSelect(run.id)}
-                  className="grid items-center gap-4 px-6 py-4 transition-colors cursor-pointer"
-                  style={{
-                    gridTemplateColumns: '36px 1fr auto',
-                    borderBottom: '1px solid var(--rc-line)',
-                    background: selectedRun === run.id ? 'var(--rc-blue-soft)' : 'transparent',
-                  }}
-                >
+              {runs.map((run) => {
+                const logged = isLogged(run);
+                const isSelected = selectedRun === run.id;
+                return (
                   <div
-                    className="w-9 h-9 rounded-[10px] grid place-items-center"
+                    key={run.id}
+                    onClick={() => handleRunSelect(run.id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && handleRunSelect(run.id)}
+                    className="relative grid items-center gap-4 px-6 py-4 transition-colors cursor-pointer overflow-hidden"
                     style={{
-                      background: selectedRun === run.id ? 'var(--rc-blue)' : 'oklch(0.96 0.04 240)',
-                      color: selectedRun === run.id ? '#fff' : 'var(--rc-blue-deep)',
+                      gridTemplateColumns: '36px 1fr auto',
+                      borderBottom: '1px solid var(--rc-line)',
+                      background: isSelected ? 'var(--rc-blue-soft)' : 'transparent',
                     }}
                   >
-                    <Activity className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-[14.5px] font-semibold" style={{ letterSpacing: '-0.005em', color: 'var(--rc-ink)' }}>
-                      {run.workout_name || 'Run'}
+                    {/* Logged ribbon */}
+                    {logged && (
+                      <span
+                        className="absolute left-0 top-0 bottom-0 w-[3px]"
+                        style={{ background: 'var(--rc-good, #10B981)' }}
+                      />
+                    )}
+                    <div
+                      className="w-9 h-9 rounded-[10px] grid place-items-center"
+                      style={{
+                        background: isSelected ? 'var(--rc-blue)' : logged ? 'oklch(0.96 0.08 150)' : 'oklch(0.96 0.04 240)',
+                        color: isSelected ? '#fff' : logged ? '#059669' : 'var(--rc-blue-deep)',
+                      }}
+                    >
+                      {logged ? <CheckCircle className="w-4 h-4" /> : <Activity className="w-4 h-4" />}
                     </div>
-                    <div className="rc-mono text-[11px] uppercase mt-0.5" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.06em' }}>
-                      {new Date(run.date).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()} · {new Date(run.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()}
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[14.5px] font-semibold" style={{ letterSpacing: '-0.005em', color: 'var(--rc-ink)' }}>
+                          {run.workout_name || 'Run'}
+                        </span>
+                        {logged && (
+                          <span className="rc-mono text-[9px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: 'oklch(0.96 0.08 150)', color: '#059669', letterSpacing: '0.06em' }}>
+                            LOGGED
+                          </span>
+                        )}
+                      </div>
+                      <div className="rc-mono text-[11px] uppercase mt-0.5" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.06em' }}>
+                        {new Date(run.date).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()} · {new Date(run.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="rc-mono font-semibold text-[16px]" style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--rc-ink)' }}>
+                        {run.distance_km.toFixed(1)}<span className="text-[11px] font-medium ml-0.5" style={{ color: 'var(--rc-ink-3)' }}>km</span>
+                      </div>
+                      <div className="rc-mono text-[12px]" style={{ color: 'var(--rc-ink-3)' }}>{run.avg_pace_str || '-'}</div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="rc-mono font-semibold text-[16px]" style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--rc-ink)' }}>
-                      {run.distance_km.toFixed(1)}<span className="text-[11px] font-medium ml-0.5" style={{ color: 'var(--rc-ink-3)' }}>km</span>
-                    </div>
-                    <div className="rc-mono text-[12px]" style={{ color: 'var(--rc-ink-3)' }}>{run.avg_pace_str || '-'}</div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-16" style={{ color: 'var(--rc-ink-3)' }}>
