@@ -11,8 +11,8 @@ export async function GET(request: NextRequest) {
 
   const userId = auth.userId;
   const { searchParams } = new URL(request.url);
-  const days = parseInt(searchParams.get('days') || '14');
-  const limit = parseInt(searchParams.get('limit') || '100');
+  const days = Math.max(1, Math.min(parseInt(searchParams.get('days') || '14', 10) || 14, 365));
+  const limit = Math.max(1, Math.min(parseInt(searchParams.get('limit') || '100', 10) || 100, 200));
 
   try {
     const startDate = new Date();
