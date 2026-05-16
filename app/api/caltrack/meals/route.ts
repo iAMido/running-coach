@@ -93,8 +93,34 @@ export async function GET(request: NextRequest) {
       item_names: itemsByMeal[m.id] || [],
     }));
 
+    // Generate signed URLs for meals that have photos (1 hour TTL)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const photoPaths: string[] = enrichedMeals
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .filter((m: any) => m.photo_storage_path)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((m: any) => m.photo_storage_path as string);
+
+    let signedUrlMap: Record<string, string> = {};
+    if (photoPaths.length > 0) {
+      const { data: signedUrls } = await caltrackDb.storage
+        .from('meals')
+        .createSignedUrls(photoPaths, 3600);
+      if (signedUrls) {
+        for (const item of signedUrls) {
+          if (item.signedUrl && item.path) signedUrlMap[item.path as string] = item.signedUrl;
+        }
+      }
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const finalMeals = enrichedMeals.map((m: any) => ({
+      ...m,
+      photo_url: m.photo_storage_path ? (signedUrlMap[m.photo_storage_path] || null) : null,
+    }));
+
     return NextResponse.json({
-      meals: enrichedMeals,
+      meals: finalMeals,
       total: count || 0,
       limit,
       offset,

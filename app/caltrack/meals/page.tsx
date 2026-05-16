@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   ChevronDown,
@@ -13,9 +12,10 @@ import {
   Pencil,
   Trash2,
   Minus,
+  Camera,
 } from 'lucide-react';
 import { DateRangePicker } from '@/components/caltrack/date-range-picker';
-import type { CaltrackMeal, CaltrackMealItem } from '@/lib/db/caltrack-types';
+import type { CaltrackMeal, CaltrackMealItem, MealTemplate } from '@/lib/db/caltrack-types';
 
 type MealFilter = 'all' | 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
@@ -26,10 +26,17 @@ const mealTypeBadge: Record<string, { bg: string; color: string }> = {
   snack: { bg: 'oklch(0.96 0.04 150)', color: 'oklch(0.42 0.10 150)' },
 };
 
-const CALTRACK_STORAGE_URL =
-  process.env.NEXT_PUBLIC_CALTRACK_STORAGE_URL || '';
-
 // ─── Add Meal Modal ───
+interface FoodItem {
+  ingredient_name: string;
+  total_count: number;
+  avg_calories: number;
+  avg_weight: number;
+  is_personal: boolean;
+  personal_food_id: string | null;
+  per_100g: { calories: number | null; protein: number | null; carbs: number | null; fat: number | null } | null;
+}
+
 interface AnalyzedIngredient {
   name_en: string;
   name_he: string;
@@ -48,22 +55,108 @@ interface AnalysisResult {
 }
 
 function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
-  const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
-  const nowStr = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); // HH:MM
+  const todayStr = new Date().toLocaleDateString('en-CA');
+  const nowStr = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+  // When
   const [mealType, setMealType] = useState<string>('lunch');
   const [mealDate, setMealDate] = useState(todayStr);
   const [mealTime, setMealTime] = useState(nowStr);
+
+  // Source tabs
+  const [activeTab, setActiveTab] = useState<'ai' | 'myfoods' | 'templates'>('ai');
+
+  // Shared ingredient list (all sources combined)
+  const [ingredients, setIngredients] = useState<AnalyzedIngredient[]>([]);
+  const [dishName, setDishName] = useState('');
+
+  // AI tab
   const [description, setDescription] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
-  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+
+  // My Foods tab
+  const [personalFoods, setPersonalFoods] = useState<FoodItem[]>([]);
+  const [pfLoaded, setPfLoaded] = useState(false);
+  const [pfSearch, setPfSearch] = useState('');
+  const [pfGrams, setPfGrams] = useState<Record<string, number>>({});
+
+  // Templates tab
+  const [templates, setTemplates] = useState<MealTemplate[]>([]);
+  const [tmplLoaded, setTmplLoaded] = useState(false);
+
+  // Save as template
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [templateSaved, setTemplateSaved] = useState(false);
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  // Load personal foods lazily when My Foods tab opens
+  useEffect(() => {
+    if (activeTab !== 'myfoods' || pfLoaded) return;
+    fetch('/api/caltrack/foods')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.foods) {
+          const pf: FoodItem[] = d.foods.filter((f: FoodItem) => f.is_personal);
+          setPersonalFoods(pf);
+          const g: Record<string, number> = {};
+          pf.forEach((f) => { g[f.ingredient_name] = f.avg_weight || 100; });
+          setPfGrams(g);
+          setPfLoaded(true);
+        }
+      });
+  }, [activeTab, pfLoaded]);
+
+  // Load templates lazily when Templates tab opens
+  useEffect(() => {
+    if (activeTab !== 'templates' || tmplLoaded) return;
+    fetch('/api/caltrack/templates')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.templates) { setTemplates(d.templates); setTmplLoaded(true); }
+      });
+  }, [activeTab, tmplLoaded]);
+
+  const totals = ingredients.reduce(
+    (acc, ing) => ({
+      calories: acc.calories + ing.calculated.calories,
+      protein: Math.round((acc.protein + ing.calculated.protein) * 10) / 10,
+      carbs: Math.round((acc.carbs + ing.calculated.carbs) * 10) / 10,
+      fat: Math.round((acc.fat + ing.calculated.fat) * 10) / 10,
+      fiber: Math.round((acc.fiber + ing.calculated.fiber) * 10) / 10,
+    }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 }
+  );
+
+  const updateGrams = (index: number, newGrams: number) => {
+    setIngredients((prev) => {
+      const updated = [...prev];
+      const ing = { ...updated[index] };
+      const factor = newGrams / 100;
+      ing.estimated_grams = newGrams;
+      ing.calculated = {
+        calories: Math.round(ing.per_100g.calories * factor),
+        protein: Math.round(ing.per_100g.protein * factor * 10) / 10,
+        carbs: Math.round(ing.per_100g.carbs * factor * 10) / 10,
+        fat: Math.round(ing.per_100g.fat * factor * 10) / 10,
+        fiber: Math.round(ing.per_100g.fiber * factor * 10) / 10,
+      };
+      updated[index] = ing;
+      return updated;
+    });
+  };
+
+  const removeIngredient = (index: number) => {
+    setIngredients((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const handleAnalyze = async () => {
     if (!description.trim()) return;
     setAnalyzing(true);
     setError('');
-    setAnalysis(null);
     try {
       const res = await fetch('/api/caltrack/analyze', {
         method: 'POST',
@@ -71,10 +164,13 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
         body: JSON.stringify({ description: description.trim() }),
       });
       if (res.ok) {
-        setAnalysis(await res.json());
-      } else {
         const data = await res.json();
-        setError(data.error || 'Analysis failed');
+        if (!dishName) setDishName(data.dish_name_he || data.dish_name_en || '');
+        setIngredients((prev) => [...prev, ...data.ingredients]);
+        setDescription('');
+      } else {
+        const d = await res.json();
+        setError(d.error || 'Analysis failed');
       }
     } catch {
       setError('Network error');
@@ -83,53 +179,98 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
     }
   };
 
-  const updateIngredientGrams = (index: number, newGrams: number) => {
-    if (!analysis) return;
-    const updated = { ...analysis };
-    const ing = { ...updated.ingredients[index] };
-    const factor = newGrams / 100;
-    ing.estimated_grams = newGrams;
-    ing.calculated = {
-      calories: Math.round(ing.per_100g.calories * factor),
-      protein: Math.round(ing.per_100g.protein * factor * 10) / 10,
-      carbs: Math.round(ing.per_100g.carbs * factor * 10) / 10,
-      fat: Math.round(ing.per_100g.fat * factor * 10) / 10,
-      fiber: Math.round(ing.per_100g.fiber * factor * 10) / 10,
-    };
-    updated.ingredients = [...updated.ingredients];
-    updated.ingredients[index] = ing;
-    updated.totals = updated.ingredients.reduce(
-      (acc, i) => ({
-        calories: acc.calories + i.calculated.calories,
-        protein: Math.round((acc.protein + i.calculated.protein) * 10) / 10,
-        carbs: Math.round((acc.carbs + i.calculated.carbs) * 10) / 10,
-        fat: Math.round((acc.fat + i.calculated.fat) * 10) / 10,
-        fiber: Math.round((acc.fiber + i.calculated.fiber) * 10) / 10,
-      }),
-      { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 }
-    );
-    setAnalysis(updated);
+  const addPersonalFood = (food: FoodItem) => {
+    const grams = pfGrams[food.ingredient_name] || food.avg_weight || 100;
+    const p = food.per_100g;
+    const p100 =
+      p?.calories != null
+        ? { calories: p.calories || 0, protein: p.protein || 0, carbs: p.carbs || 0, fat: p.fat || 0, fiber: 0 }
+        : food.avg_weight > 0
+        ? { calories: Math.round((food.avg_calories / food.avg_weight) * 100), protein: 0, carbs: 0, fat: 0, fiber: 0 }
+        : null;
+    if (!p100) return;
+    const factor = grams / 100;
+    setIngredients((prev) => [
+      ...prev,
+      {
+        name_en: food.ingredient_name,
+        name_he: '',
+        fdc_id: null,
+        source: 'personal',
+        estimated_grams: grams,
+        per_100g: p100,
+        calculated: {
+          calories: Math.round(p100.calories * factor),
+          protein: Math.round(p100.protein * factor * 10) / 10,
+          carbs: Math.round(p100.carbs * factor * 10) / 10,
+          fat: Math.round(p100.fat * factor * 10) / 10,
+          fiber: 0,
+        },
+      },
+    ]);
   };
 
-  const removeIngredient = (index: number) => {
-    if (!analysis) return;
-    const updated = { ...analysis };
-    updated.ingredients = updated.ingredients.filter((_, i) => i !== index);
-    updated.totals = updated.ingredients.reduce(
-      (acc, i) => ({
-        calories: acc.calories + i.calculated.calories,
-        protein: Math.round((acc.protein + i.calculated.protein) * 10) / 10,
-        carbs: Math.round((acc.carbs + i.calculated.carbs) * 10) / 10,
-        fat: Math.round((acc.fat + i.calculated.fat) * 10) / 10,
-        fiber: Math.round((acc.fiber + i.calculated.fiber) * 10) / 10,
-      }),
-      { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 }
+  const loadTemplate = (tmpl: MealTemplate) => {
+    setDishName(tmpl.name);
+    setIngredients(
+      tmpl.items.map((item) => {
+        const per100 =
+          item.weight_grams > 0
+            ? {
+                calories: Math.round((item.calories / item.weight_grams) * 100),
+                protein: Math.round((item.protein_g / item.weight_grams) * 100 * 10) / 10,
+                carbs: Math.round((item.carbs_g / item.weight_grams) * 100 * 10) / 10,
+                fat: Math.round((item.fat_g / item.weight_grams) * 100 * 10) / 10,
+                fiber: Math.round(((item.fiber_g || 0) / item.weight_grams) * 100 * 10) / 10,
+              }
+            : { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
+        return {
+          name_en: item.ingredient_name,
+          name_he: '',
+          fdc_id: item.fdc_id,
+          source: 'template',
+          estimated_grams: item.weight_grams,
+          per_100g: per100,
+          calculated: { calories: item.calories, protein: item.protein_g, carbs: item.carbs_g, fat: item.fat_g, fiber: item.fiber_g || 0 },
+        };
+      })
     );
-    setAnalysis(updated);
+  };
+
+  const handleSaveTemplate = async () => {
+    if (!templateName.trim() || !ingredients.length) return;
+    setSavingTemplate(true);
+    try {
+      await fetch('/api/caltrack/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: templateName.trim(),
+          ingredients: ingredients.map((ing) => ({
+            name_en: ing.name_en,
+            fdc_id: ing.fdc_id,
+            weight_grams: ing.estimated_grams,
+            calories: ing.calculated.calories,
+            protein_g: ing.calculated.protein,
+            carbs_g: ing.calculated.carbs,
+            fat_g: ing.calculated.fat,
+            fiber_g: ing.calculated.fiber,
+          })),
+        }),
+      });
+      setTemplateSaved(true);
+      setTemplateName('');
+      setShowSaveTemplate(false);
+      setTmplLoaded(false);
+    } catch {
+      setError('Failed to save template');
+    } finally {
+      setSavingTemplate(false);
+    }
   };
 
   const handleConfirm = async () => {
-    if (!analysis || !analysis.ingredients.length) return;
+    if (!ingredients.length) return;
     setSubmitting(true);
     setError('');
     try {
@@ -140,8 +281,8 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
         body: JSON.stringify({
           meal_type: mealType,
           eaten_at,
-          description,
-          ingredients: analysis.ingredients.map((ing) => ({
+          description: dishName || description,
+          ingredients: ingredients.map((ing) => ({
             name_en: ing.name_en,
             name_he: ing.name_he,
             fdc_id: ing.fdc_id,
@@ -158,14 +299,25 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
         onAdded();
         onClose();
       } else {
-        const data = await res.json().catch(() => ({}));
-        setError(data.error || `Save failed (${res.status})`);
+        const d = await res.json().catch(() => ({}));
+        setError(d.error || `Save failed (${res.status})`);
       }
     } catch (err) {
       setError(`Network error: ${err instanceof Error ? err.message : 'unknown'}`);
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const filteredPF = personalFoods.filter(
+    (f) => !pfSearch || f.ingredient_name.toLowerCase().includes(pfSearch.toLowerCase())
+  );
+
+  const sourceBadge = (src: string) => {
+    if (src === 'usda') return { bg: 'rgba(34,197,94,0.1)', color: 'var(--ct-good)', label: 'USDA' };
+    if (src === 'personal') return { bg: 'rgba(251,191,36,0.1)', color: '#f59e0b', label: 'SAVED' };
+    if (src === 'template') return { bg: 'rgba(139,92,246,0.1)', color: '#7c3aed', label: 'TMPL' };
+    return { bg: 'rgba(59,130,246,0.1)', color: '#3b82f6', label: 'AI' };
   };
 
   return (
@@ -176,7 +328,7 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
       >
         <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--ct-line)' }}>
           <h2 className="text-lg font-semibold" style={{ color: 'var(--ct-ink)' }}>Add Meal</h2>
-          <button onClick={onClose} className="p-1 rounded-lg transition-colors" style={{ color: 'var(--ct-ink-3)' }}>
+          <button onClick={onClose} className="p-1 rounded-lg" style={{ color: 'var(--ct-ink-3)' }}>
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -186,189 +338,235 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="ct-kicker block mb-2">DATE</label>
-              <input
-                type="date"
-                value={mealDate}
-                max={todayStr}
-                onChange={(e) => setMealDate(e.target.value)}
+              <input type="date" value={mealDate} max={todayStr} onChange={(e) => setMealDate(e.target.value)}
                 className="w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 ct-mono"
-                style={{
-                  background: 'var(--ct-surface-2)',
-                  border: '1px solid var(--ct-line)',
-                  color: 'var(--ct-ink)',
-                }}
-              />
+                style={{ background: 'var(--ct-surface-2)', border: '1px solid var(--ct-line)', color: 'var(--ct-ink)' }} />
             </div>
             <div className="flex-1">
               <label className="ct-kicker block mb-2">TIME</label>
-              <input
-                type="time"
-                value={mealTime}
-                onChange={(e) => setMealTime(e.target.value)}
+              <input type="time" value={mealTime} onChange={(e) => setMealTime(e.target.value)}
                 className="w-full px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 ct-mono"
-                style={{
-                  background: 'var(--ct-surface-2)',
-                  border: '1px solid var(--ct-line)',
-                  color: 'var(--ct-ink)',
-                }}
-              />
+                style={{ background: 'var(--ct-surface-2)', border: '1px solid var(--ct-line)', color: 'var(--ct-ink)' }} />
             </div>
           </div>
 
           {/* Meal type */}
           <div>
             <label className="ct-kicker block mb-2">MEAL TYPE</label>
-            <div
-              className="inline-flex gap-[1px] rounded-full p-[3px]"
-              style={{ background: 'var(--ct-surface-2)', border: '1px solid var(--ct-line)' }}
-            >
+            <div className="inline-flex gap-[1px] rounded-full p-[3px]"
+              style={{ background: 'var(--ct-surface-2)', border: '1px solid var(--ct-line)' }}>
               {['breakfast', 'lunch', 'dinner', 'snack'].map((type) => (
-                <button
-                  key={type}
-                  onClick={() => setMealType(type)}
+                <button key={type} onClick={() => setMealType(type)}
                   className="ct-mono px-[13px] py-[7px] rounded-full text-[11px] font-medium transition-colors"
-                  style={{
-                    background: mealType === type ? 'var(--ct-ink)' : 'transparent',
-                    color: mealType === type ? '#fff' : 'var(--ct-ink-3)',
-                    letterSpacing: '0.06em',
-                  }}
-                >
+                  style={{ background: mealType === type ? 'var(--ct-ink)' : 'transparent', color: mealType === type ? '#fff' : 'var(--ct-ink-3)', letterSpacing: '0.06em' }}>
                   {type.toUpperCase()}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Free-text input */}
-          <div>
-            <label className="ct-kicker block mb-2">WHAT DID YOU EAT?</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder={"פיתה שווארמה פרגית\nסושי סלמון רול\nchicken breast with rice and salad"}
-              rows={3}
-              className="w-full px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 resize-none"
-              style={{
-                background: 'var(--ct-surface-2)',
-                border: '1px solid var(--ct-line)',
-                color: 'var(--ct-ink)',
-              }}
-              dir="auto"
-            />
-            <p className="text-xs mt-1.5" style={{ color: 'var(--ct-ink-4)' }}>
-              Hebrew or English — AI will identify ingredients
-            </p>
-          </div>
-
-          {!analysis && (
-            <button
-              onClick={handleAnalyze}
-              disabled={!description.trim() || analyzing}
-              className="w-full py-3 rounded-full text-white font-semibold disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-              style={{ background: 'var(--ct-ember)' }}
-            >
-              {analyzing ? (
-                <>
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Analyzing…
-                </>
-              ) : (
-                <>
-                  <Search className="w-4 h-4" />
-                  Analyze Food
-                </>
-              )}
-            </button>
+          {/* Shared ingredient list */}
+          {ingredients.length > 0 && (
+            <div>
+              <label className="ct-kicker block mb-2">INGREDIENTS ({ingredients.length})</label>
+              <div className="space-y-2">
+                {ingredients.map((ing, i) => {
+                  const badge = sourceBadge(ing.source);
+                  return (
+                    <div key={i} className="rounded-xl p-3 space-y-2"
+                      style={{ background: 'var(--ct-surface-2)', border: '1px solid var(--ct-line)' }}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-sm font-medium" style={{ color: 'var(--ct-ink)' }}>{ing.name_he || ing.name_en}</span>
+                          {ing.name_he && <span className="text-xs ml-1.5" style={{ color: 'var(--ct-ink-3)' }}>({ing.name_en})</span>}
+                          <span className="ct-mono text-[10px] ml-1.5 px-1.5 py-0.5 rounded-full"
+                            style={{ background: badge.bg, color: badge.color }}>{badge.label}</span>
+                        </div>
+                        <button onClick={() => removeIngredient(i)} className="p-1 rounded" style={{ color: 'var(--ct-ink-4)' }}>
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input type="number" value={ing.estimated_grams}
+                          onChange={(e) => updateGrams(i, Math.max(1, Number(e.target.value)))}
+                          className="w-20 px-2 py-1 text-sm rounded-lg ct-mono text-center"
+                          style={{ border: '1px solid var(--ct-line)', background: 'var(--ct-surface)', color: 'var(--ct-ink)' }} min="1" />
+                        <span className="text-xs ct-mono" style={{ color: 'var(--ct-ink-4)' }}>g</span>
+                        <span className="text-xs ct-mono ml-auto" style={{ color: 'var(--ct-ink-3)' }}>{ing.calculated.calories} kcal</span>
+                        <span className="text-xs ct-mono" style={{ color: 'var(--ct-ink-4)' }}>P:{ing.calculated.protein}</span>
+                        <span className="text-xs ct-mono" style={{ color: 'var(--ct-ink-4)' }}>C:{ing.calculated.carbs}</span>
+                        <span className="text-xs ct-mono" style={{ color: 'var(--ct-ink-4)' }}>F:{ing.calculated.fat}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Totals bar */}
+              <div className="mt-3 rounded-xl p-3" style={{ background: 'var(--ct-ember-soft)' }}>
+                <div className="grid grid-cols-5 gap-2 text-center text-xs">
+                  <div><p style={{ color: 'var(--ct-ink-3)' }}>Cal</p><p className="font-bold text-base" style={{ color: 'var(--ct-ember)' }}>{totals.calories}</p></div>
+                  <div><p style={{ color: 'var(--ct-ink-3)' }}>Protein</p><p className="font-bold" style={{ color: '#3b82f6' }}>{totals.protein}g</p></div>
+                  <div><p style={{ color: 'var(--ct-ink-3)' }}>Carbs</p><p className="font-bold" style={{ color: 'var(--ct-good)' }}>{totals.carbs}g</p></div>
+                  <div><p style={{ color: 'var(--ct-ink-3)' }}>Fat</p><p className="font-bold" style={{ color: '#a855f7' }}>{totals.fat}g</p></div>
+                  <div><p style={{ color: 'var(--ct-ink-3)' }}>Fiber</p><p className="font-bold" style={{ color: 'var(--ct-ink)' }}>{totals.fiber}g</p></div>
+                </div>
+              </div>
+            </div>
           )}
 
-          {/* Analysis results */}
-          {analysis && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-semibold" style={{ color: 'var(--ct-ink)' }}>{analysis.dish_name_he}</p>
-                  <p className="text-sm" style={{ color: 'var(--ct-ink-3)' }}>{analysis.dish_name_en}</p>
-                </div>
-                <button
-                  onClick={() => setAnalysis(null)}
-                  className="text-xs px-2 py-1 rounded-lg transition-colors"
-                  style={{ color: 'var(--ct-ink-3)' }}
-                >
-                  Re-analyze
+          {/* Source tab switcher */}
+          <div>
+            <div className="inline-flex gap-[1px] rounded-full p-[3px]"
+              style={{ background: 'var(--ct-surface-2)', border: '1px solid var(--ct-line)' }}>
+              {([['ai', 'AI Analysis'], ['myfoods', 'My Foods'], ['templates', 'Templates']] as const).map(([tab, label]) => (
+                <button key={tab} onClick={() => setActiveTab(tab)}
+                  className="ct-mono px-[13px] py-[7px] rounded-full text-[11px] font-medium transition-colors"
+                  style={{ background: activeTab === tab ? 'var(--ct-ink)' : 'transparent', color: activeTab === tab ? '#fff' : 'var(--ct-ink-3)', letterSpacing: '0.06em' }}>
+                  {label}
                 </button>
-              </div>
+              ))}
+            </div>
+          </div>
 
-              <div className="space-y-2">
-                {analysis.ingredients.map((ing, i) => (
-                  <div
-                    key={i}
-                    className="rounded-xl p-3 space-y-2"
-                    style={{ background: 'var(--ct-surface-2)', border: '1px solid var(--ct-line)' }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="text-sm font-medium" style={{ color: 'var(--ct-ink)' }}>{ing.name_he || ing.name_en}</span>
-                        {ing.name_he && (
-                          <span className="text-xs ml-1.5" style={{ color: 'var(--ct-ink-3)' }}>({ing.name_en})</span>
-                        )}
-                        <span
-                          className="ct-mono text-[10px] ml-1.5 px-1.5 py-0.5 rounded-full"
-                          style={{
-                            background: ing.source === 'usda' ? 'rgba(34,197,94,0.1)' : 'rgba(59,130,246,0.1)',
-                            color: ing.source === 'usda' ? 'var(--ct-good)' : '#3b82f6',
-                          }}
-                        >
-                          {ing.source === 'usda' ? 'USDA' : 'AI'}
-                        </span>
-                      </div>
-                      <button onClick={() => removeIngredient(i)} className="p-1 rounded" style={{ color: 'var(--ct-ink-4)' }}>
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        value={ing.estimated_grams}
-                        onChange={(e) => updateIngredientGrams(i, Math.max(1, Number(e.target.value)))}
-                        className="w-20 px-2 py-1 text-sm rounded-lg ct-mono text-center"
-                        style={{ border: '1px solid var(--ct-line)', background: 'var(--ct-surface)', color: 'var(--ct-ink)' }}
-                        min="1"
-                      />
-                      <span className="text-xs ct-mono" style={{ color: 'var(--ct-ink-4)' }}>g</span>
-                      <span className="text-xs ct-mono ml-auto" style={{ color: 'var(--ct-ink-3)' }}>{ing.calculated.calories} kcal</span>
-                      <span className="text-xs ct-mono" style={{ color: 'var(--ct-ink-4)' }}>P:{ing.calculated.protein}</span>
-                      <span className="text-xs ct-mono" style={{ color: 'var(--ct-ink-4)' }}>C:{ing.calculated.carbs}</span>
-                      <span className="text-xs ct-mono" style={{ color: 'var(--ct-ink-4)' }}>F:{ing.calculated.fat}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+          {/* AI Analysis tab */}
+          {activeTab === 'ai' && (
+            <div className="space-y-3">
+              <textarea value={description} onChange={(e) => setDescription(e.target.value)}
+                placeholder={"פיתה שווארמה פרגית\nסושי סלמון רול\nchicken breast with rice and salad"}
+                rows={3} dir="auto"
+                className="w-full px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 resize-none"
+                style={{ background: 'var(--ct-surface-2)', border: '1px solid var(--ct-line)', color: 'var(--ct-ink)' }} />
+              <p className="text-xs" style={{ color: 'var(--ct-ink-4)' }}>Hebrew or English — AI identifies ingredients and adds to the list above.</p>
+              <button onClick={handleAnalyze} disabled={!description.trim() || analyzing}
+                className="w-full py-3 rounded-full text-white font-semibold disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                style={{ background: 'var(--ct-ember)' }}>
+                {analyzing
+                  ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Analyzing…</>
+                  : <><Search className="w-4 h-4" /> Analyze & Add</>}
+              </button>
+            </div>
+          )}
 
-              {/* Totals */}
-              <div className="rounded-xl p-3" style={{ background: 'var(--ct-ember-soft)', border: '1px solid rgba(0,0,0,0.04)' }}>
-                <p className="text-sm font-semibold mb-2" style={{ color: 'var(--ct-ink)' }}>Total</p>
-                <div className="grid grid-cols-5 gap-2 text-center text-xs">
-                  <div><p style={{ color: 'var(--ct-ink-3)' }}>Cal</p><p className="font-bold text-base" style={{ color: 'var(--ct-ember)' }}>{analysis.totals.calories}</p></div>
-                  <div><p style={{ color: 'var(--ct-ink-3)' }}>Protein</p><p className="font-bold" style={{ color: '#3b82f6' }}>{analysis.totals.protein}g</p></div>
-                  <div><p style={{ color: 'var(--ct-ink-3)' }}>Carbs</p><p className="font-bold" style={{ color: 'var(--ct-good)' }}>{analysis.totals.carbs}g</p></div>
-                  <div><p style={{ color: 'var(--ct-ink-3)' }}>Fat</p><p className="font-bold" style={{ color: '#a855f7' }}>{analysis.totals.fat}g</p></div>
-                  <div><p style={{ color: 'var(--ct-ink-3)' }}>Fiber</p><p className="font-bold" style={{ color: 'var(--ct-ink)' }}>{analysis.totals.fiber}g</p></div>
+          {/* My Foods tab */}
+          {activeTab === 'myfoods' && (
+            <div className="space-y-3">
+              {!pfLoaded ? (
+                <div className="flex justify-center py-6">
+                  <span className="w-5 h-5 border-2 border-current/30 border-t-current rounded-full animate-spin" style={{ color: 'var(--ct-ink-3)' }} />
                 </div>
-              </div>
+              ) : personalFoods.length === 0 ? (
+                <p className="text-sm text-center py-6" style={{ color: 'var(--ct-ink-3)' }}>
+                  No saved foods yet. Star foods in the Foods tab to save them here.
+                </p>
+              ) : (
+                <>
+                  <div className="relative">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--ct-ink-4)' }} />
+                    <input type="text" placeholder="Search my foods…" value={pfSearch}
+                      onChange={(e) => setPfSearch(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 rounded-xl text-sm focus:outline-none focus:ring-2"
+                      style={{ border: '1px solid var(--ct-line)', background: 'var(--ct-surface-2)', color: 'var(--ct-ink)' }} />
+                  </div>
+                  <div className="space-y-2 max-h-56 overflow-y-auto">
+                    {filteredPF.map((food) => (
+                      <div key={food.ingredient_name} className="flex items-center gap-2 p-3 rounded-xl"
+                        style={{ background: 'var(--ct-surface-2)', border: '1px solid var(--ct-line)' }}>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate" style={{ color: 'var(--ct-ink)' }}>{food.ingredient_name}</p>
+                          <p className="text-xs ct-mono" style={{ color: 'var(--ct-ink-4)' }}>
+                            ~{food.avg_calories} kcal · logged {food.total_count}×
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <input type="number"
+                            value={pfGrams[food.ingredient_name] ?? food.avg_weight ?? 100}
+                            onChange={(e) => setPfGrams((prev) => ({ ...prev, [food.ingredient_name]: Math.max(1, Number(e.target.value)) }))}
+                            className="w-16 px-2 py-1 text-xs rounded-lg ct-mono text-center"
+                            style={{ border: '1px solid var(--ct-line)', background: 'var(--ct-surface)', color: 'var(--ct-ink)' }} min="1" />
+                          <span className="text-xs ct-mono" style={{ color: 'var(--ct-ink-4)' }}>g</span>
+                          <button onClick={() => addPersonalFood(food)}
+                            className="px-2.5 py-1.5 text-xs font-medium rounded-lg"
+                            style={{ background: 'var(--ct-ember)', color: '#fff' }}>
+                            + Add
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
-              {error && (
-                <div className="p-3 rounded-xl text-sm" style={{ background: 'rgba(239,83,80,0.1)', color: 'var(--ct-bad)', border: '1px solid rgba(239,83,80,0.2)' }}>
-                  {error}
+          {/* Templates tab */}
+          {activeTab === 'templates' && (
+            <div className="space-y-2">
+              {!tmplLoaded ? (
+                <div className="flex justify-center py-6">
+                  <span className="w-5 h-5 border-2 border-current/30 border-t-current rounded-full animate-spin" style={{ color: 'var(--ct-ink-3)' }} />
+                </div>
+              ) : templates.length === 0 ? (
+                <p className="text-sm text-center py-6" style={{ color: 'var(--ct-ink-3)' }}>
+                  No templates yet. Add ingredients and click &quot;Save as template&quot; below.
+                </p>
+              ) : (
+                templates.map((tmpl) => (
+                  <button key={tmpl.id} onClick={() => loadTemplate(tmpl)}
+                    className="w-full flex items-center justify-between p-3 rounded-xl text-left transition-colors hover:opacity-80"
+                    style={{ background: 'var(--ct-surface-2)', border: '1px solid var(--ct-line)' }}>
+                    <div>
+                      <p className="text-sm font-medium" style={{ color: 'var(--ct-ink)' }}>{tmpl.name}</p>
+                      <p className="text-xs ct-mono mt-0.5" style={{ color: 'var(--ct-ink-4)' }}>
+                        {tmpl.total_calories} kcal · {tmpl.items.length} items
+                      </p>
+                    </div>
+                    <span className="text-xs font-medium px-2.5 py-1 rounded-full"
+                      style={{ background: 'var(--ct-ember-soft)', color: 'var(--ct-ember)' }}>Use</span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* Error */}
+          {error && (
+            <div className="p-3 rounded-xl text-sm" style={{ background: 'rgba(239,83,80,0.1)', color: 'var(--ct-bad)', border: '1px solid rgba(239,83,80,0.2)' }}>
+              {error}
+            </div>
+          )}
+
+          {/* Confirm + Save-as-template (only when ingredients exist) */}
+          {ingredients.length > 0 && (
+            <div className="space-y-3 pt-2" style={{ borderTop: '1px solid var(--ct-line)' }}>
+              {!showSaveTemplate && !templateSaved && (
+                <button onClick={() => setShowSaveTemplate(true)}
+                  className="text-sm flex items-center gap-1.5 transition-colors"
+                  style={{ color: 'var(--ct-ink-3)' }}>
+                  <Plus className="w-3.5 h-3.5" /> Save as template
+                </button>
+              )}
+              {templateSaved && <p className="text-sm" style={{ color: 'var(--ct-good)' }}>✓ Template saved!</p>}
+              {showSaveTemplate && (
+                <div className="flex gap-2">
+                  <input type="text" placeholder="Template name…" value={templateName}
+                    onChange={(e) => setTemplateName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveTemplate()}
+                    className="flex-1 px-3 py-2 text-sm rounded-xl focus:outline-none focus:ring-2"
+                    style={{ border: '1px solid var(--ct-line)', background: 'var(--ct-surface-2)', color: 'var(--ct-ink)' }} />
+                  <button onClick={handleSaveTemplate} disabled={savingTemplate || !templateName.trim()}
+                    className="px-3 py-2 text-sm font-medium rounded-xl disabled:opacity-50"
+                    style={{ background: 'var(--ct-surface-2)', color: 'var(--ct-ink-3)', border: '1px solid var(--ct-line)' }}>
+                    {savingTemplate ? '…' : 'Save'}
+                  </button>
+                  <button onClick={() => setShowSaveTemplate(false)} className="px-3 py-2 text-sm rounded-xl" style={{ color: 'var(--ct-ink-4)' }}>
+                    Cancel
+                  </button>
                 </div>
               )}
-
-              <button
-                onClick={handleConfirm}
-                disabled={submitting || !analysis.ingredients.length}
+              <button onClick={handleConfirm} disabled={submitting}
                 className="w-full py-3 rounded-full text-white font-semibold disabled:opacity-50 transition-colors"
-                style={{ background: 'var(--ct-ember)' }}
-              >
-                {submitting ? 'Saving…' : `Confirm & Save (${analysis.totals.calories} kcal)`}
+                style={{ background: 'var(--ct-ember)' }}>
+                {submitting ? 'Saving…' : `Confirm & Save (${totals.calories} kcal)`}
               </button>
             </div>
           )}
@@ -889,11 +1087,6 @@ export default function MealsPage() {
     }
   };
 
-  const getPhotoUrl = (meal: CaltrackMeal) => {
-    if (!meal.photo_storage_path || !CALTRACK_STORAGE_URL) return null;
-    return `${CALTRACK_STORAGE_URL}/storage/v1/object/authenticated/meals/${meal.photo_storage_path}`;
-  };
-
   const formatTime = (iso: string) => {
     const d = new Date(iso);
     const h = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
@@ -1147,7 +1340,6 @@ export default function MealsPage() {
               {/* Meal cards */}
               <div className="space-y-2 mb-6">
                 {dateMeals.map((meal) => {
-                  const photoUrl = getPhotoUrl(meal);
                   const badge = mealTypeBadge[meal.meal_type] || { bg: 'rgba(14,15,12,0.06)', color: 'var(--ct-ink-3)' };
                   return (
                     <div
@@ -1224,6 +1416,26 @@ export default function MealsPage() {
 
                       {expandedMeal === meal.id && (
                         <div className="px-4 py-4" style={{ borderTop: '1px solid var(--ct-line)', background: 'var(--ct-surface-2)' }}>
+                          {/* Photo thumbnail */}
+                          {meal.photo_url && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setLightboxUrl(meal.photo_url!); }}
+                              className="block mb-3 rounded-xl overflow-hidden"
+                              style={{ maxWidth: 200 }}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={meal.photo_url}
+                                alt="Meal photo"
+                                className="w-full object-cover"
+                                style={{ maxHeight: 150 }}
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                              />
+                              <div className="flex items-center gap-1 px-2 py-1 text-xs" style={{ background: 'rgba(14,15,12,0.6)', color: '#fff' }}>
+                                <Camera className="w-3 h-3" /> View photo
+                              </div>
+                            </button>
+                          )}
                           {meal.notes && (
                             <p className="text-sm font-semibold mb-3" style={{ color: 'var(--ct-ink)' }}>{meal.notes}</p>
                           )}

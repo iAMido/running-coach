@@ -8,7 +8,7 @@ import {
   UtensilsCrossed,
   Scale,
   Apple,
-  Activity,
+  BookOpen,
   LogOut,
 } from 'lucide-react';
 import { signOut } from 'next-auth/react';
@@ -18,7 +18,7 @@ const navItems = [
   { href: '/caltrack/meals', label: 'Meals', icon: UtensilsCrossed },
   { href: '/caltrack/weight', label: 'Weight', icon: Scale },
   { href: '/caltrack/foods', label: 'Foods', icon: Apple },
-  { href: '/coach', label: 'Coach', icon: Activity },
+  { href: '/caltrack/coach', label: 'Coach', icon: BookOpen },
 ];
 
 export function CaltrackBottomNav() {

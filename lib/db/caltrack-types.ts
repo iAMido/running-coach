@@ -9,9 +9,44 @@ export interface CaltrackMeal {
   total_fat_g: number;
   total_fiber_g: number;
   photo_storage_path: string | null;
+  photo_url?: string | null;
   notes: string | null;
   status: string;
   item_names?: string[];
+}
+
+export interface CoachReport {
+  id: string;
+  user_id: string;
+  week_start: string;
+  week_end: string;
+  report_text: string;
+  created_at: string;
+}
+
+export interface MealTemplate {
+  id: string;
+  user_id: string;
+  name: string;
+  total_calories: number | null;
+  total_protein_g: number | null;
+  total_carbs_g: number | null;
+  total_fat_g: number | null;
+  created_at: string;
+  items: MealTemplateItem[];
+}
+
+export interface MealTemplateItem {
+  id: string;
+  template_id: string;
+  ingredient_name: string;
+  fdc_id: number | null;
+  weight_grams: number;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
 }
 
 export interface CaltrackMealItem {

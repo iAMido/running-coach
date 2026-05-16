@@ -11,6 +11,7 @@ import {
   LogOut,
   Activity,
   ChevronLeft,
+  BookOpen,
 } from 'lucide-react';
 import { signOut } from 'next-auth/react';
 
@@ -19,6 +20,7 @@ const navItems = [
   { href: '/caltrack/meals', label: 'Meals', icon: UtensilsCrossed },
   { href: '/caltrack/weight', label: 'Weight', icon: Scale },
   { href: '/caltrack/foods', label: 'Foods', icon: Apple },
+  { href: '/caltrack/coach', label: 'Coach Reports', icon: BookOpen },
 ];
 
 export function CaltrackSidebar() {
