@@ -434,10 +434,10 @@ Please provide:
 3. **Intensity Distribution** - Were easy days easy enough? (80/20 check)
 4. **What Went Well** - Positive observations
 5. **Areas to Improve** - Specific issues
-6. **Run-by-Run Feedback** - Quick notes on each run
+6. **Run-by-Run Feedback** - For each run: if lap data is available, comment on pacing consistency, HR drift across laps, and whether the effort was truly easy or crept into a harder zone. If no laps, use headline stats only.
 7. **Next Week Focus** - 2-3 key things
 
-Be specific about HR zones and pacing. If runs were too hard, say so clearly.`;
+Be specific about HR zones and pacing. If runs were too hard, say so clearly. When laps are present, use them — lap-by-lap HR drift is more revealing than average HR.`;
 }
 
 /**

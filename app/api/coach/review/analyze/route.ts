@@ -57,10 +57,22 @@ export async function POST(request: NextRequest) {
       .eq('user_id', userId)
       .gte('run_date', monday.toISOString().split('T')[0]);
 
+    // Fetch laps for this week's runs
+    const runIds = (runs || []).map((r: { id: string }) => r.id);
+    const { data: laps } = runIds.length > 0
+      ? await supabase.from('laps').select('*').in('run_id', runIds).order('lap_number', { ascending: true })
+      : { data: [] };
+
+    // Attach laps to each run
+    const runsWithLaps = (runs || []).map((run: { id: string }) => ({
+      ...run,
+      laps: (laps || []).filter((l: { run_id: string }) => l.run_id === run.id),
+    }));
+
     // Build prompts
     const systemPrompt = buildCoachSystemPrompt({ profile });
     const userPrompt = buildWeeklyAnalysisPrompt({
-      runs: runs || [],
+      runs: runsWithLaps,
       feedback: feedback || [],
       overallFeeling,
       sleepQuality,

@@ -169,6 +169,43 @@ export async function POST(request: NextRequest) {
       } else {
         console.log(`  Inserted successfully!`);
         newRunsCount++;
+
+        // Fetch and save laps for this activity
+        const { data: insertedRun } = await supabase
+          .from('runs')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('filename', filename)
+          .single();
+
+        if (insertedRun) {
+          try {
+            const lapsResponse = await fetch(
+              `https://www.strava.com/api/v3/activities/${activity.id}/laps`,
+              { headers: { Authorization: `Bearer ${accessToken}` } }
+            );
+            if (lapsResponse.ok) {
+              const lapsData = await lapsResponse.json();
+              if (Array.isArray(lapsData) && lapsData.length > 0) {
+                const lapsToInsert = lapsData.map((lap: StravaLap) => ({
+                  run_id: insertedRun.id,
+                  lap_number: lap.lap_index,
+                  distance_km: Math.round((lap.distance / 1000) * 1000) / 1000,
+                  duration_sec: Math.round(lap.moving_time),
+                  avg_hr: lap.average_heartrate ? Math.round(lap.average_heartrate) : null,
+                  max_hr: lap.max_heartrate ? Math.round(lap.max_heartrate) : null,
+                  avg_pace_str: lap.average_speed > 0
+                    ? formatPace(1 / (lap.average_speed * 60 / 1000))
+                    : null,
+                }));
+                await supabase.from('laps').insert(lapsToInsert);
+                console.log(`  Saved ${lapsToInsert.length} laps`);
+              }
+            }
+          } catch (lapErr) {
+            console.log(`  Failed to fetch laps: ${lapErr}`);
+          }
+        }
       }
     }
 
@@ -177,4 +214,13 @@ export async function POST(request: NextRequest) {
     console.error('Error syncing Strava:', error);
     return NextResponse.json({ error: 'Failed to sync' }, { status: 500 });
   }
+}
+
+interface StravaLap {
+  lap_index: number;
+  distance: number;
+  moving_time: number;
+  average_heartrate?: number;
+  max_heartrate?: number;
+  average_speed: number;
 }
