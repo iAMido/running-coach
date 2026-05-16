@@ -107,10 +107,12 @@ export async function POST(request: NextRequest) {
 
     let newRunsCount = 0;
     let lapsBackfilledCount = 0;
+    const debugLog: string[] = [];
+
+    debugLog.push(`Activities from Strava: ${activities.length}, Runs: ${runs.length}`);
 
     for (const activity of runs) {
       const filename = `strava_${activity.id}`;
-      console.log(`Checking activity ${filename} (${activity.name})`);
 
       // Check if already exists
       const { data: existing, error: checkError } = await supabase
@@ -120,14 +122,14 @@ export async function POST(request: NextRequest) {
         .eq('filename', filename)
         .single();
 
-      console.log(`  Existing: ${!!existing}, Error: ${checkError?.code || 'none'}`);
-
       if (existing) {
         // Backfill laps if this run has none yet
-        const { count } = await supabase
+        const { count, error: countError } = await supabase
           .from('laps')
           .select('*', { count: 'exact', head: true })
           .eq('run_id', existing.id);
+
+        debugLog.push(`${activity.name}: exists (id=${existing.id}), laps count=${count}, countErr=${countError?.message || 'none'}`);
 
         if (!count) {
           try {
@@ -135,8 +137,10 @@ export async function POST(request: NextRequest) {
               `https://www.strava.com/api/v3/activities/${activity.id}/laps`,
               { headers: { Authorization: `Bearer ${accessToken}` } }
             );
+            const lapsStatus = lapsResponse.status;
             if (lapsResponse.ok) {
               const lapsData = await lapsResponse.json();
+              debugLog.push(`  Strava laps API: ${lapsStatus}, returned ${Array.isArray(lapsData) ? lapsData.length : 'non-array'} laps`);
               if (Array.isArray(lapsData) && lapsData.length > 0) {
                 const lapsToInsert = lapsData.map((lap: StravaLap) => ({
                   run_id: existing.id,
@@ -149,13 +153,19 @@ export async function POST(request: NextRequest) {
                     ? formatPace(1 / (lap.average_speed * 60 / 1000))
                     : null,
                 }));
-                await supabase.from('laps').insert(lapsToInsert);
-                lapsBackfilledCount++;
-                console.log(`  Backfilled ${lapsToInsert.length} laps`);
+                const { error: insertError } = await supabase.from('laps').insert(lapsToInsert);
+                if (insertError) {
+                  debugLog.push(`  Insert error: ${insertError.message}`);
+                } else {
+                  lapsBackfilledCount++;
+                  debugLog.push(`  Backfilled ${lapsToInsert.length} laps OK`);
+                }
               }
+            } else {
+              debugLog.push(`  Strava laps API failed: ${lapsStatus}`);
             }
           } catch (lapErr) {
-            console.log(`  Failed to backfill laps: ${lapErr}`);
+            debugLog.push(`  Exception: ${lapErr}`);
           }
         }
         continue;
@@ -244,7 +254,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, newRunsCount, lapsBackfilledCount });
+    return NextResponse.json({ success: true, newRunsCount, lapsBackfilledCount, debug: debugLog });
   } catch (error) {
     console.error('Error syncing Strava:', error);
     return NextResponse.json({ error: 'Failed to sync' }, { status: 500 });
