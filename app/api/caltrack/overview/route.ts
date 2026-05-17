@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { NextRequest } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { caltrackDb, isCaltrackConfigured } from '@/lib/db/supabase-caltrack';
-// RunCoach DB no longer needed — CalTrack has its own Strava sync
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthenticatedUser();
@@ -40,7 +39,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [profileRes, summariesRes, weightRes, todayMealsRes, runsRes, waterRes] =
+    const [profileRes, allMealsRes, weightRes, runsRes, waterRes] =
       await Promise.all([
         caltrackDb
           .from('user_profile')
@@ -49,25 +48,20 @@ export async function GET(request: NextRequest) {
           )
           .limit(1)
           .single(),
-        caltrackDb
-          .from('daily_summary')
-          .select('*')
-          .gte('date', startStr)
-          .lte('date', todayStr)
-          .order('date', { ascending: true }),
-        caltrackDb
-          .from('weight_log')
-          .select('weight_kg,measured_at')
-          .gte('measured_at', `${startStr}T00:00:00`)
-          .order('measured_at', { ascending: true }),
+        // Fetch ALL meals in the date range (not just today)
         caltrackDb
           .from('meals')
           .select(
             'id,meal_type,total_calories,total_protein_g,total_carbs_g,total_fat_g,total_fiber_g,eaten_at'
           )
           .eq('status', 'confirmed')
-          .gte('eaten_at', `${todayStr}T00:00:00`)
+          .gte('eaten_at', `${startStr}T00:00:00`)
           .lte('eaten_at', `${todayStr}T23:59:59`),
+        caltrackDb
+          .from('weight_log')
+          .select('weight_kg,measured_at')
+          .gte('measured_at', `${startStr}T00:00:00`)
+          .order('measured_at', { ascending: true }),
         caltrackDb
           .from('caltrack_runs')
           .select('calories_burned,run_date,distance_km,duration_minutes')
@@ -81,9 +75,8 @@ export async function GET(request: NextRequest) {
       ]);
 
     const profile = profileRes.data;
-    const summaries = summariesRes.data || [];
+    const allMeals = allMealsRes.data || [];
     const weights = weightRes.data || [];
-    const todayMeals = todayMealsRes.data || [];
     const allRuns = runsRes.data || [];
     const todayWaterLogs = waterRes.data || [];
     const targetCal = profile?.target_daily_calories || 2000;
@@ -93,6 +86,26 @@ export async function GET(request: NextRequest) {
       (sum: number, w: { amount_ml: number }) => sum + w.amount_ml,
       0
     );
+
+    // Group meals by day (live data — always accurate)
+    const mealsByDay: Record<
+      string,
+      { calories: number; protein: number; carbs: number; fat: number; fiber: number; count: number }
+    > = {};
+
+    for (const m of allMeals) {
+      const mealDate = new Date(m.eaten_at);
+      const day = mealDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+      if (!day) continue;
+      if (!mealsByDay[day])
+        mealsByDay[day] = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, count: 0 };
+      mealsByDay[day].calories += m.total_calories || 0;
+      mealsByDay[day].protein += m.total_protein_g || 0;
+      mealsByDay[day].carbs += m.total_carbs_g || 0;
+      mealsByDay[day].fat += m.total_fat_g || 0;
+      mealsByDay[day].fiber += m.total_fiber_g || 0;
+      mealsByDay[day].count += 1;
+    }
 
     // Build a map of exercise calories per day from caltrack_runs
     const runsByDay: Record<
@@ -112,43 +125,28 @@ export async function GET(request: NextRequest) {
       runsByDay[day].duration += r.duration_minutes || 0;
     }
 
-    // Build a map from daily_summary
-    const summaryByDay: Record<
-      string,
-      { calories_in: number; calories_out: number; target: number }
-    > = {};
-    for (const s of summaries) {
-      summaryByDay[s.date] = {
-        calories_in: s.total_calories_in || 0,
-        calories_out: s.total_calories_out || 0,
-        target: s.target_calories || targetCal,
-      };
-    }
-
-    // Merge all dates that have any data (summary OR runs)
+    // Merge all dates that have any data (meals OR runs)
     const allDates = new Set<string>([
-      ...Object.keys(summaryByDay),
+      ...Object.keys(mealsByDay),
       ...Object.keys(runsByDay),
     ]);
     const sortedDates = Array.from(allDates).sort();
 
     const trend = sortedDates.map((date) => {
-      const summary = summaryByDay[date];
+      const meals = mealsByDay[date];
       const runs = runsByDay[date];
-      const caloriesIn = summary?.calories_in || 0;
-      const exerciseFromSummary = summary?.calories_out || 0;
-      const exerciseFromRuns = runs?.calories || 0;
-      const exerciseCalories = Math.max(exerciseFromSummary, exerciseFromRuns);
+      const caloriesIn = meals?.calories || 0;
+      const exerciseCalories = runs?.calories || 0;
       return {
         date,
         calories_in: caloriesIn,
         calories_out: exerciseCalories,
         net: caloriesIn - exerciseCalories,
-        target: summary?.target || targetCal,
+        target: targetCal,
       };
     });
 
-    // Today's exercise
+    // Today's data
     const todayExercise = runsByDay[todayStr] || {
       calories: 0,
       count: 0,
@@ -156,64 +154,25 @@ export async function GET(request: NextRequest) {
       duration: 0,
     };
 
-    const todayCalories = todayMeals.reduce(
-      (sum: number, m: { total_calories: number }) =>
-        sum + (m.total_calories || 0),
-      0
-    );
+    const todayData = mealsByDay[todayStr] || {
+      calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, count: 0,
+    };
 
-    // Override today's trend entry with live data from meals table
-    // (daily_summary may be stale if the last update failed)
-    if (todayCalories > 0 || todayMeals.length > 0) {
-      const todayIdx = trend.findIndex((t) => t.date === todayStr);
-      const todayExCal = todayExercise.calories;
-      const todayEntry = {
-        date: todayStr,
-        calories_in: todayCalories,
-        calories_out: todayExCal,
-        net: todayCalories - todayExCal,
-        target: targetCal,
-      };
-      if (todayIdx >= 0) {
-        trend[todayIdx] = todayEntry;
-      } else {
-        trend.push(todayEntry);
-      }
-    }
-    const todayProtein = todayMeals.reduce(
-      (sum: number, m: { total_protein_g: number }) =>
-        sum + (m.total_protein_g || 0),
-      0
-    );
-    const todayCarbs = todayMeals.reduce(
-      (sum: number, m: { total_carbs_g: number }) =>
-        sum + (m.total_carbs_g || 0),
-      0
-    );
-    const todayFat = todayMeals.reduce(
-      (sum: number, m: { total_fat_g: number }) => sum + (m.total_fat_g || 0),
-      0
-    );
-    const todayFiber = todayMeals.reduce(
-      (sum: number, m: { total_fiber_g: number }) =>
-        sum + (m.total_fiber_g || 0),
-      0
-    );
+    // Filter today's meals for the response
+    const todayMeals = allMeals.filter((m) => {
+      const mealDate = new Date(m.eaten_at);
+      const day = mealDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+      return day === todayStr;
+    });
 
-    const daysWithMeals = summaries.filter(
-      (s: { total_calories_in: number }) => (s.total_calories_in || 0) > 0
-    ).length;
+    const daysWithMeals = Object.values(mealsByDay).filter((d) => d.calories > 0).length;
 
+    const totalMealCalories = Object.values(mealsByDay).reduce(
+      (sum, d) => sum + d.calories,
+      0
+    );
     const avgCalories =
-      daysWithMeals > 0
-        ? Math.round(
-            summaries.reduce(
-              (sum: number, s: { total_calories_in: number }) =>
-                sum + (s.total_calories_in || 0),
-              0
-            ) / daysWithMeals
-          )
-        : 0;
+      daysWithMeals > 0 ? Math.round(totalMealCalories / daysWithMeals) : 0;
 
     const weightTrend = weights.map(
       (w: { measured_at: string; weight_kg: number }) => ({
@@ -235,12 +194,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       profile,
       today: {
-        calories: todayCalories,
+        calories: todayData.calories,
         target: targetCal,
-        protein: Math.round(todayProtein * 10) / 10,
-        carbs: Math.round(todayCarbs * 10) / 10,
-        fat: Math.round(todayFat * 10) / 10,
-        fiber: Math.round(todayFiber * 10) / 10,
+        protein: Math.round(todayData.protein * 10) / 10,
+        carbs: Math.round(todayData.carbs * 10) / 10,
+        fat: Math.round(todayData.fat * 10) / 10,
+        fiber: Math.round(todayData.fiber * 10) / 10,
         meals: todayMeals.length,
         exercise: todayExercise.calories,
         exerciseRuns: todayExercise.count,
