@@ -161,6 +161,25 @@ export async function GET(request: NextRequest) {
         sum + (m.total_calories || 0),
       0
     );
+
+    // Override today's trend entry with live data from meals table
+    // (daily_summary may be stale if the last update failed)
+    if (todayCalories > 0 || todayMeals.length > 0) {
+      const todayIdx = trend.findIndex((t) => t.date === todayStr);
+      const todayExCal = todayExercise.calories;
+      const todayEntry = {
+        date: todayStr,
+        calories_in: todayCalories,
+        calories_out: todayExCal,
+        net: todayCalories - todayExCal,
+        target: targetCal,
+      };
+      if (todayIdx >= 0) {
+        trend[todayIdx] = todayEntry;
+      } else {
+        trend.push(todayEntry);
+      }
+    }
     const todayProtein = todayMeals.reduce(
       (sum: number, m: { total_protein_g: number }) =>
         sum + (m.total_protein_g || 0),
