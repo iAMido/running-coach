@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
           target_calories: profileRes.data.target_daily_calories || 2000,
           net_calories: dayTotals.cal,
         },
-        { onConflict: 'user_id,date' }
+        { onConflict: 'date' }
       );
     }
 
