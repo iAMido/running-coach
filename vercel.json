@@ -1,13 +1,1 @@
-{
-  "_comment_crons_disabled": "Crons disabled during Supabase migration (RunCoach -> CalTrack). Restore after Step 11 of the migration plan.",
-  "_disabled_crons": [
-    {
-      "path": "/api/cron/strava-sync",
-      "schedule": "0 15 * * *"
-    },
-    {
-      "path": "/api/cron/strava-sync",
-      "schedule": "40 21 * * *"
-    }
-  ]
-}
+{}
