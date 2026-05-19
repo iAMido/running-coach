@@ -57,3 +57,12 @@ package-lock.json
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Supabase migration backups (contains live OAuth tokens)
+migration-backup/
+
+# Password files - never commit
+supabase password.txt
+*password*.txt
+*secret*.txt
+New folder/

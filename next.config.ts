@@ -63,11 +63,8 @@ const nextConfig: NextConfig = {
         pathname: '/**',
       },
       {
-        protocol: 'https',
-        hostname: 'ucjsnpnlxklaadqolpkx.supabase.co',
-        pathname: '/storage/v1/object/public/**',
-      },
-      {
+        // CalTrack project hosts ALL storage after RunCoach consolidation
+        // (assets bucket + caltrack meals bucket).
         protocol: 'https',
         hostname: 'tlnqkxwlrewbtufnqiwi.supabase.co',
         pathname: '/storage/v1/object/**',

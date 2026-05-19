@@ -4,8 +4,8 @@ import { Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
 
-// Supabase storage URLs
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ucjsnpnlxklaadqolpkx.supabase.co'
+// Supabase storage URLs (CalTrack project hosts the `assets` bucket post-consolidation)
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://tlnqkxwlrewbtufnqiwi.supabase.co'
 const PROFILE_IMAGE_URL = `${SUPABASE_URL}/storage/v1/object/public/assets/profile-image.jpg`
 const CV_URL = `${SUPABASE_URL}/storage/v1/object/public/assets/Ido-Mosseri-CV.pdf`
 

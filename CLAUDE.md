@@ -32,7 +32,7 @@ bunx shadcn@latest add <component>  # Add shadcn/ui component
 - **Server Components by default** unless marked `'use client'`
 - **API Routes** use `export const runtime = 'nodejs'` for external API calls
 - **Vercel Cron** for scheduled Strava sync
-- **Two Supabase projects**: RunCoach (`ucjsnpnlxklaadqolpkx`) and CalTrack (`tlnqkxwlrewbtufnqiwi`)
+- **One Supabase project, two schemas** (post-consolidation, May 2026): the CalTrack project (`tlnqkxwlrewbtufnqiwi`) hosts both apps. CalTrack's tables live in the `public` schema; RunCoach's tables live in the `runcoach` schema. The two `lib/db/supabase*` clients are configured with different `db.schema` settings to route queries to the right place. The old RunCoach project (`ucjsnpnlxklaadqolpkx`) is paused.
 
 ### Directory Structure
 ```
@@ -193,7 +193,7 @@ GOOGLE_CLIENT_ID=<from-google-console>
 GOOGLE_CLIENT_SECRET=<from-google-console>
 
 # RunCoach Supabase
-NEXT_PUBLIC_SUPABASE_URL=https://ucjsnpnlxklaadqolpkx.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=https://tlnqkxwlrewbtufnqiwi.supabase.co   # same project as CalTrack; RunCoach client uses `runcoach` schema
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
 
 # CalTrack Supabase (separate project)
@@ -247,7 +247,7 @@ Edit `lib/cv-data.ts` - single source of truth for all CV sections.
 
 ## Important Notes
 
-- **Two Supabase projects** - RunCoach and CalTrack are separate. Don't mix clients.
+- **One Supabase project, two schemas** - `public` for CalTrack, `runcoach` for RunCoach. Don't mix clients: use `lib/db/supabase.ts` for RunCoach data, `lib/db/supabase-caltrack.ts` for CalTrack data.
 - **`bun run build` before every commit** - TypeScript errors must be fixed.
 - **Service role key fallback** - `lib/db/supabase.ts` falls back to anon key at build time (env vars unavailable during static analysis). This is intentional.
 - **react-markdown** - Used for rendering AI coach analysis output (weekly review, reports).
