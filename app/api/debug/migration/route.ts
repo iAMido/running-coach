@@ -35,16 +35,24 @@ export async function GET() {
       : '(empty)',
   };
 
-  // Try a simple query
-  let queryResult: unknown;
+  // Try real queries against multiple tables
+  const checks: Record<string, unknown> = {};
   try {
-    const { data, error, status, statusText } = await supabase
-      .from('runs')
-      .select('id', { count: 'exact', head: true });
-    queryResult = { data, error, status, statusText };
-  } catch (e) {
-    queryResult = { caught: (e as Error).message };
-  }
+    const r = await supabase.from('runs').select('id, date', { count: 'exact' }).order('date', { ascending: false }).limit(1);
+    checks.runs = { count: r.count, newest: r.data?.[0]?.date, error: r.error?.message };
+  } catch (e) { checks.runs = { caught: (e as Error).message }; }
+  try {
+    const r = await supabase.from('athlete_profile').select('name, age', { count: 'exact' });
+    checks.athlete_profile = { count: r.count, name: r.data?.[0]?.name, error: r.error?.message };
+  } catch (e) { checks.athlete_profile = { caught: (e as Error).message }; }
+  try {
+    const r = await supabase.from('book_instructions').select('id', { count: 'exact', head: true });
+    checks.book_instructions = { count: r.count, error: r.error?.message };
+  } catch (e) { checks.book_instructions = { caught: (e as Error).message }; }
+  try {
+    const r = await supabase.from('strava_tokens').select('user_id', { count: 'exact' });
+    checks.strava_tokens = { count: r.count, error: r.error?.message };
+  } catch (e) { checks.strava_tokens = { caught: (e as Error).message }; }
 
-  return NextResponse.json({ env, queryResult }, { status: 200 });
+  return NextResponse.json({ env, checks }, { status: 200 });
 }
