@@ -13,6 +13,7 @@ import {
   Trash2,
   Minus,
   Camera,
+  Bookmark,
 } from 'lucide-react';
 import { DateRangePicker } from '@/components/caltrack/date-range-picker';
 import type { CaltrackMeal, CaltrackMealItem, MealTemplate } from '@/lib/db/caltrack-types';
@@ -506,9 +507,14 @@ function AddMealModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
                   <span className="w-5 h-5 border-2 border-current/30 border-t-current rounded-full animate-spin" style={{ color: 'var(--ct-ink-3)' }} />
                 </div>
               ) : templates.length === 0 ? (
-                <p className="text-sm text-center py-6" style={{ color: 'var(--ct-ink-3)' }}>
-                  No templates yet. Add ingredients and click &quot;Save as template&quot; below.
-                </p>
+                <div className="text-center py-6 space-y-2">
+                  <Bookmark className="w-8 h-8 mx-auto" style={{ color: 'var(--ct-ink-4)' }} />
+                  <p className="text-sm font-medium" style={{ color: 'var(--ct-ink-3)' }}>No templates yet</p>
+                  <p className="text-xs" style={{ color: 'var(--ct-ink-4)', maxWidth: 280, margin: '0 auto' }}>
+                    Expand any meal in the list below and tap <strong>&quot;Save as template&quot;</strong> to reuse it later.
+                    You can also add ingredients here and save them as a template.
+                  </p>
+                </div>
               ) : (
                 templates.map((tmpl) => (
                   <div key={tmpl.id} className="flex items-center gap-2 p-3 rounded-xl"
@@ -1101,6 +1107,42 @@ export default function MealsPage() {
     }
   };
 
+  const [savingTemplateId, setSavingTemplateId] = useState<string | null>(null);
+
+  const saveAsTemplate = async (meal: CaltrackMeal) => {
+    const items = mealItems[meal.id];
+    if (!items || items.length === 0) return;
+
+    const name = prompt('Template name:', meal.notes || meal.item_names?.join(', ') || 'My meal');
+    if (!name?.trim()) return;
+
+    setSavingTemplateId(meal.id);
+    try {
+      await fetch('/api/caltrack/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          ingredients: items.map((item) => ({
+            name_en: item.ingredient_name,
+            fdc_id: item.fdc_id,
+            weight_grams: item.weight_grams,
+            calories: item.calories,
+            protein_g: item.protein_g,
+            carbs_g: item.carbs_g,
+            fat_g: item.fat_g,
+            fiber_g: item.fiber_g || 0,
+          })),
+        }),
+      });
+      alert('Template saved!');
+    } catch {
+      alert('Failed to save template');
+    } finally {
+      setSavingTemplateId(null);
+    }
+  };
+
   const formatTime = (iso: string) => {
     const d = new Date(iso);
     const h = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
@@ -1489,17 +1531,31 @@ export default function MealsPage() {
                                   </span>
                                 </div>
                               ))}
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingMeal(meal);
-                                }}
-                                className="flex items-center gap-1.5 mt-3 px-3 py-1.5 text-sm font-medium rounded-full transition-colors"
-                                style={{ color: 'var(--ct-ember)', background: 'var(--ct-ember-soft)' }}
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                                Edit meal
-                              </button>
+                              <div className="flex gap-2 mt-3">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingMeal(meal);
+                                  }}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-colors"
+                                  style={{ color: 'var(--ct-ember)', background: 'var(--ct-ember-soft)' }}
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                  Edit meal
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    saveAsTemplate(meal);
+                                  }}
+                                  disabled={savingTemplateId === meal.id}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                                  style={{ color: 'var(--ct-ink-3)', background: 'var(--ct-surface)', border: '1px solid var(--ct-line)' }}
+                                >
+                                  <Bookmark className="w-3.5 h-3.5" />
+                                  {savingTemplateId === meal.id ? 'Saving…' : 'Save as template'}
+                                </button>
+                              </div>
                             </div>
                           ) : (
                             <Skeleton className="h-16" style={{ background: 'rgba(14,15,12,0.06)' }} />

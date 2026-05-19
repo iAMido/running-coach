@@ -109,13 +109,13 @@ export default function CoachReportsPage() {
         <div>
           <div className="ct-kicker mb-2">
             <span className="inline-block w-[6px] h-[6px] rounded-full mr-2" style={{ background: 'var(--ct-ember)' }} />
-            AI COACH · WEEKLY REPORTS
+            AI DIETITIAN · WEEKLY REPORTS
           </div>
           <h1
             className="text-[36px] md:text-[44px] font-bold leading-[1.05]"
             style={{ letterSpacing: '-0.025em', color: 'var(--ct-ink)' }}
           >
-            Coach,{' '}
+            Dietitian,{' '}
             <span
               className="font-normal italic"
               style={{ fontFamily: 'var(--font-serif, Georgia, serif)', fontWeight: 500, letterSpacing: '-0.01em', color: 'var(--ct-ink)' }}
@@ -124,7 +124,7 @@ export default function CoachReportsPage() {
             </span>
           </h1>
           <p className="mt-2.5 text-sm" style={{ color: 'var(--ct-ink-3)', maxWidth: 520 }}>
-            Weekly AI analysis of your food, exercise, and weight trend.
+            Weekly AI dietitian analysis of your food, exercise, and weight trend.
             Reports are generated every Saturday at 22:00 and sent to Telegram.
           </p>
         </div>
@@ -169,7 +169,7 @@ export default function CoachReportsPage() {
           style={{ border: '2px dashed var(--ct-line)', color: 'var(--ct-ink-3)' }}
         >
           <BookOpen className="w-10 h-10 mb-3" style={{ color: 'var(--ct-ink-4)' }} />
-          <p className="text-sm font-medium">No coach reports yet</p>
+          <p className="text-sm font-medium">No dietitian reports yet</p>
           <p className="text-xs mt-1.5" style={{ color: 'var(--ct-ink-4)' }}>
             The first report will be generated this Saturday at 22:00 and saved here.
           </p>
