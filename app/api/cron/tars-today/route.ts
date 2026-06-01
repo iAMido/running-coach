@@ -5,7 +5,10 @@
  * morning briefing. Returns today's training prescription and a thin
  * summary of this week's plan for context.
  *
- * Auth: `Authorization: Bearer ${CRON_SECRET}` (same secret as strava-sync).
+ * Auth: `Authorization: Bearer ${TARS_API_KEY}` — DEDICATED secret for TARS,
+ * intentionally separate from CRON_SECRET (so a leak in either does not
+ * compromise the other) and from NEXTAUTH_SECRET (which signs session JWTs
+ * and must never be reused for API auth).
  * No session/cookie — TARS calls server-to-server.
  *
  * Query params:
@@ -35,8 +38,11 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 
 export async function GET(request: NextRequest) {
   // --- auth ---
+  // Use a TARS-dedicated secret. We deliberately do NOT fall back to
+  // CRON_SECRET so that compromising one doesn't compromise the other.
   const authHeader = request.headers.get('authorization');
-  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const expected = process.env.TARS_API_KEY;
+  if (!expected || authHeader !== `Bearer ${expected}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
