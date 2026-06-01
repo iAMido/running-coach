@@ -159,13 +159,18 @@ function summarizeWorkout(w: unknown): string {
   if (typeof w !== 'object') return String(w);
   const o = w as Record<string, unknown>;
   const type = o.type || o.workout_type || '';
-  const distance = o.distance_km ?? o.distance ?? '';
-  const duration = o.duration_min ?? o.duration ?? '';
+  const distance = o.distance_km ?? o.distance;
+  const duration = o.duration_min ?? o.duration;
   const description = o.description || o.notes || '';
   const bits: string[] = [];
   if (type) bits.push(String(type));
-  if (distance) bits.push(`${distance}km`);
-  else if (duration) bits.push(`${duration}min`);
+  // distance/duration may already include the unit (e.g. "6 km") or be a
+  // bare number (e.g. 6). Only append the unit when it's a bare number.
+  if (distance != null && distance !== '') {
+    bits.push(typeof distance === 'number' ? `${distance}km` : String(distance));
+  } else if (duration != null && duration !== '') {
+    bits.push(typeof duration === 'number' ? `${duration}min` : String(duration));
+  }
   if (description) bits.push(String(description).slice(0, 80));
   return bits.length ? bits.join(' · ') : JSON.stringify(o).slice(0, 120);
 }
