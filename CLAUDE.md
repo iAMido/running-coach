@@ -141,7 +141,8 @@ lib/
 │   └── schemas.ts                    # Zod validation schemas (feedback, etc.)
 ├── utils/
 │   ├── pace.ts                       # Pace formatting/conversion
-│   ├── run-classifier.ts            # Run type classification (easy/tempo/etc.)
+│   ├── run-classifier.ts            # Run type classification — honors athlete_profile zones, emits 'Intervals'
+│   ├── zones.ts                     # HR zone helpers: parseZonesFromProfile, computeZonePercentsFromStream
 │   ├── trimp.ts                      # Training load (TRIMP) calculation
 │   ├── week-calculator.ts           # Week boundary calculations
 │   └── oauth-state.ts              # Strava OAuth state management
@@ -175,7 +176,19 @@ All tables have RLS enabled with policies for authenticated users.
 
 **AI Integration:** OpenRouter API client supports multiple models (Claude Sonnet 4, Grok, GPT-4o). 3-layer RAG provides context: athlete data + coach patterns + book methodology.
 
-**Strava Sync:** OAuth flow → token storage → manual sync button + automated Vercel Cron (daily at 15:00 and 21:40 UTC). Syncs activities + laps. Token refresh on expiry, auto-disconnect on permanent auth failure.
+**RAG context budget:** `TOKEN_BUDGETS_PER_QUERY` in `lib/rag/types.ts` sets the per-query-type budget (chat 20k, daily 24k, weekly review 32k, plan generation 48k). `QUERY_WEIGHTS` splits each budget across the three layers. Raised from the original 8k flat budget once we noticed the coach layer was capped at ~800 tokens and surfacing only 5 of 69 historical workouts.
+
+**Prompt caching:** `callOpenRouter({ cacheSystemPrompt: true })` rewrites the first system message as a structured content array with `cache_control: ephemeral` (Anthropic only). Enabled on chat, weekly review, and plan generation. Multi-turn chat and retries hit the cache within 5 min.
+
+**User context formatter (`lib/rag/user-formatter.ts`):**
+- Joins `run_feedback` to each run by `run_id` (falls back to date) and shows rating / effort / feeling / comment / followed_plan inline. Previously fetched but never rendered.
+- Serializes the current week's per-day planned workouts (type / distance / pace / HR / description) under "Active Training Plan".
+- Calls `getRecentRunsWithLaps` to attach laps for quality workouts (Intervals, Tempo, Fartlek, Long Run, or any run with >15% Z4+ time).
+- Uses `calculateCurrentWeek(plan.start_date, …)` rather than the stored `plan.current_week_num`, so the AI doesn't see a stale phase if the cron hasn't advanced.
+
+**Weekly review prompt:** Renders a PLANNED vs ACTUAL block side-by-side and asks for per-rep interval commentary using the lap detail.
+
+**Strava Sync:** OAuth flow → token storage → manual sync button + automated Vercel Cron (daily at 15:00 and 21:40 UTC). For each new activity: stores summary row, fetches `/activities/{id}/laps` for lap rows, fetches `/activities/{id}/streams?keys=heartrate,time` and buckets the HR stream into the athlete's zones (`pct_z1..pct_z6` via `lib/utils/zones.ts`). Run type classified via `classifyRun` with `workoutName` + `profile` + `zonePercents`. Token refresh on expiry, auto-disconnect on permanent auth failure.
 
 **Input Validation:** Zod schemas in `lib/validation/schemas.ts`. All API routes validate and bound numeric inputs.
 
@@ -238,7 +251,12 @@ Edit `lib/cv-data.ts` - single source of truth for all CV sections.
 ### Modifying AI Coach Behavior
 - System prompts: `lib/ai/coach-prompts.ts` and `lib/ai/grocky-prompts.ts`
 - RAG context: `lib/rag/context-builder.ts` assembles the 3-layer context
+- Token budgets per query type: `TOKEN_BUDGETS_PER_QUERY` in `lib/rag/types.ts`
+- Prompt caching: pass `cacheSystemPrompt: true` to `callOpenRouter`
 - Model selection: `lib/ai/openrouter.ts` (change model IDs there)
+
+### Backfilling embeddings (one-shot admin)
+The Supabase Edge Function `supabase/functions/backfill-embeddings` finds any `book_instructions` rows where `embedding IS NULL`, embeds via OpenAI `text-embedding-3-small` (1536d), and writes back. Requires the `OPENAI_API_KEY` Supabase secret. Invoke via POST with the anon key in `Authorization: Bearer`. Append `?dryRun=1` to count without writing.
 
 ### Working with Supabase
 - RunCoach client: `lib/db/supabase.ts` (uses service role, bypasses RLS)
