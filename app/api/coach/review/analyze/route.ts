@@ -95,13 +95,15 @@ export async function POST(request: NextRequest) {
       weekNumber: reviewWeekNumber,
     });
 
-    // Call OpenRouter
+    // Call OpenRouter. cacheSystemPrompt: most of the methodology / RAG
+    // block is identical across consecutive review attempts in a session
+    // (retry, re-roll, etc.), so caching saves real cost.
     const response = await callOpenRouter(
       [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      { apiKey, maxTokens: 2000 }
+      { apiKey, maxTokens: 2000, cacheSystemPrompt: true }
     );
 
     if (response.error) {

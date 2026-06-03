@@ -52,13 +52,15 @@ export async function POST(request: NextRequest) {
       trainingDays: profile?.training_days,
     });
 
-    // Call OpenRouter
+    // Call OpenRouter. Plan generation prompts the model with a very long
+    // RAG-built system block (books + coach workouts + athlete data) — cache
+    // it so retries within 5 minutes don't re-pay the input cost.
     const response = await callOpenRouter(
       [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: `Generate my ${durationWeeks}-week ${planType} training plan. IMPORTANT: Return ONLY the raw JSON object with no markdown code blocks, no explanation, no extra text — just the JSON.` },
       ],
-      { apiKey, maxTokens: 16000 }
+      { apiKey, maxTokens: 16000, cacheSystemPrompt: true }
     );
 
     if (response.error) {

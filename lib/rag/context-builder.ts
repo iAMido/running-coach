@@ -9,6 +9,7 @@ import {
   type FormattedBookContext,
   QUERY_WEIGHTS,
   TOTAL_CONTEXT_TOKENS,
+  TOKEN_BUDGETS_PER_QUERY,
 } from './types';
 import { getActivePlan } from '@/lib/db/plans';
 import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
@@ -23,13 +24,14 @@ export async function buildContext(
   query: string,
   queryType: QueryType
 ): Promise<EnhancedContext> {
-  // Get weights for this query type
+  // Get weights and per-query budget for this query type
   const weights = QUERY_WEIGHTS[queryType];
+  const totalBudget = TOKEN_BUDGETS_PER_QUERY[queryType] ?? TOTAL_CONTEXT_TOKENS;
 
   // Calculate token budgets for each layer
-  const userTokens = Math.floor(TOTAL_CONTEXT_TOKENS * weights.userDataWeight);
-  const coachTokens = Math.floor(TOTAL_CONTEXT_TOKENS * weights.oldCoachWeight);
-  const bookTokens = Math.floor(TOTAL_CONTEXT_TOKENS * weights.bookWeight);
+  const userTokens = Math.floor(totalBudget * weights.userDataWeight);
+  const coachTokens = Math.floor(totalBudget * weights.oldCoachWeight);
+  const bookTokens = Math.floor(totalBudget * weights.bookWeight);
 
   // Get current phase from active plan (needed for filtering).
   // Compute current week from start_date — the stored current_week_num can drift
