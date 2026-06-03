@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { DashboardStats, Run, TrainingPlan, PlanWeek, Workout } from '@/lib/db/types';
 import { isWorkoutToday, getTodayDayName, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
+import { CoachHealthWidget } from '@/components/coach/coach-health-widget';
 
 export default function CoachDashboard() {
   const { data: session } = useSession();
@@ -334,6 +335,9 @@ export default function CoachDashboard() {
           );
         })}
       </div>
+
+      {/* Supervisor: 7-day coach health */}
+      <CoachHealthWidget />
 
       {/* Main Grid: Recent Runs + This Week */}
       <div className="grid gap-5 lg:grid-cols-[2fr_1fr]">
