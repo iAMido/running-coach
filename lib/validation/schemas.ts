@@ -11,6 +11,17 @@ const safeText = z.string().max(50000).trim();
 const positiveInt = z.number().int().positive();
 const rating = z.number().int().min(1).max(10);
 
+/**
+ * Coerce "" (and null) → undefined before running an optional schema.
+ * Without this, an optional enum like `feeling` will reject the empty
+ * string that React forms naturally send when a pill is not picked,
+ * and the API silently 400s. Use this for any optional enum that comes
+ * from a form. (run_feedback was already fixed on the client; this is
+ * defence-in-depth.)
+ */
+const emptyToUndef = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((v) => (v === '' || v === null ? undefined : v), schema);
+
 // Run data validation
 export const runSchema = z.object({
   date: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),
@@ -25,7 +36,11 @@ export const runSchema = z.object({
   run_type: safeString.max(100).optional(),
   workout_name: safeString.max(200).optional(),
   coach_notes: safeText.optional(),
-  data_source: z.enum(['manual', 'strava', 'fit_file']).optional(),
+  // Enum was a fiction: production DB has `garmin`, `garmin+tp`, `strava_sync`,
+  // `fit_upload`, `tp_only` — none of which matched the old enum's
+  // `manual|strava|fit_file`. Anyone posting to /api/coach/runs with a
+  // real value would have been rejected. Switched to a bounded free string.
+  data_source: safeString.max(40).optional(),
 });
 
 // Training plan validation
@@ -46,7 +61,7 @@ export const planSaveSchema = z.object({
 
 // Plan adjustment validation
 export const planAdjustmentSchema = z.object({
-  adjustmentType: z.enum(['weekly_review', 'user_request', 'injury', 'performance']).optional(),
+  adjustmentType: emptyToUndef(z.enum(['weekly_review', 'user_request', 'injury', 'performance']).optional()),
   userRequest: safeText.max(10000).optional(), // Increased to handle full conversation context
   weeklyFeedback: z.object({
     overallFeeling: rating.optional(),
@@ -68,16 +83,19 @@ export const chatRequestSchema = z.object({
   sessionId: z.string().uuid().nullable().optional(),
 });
 
-// Feedback validation
+// Feedback validation. The optional enums are wrapped in emptyToUndef so
+// the API gracefully accepts the empty-string payloads React forms emit
+// for unselected pills — the client also strips them, but defending here
+// stops future code paths from regressing into silent 400s.
 export const runFeedbackSchema = z.object({
-  run_id: z.string().uuid().optional(),
+  run_id: emptyToUndef(z.string().uuid().optional()),
   run_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   rating: rating.optional(),
   effort_level: rating.optional(),
-  feeling: z.enum(['great', 'good', 'okay', 'tired', 'exhausted']).optional(),
-  comment: safeText.max(2000).optional(),
-  followed_plan: z.enum(['yes', 'no', 'modified']).optional(),
-  pre_run_feeling: z.enum(['fresh', 'good', 'tired', 'sore_legs', 'stressed']).optional(),
+  feeling: emptyToUndef(z.enum(['great', 'good', 'okay', 'tired', 'exhausted']).optional()),
+  comment: emptyToUndef(safeText.max(2000).optional()),
+  followed_plan: emptyToUndef(z.enum(['yes', 'no', 'modified']).optional()),
+  pre_run_feeling: emptyToUndef(z.enum(['fresh', 'good', 'tired', 'sore_legs', 'stressed']).optional()),
 });
 
 // Weekly summary validation
