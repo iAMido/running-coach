@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   LogOut,
   UtensilsCrossed,
+  BookOpen,
 } from 'lucide-react';
 import { signOut } from 'next-auth/react';
 
@@ -27,6 +28,7 @@ const navItems = [
   { href: '/coach/ask', label: 'Ask Coach', icon: MessageSquare },
   { href: '/coach/grocky', label: 'Grocky', icon: Dumbbell },
   { href: '/coach/reports', label: 'Coach Reports', icon: FileText },
+  { href: '/coach/resources', label: 'Coach Library', icon: BookOpen },
   { href: '/coach/strava', label: 'Sync Strava', icon: RefreshCw },
   { href: '/coach/settings', label: 'Settings', icon: Settings },
 ];

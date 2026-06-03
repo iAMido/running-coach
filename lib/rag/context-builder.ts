@@ -58,7 +58,8 @@ export async function buildContext(
     retrieveBookContext(
       query,
       { phase: currentPhase, workoutType },
-      bookTokens
+      bookTokens,
+      userId,
     ),
   ]);
 

@@ -131,11 +131,13 @@ lib/
 │   ├── coach-workouts.ts             # Coach workout patterns
 │   └── strength.ts                   # Strength training data
 ├── rag/                              # 3-layer RAG system
-│   ├── book-retriever.ts             # Book methodology retrieval
+│   ├── book-retriever.ts             # Book methodology retrieval (merges user_resources too)
 │   ├── coach-retriever.ts            # Coach patterns retrieval
 │   ├── context-builder.ts            # Combines all RAG layers
 │   ├── embeddings.ts                 # OpenAI embeddings generation
+│   ├── chunker.ts                    # Paragraph-aware chunker for ingestion
 │   ├── user-formatter.ts            # User data formatting for context
+│   ├── user-resource-retriever.ts   # Per-user uploaded material retrieval
 │   └── types.ts                      # RAG type definitions
 ├── supervisor/                       # Pre/post-flight gate around every AI call
 │   ├── preflight.ts                  # Deterministic coverage rules
@@ -175,6 +177,7 @@ All tables have RLS enabled with policies for authenticated users.
 | `book_embeddings` | RAG: running book methodology chunks |
 | `coach_workouts` | RAG: coach workout pattern embeddings |
 | `coach_phases` | RAG: synthesized phase wisdom (Base / Specific) |
+| `user_resources` / `user_resource_chunks` | RAG: athlete-uploaded coach material (per user, pgvector) |
 | `coach_calls` | Supervisor: one row per AI request (tokens, latency, warnings) |
 | `coach_response_audits` | Supervisor: Haiku critic scores per response |
 | `strength_exercises` | Strength training exercises |
@@ -196,6 +199,8 @@ All tables have RLS enabled with policies for authenticated users.
 - Uses `calculateCurrentWeek(plan.start_date, …)` rather than the stored `plan.current_week_num`, so the AI doesn't see a stale phase if the cron hasn't advanced.
 
 **Weekly review prompt:** Renders a PLANNED vs ACTUAL block side-by-side and asks for per-rep interval commentary using the lap detail.
+
+**User resources (`lib/rag/user-resource-retriever.ts`, `/coach/resources`):** Athlete-uploaded coach material. POST `/api/coach/resources` with `{ title, content, ... }` chunks via `lib/rag/chunker.ts`, embeds via `text-embedding-3-small`, writes to `runcoach.user_resources` + `runcoach.user_resource_chunks`. The book retriever calls `retrieveUserResources(userId, query, ...)` in parallel with its book search and merges results into the same "Methodology Guidelines" block — user resources go first so they win ties when the prompt truncates. Soft-delete via `DELETE /api/coach/resources/[id]` (sets `status='archived'`, retains embeddings).
 
 **Supervisor (`lib/supervisor/`):** Three-piece watchdog on every AI call.
 - **Pre-flight (`preflight.ts`)** — deterministic `validateContext(...)` that flags silent gaps (no planned-today workout, no recent runs, no book sources for plan generation, no active plan covering the review week). May inject a "SUPERVISOR NOTES" suffix into the system prompt so the model acknowledges gaps instead of confabulating.
