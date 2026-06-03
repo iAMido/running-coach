@@ -10,6 +10,13 @@ import { reviewAnalysisSchema, validateInput } from '@/lib/validation/schemas';
 import { getActivePlan } from '@/lib/db/plans';
 import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
 import type { Run, Lap } from '@/lib/db/types';
+import {
+  validateContext as supervisorValidate,
+  serializeWarnings,
+  logCoachCall,
+  runCritic,
+} from '@/lib/supervisor';
+import { TOKEN_BUDGETS_PER_QUERY } from '@/lib/rag/types';
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser();
@@ -81,8 +88,20 @@ export async function POST(request: NextRequest) {
       ? calculateCurrentWeek(activePlan.start_date, activePlan.duration_weeks, monday).currentWeek
       : undefined;
 
+    // Pre-flight supervisor gate. plan_review specifically flags when no
+    // active plan covers this week and when no runs were logged.
+    const preflight = supervisorValidate({
+      context,
+      queryType: 'plan_review',
+      plan: activePlan,
+      weekRuns: runsWithLaps as Run[],
+    });
+
     // Build prompts using enhanced system
-    const systemPrompt = buildEnhancedCoachSystemPrompt(context);
+    let systemPrompt = buildEnhancedCoachSystemPrompt(context);
+    if (preflight.augmentedSystemSuffix) {
+      systemPrompt = systemPrompt + preflight.augmentedSystemSuffix;
+    }
     const userPrompt = buildEnhancedWeeklyAnalysisPrompt(context, {
       runs: runsWithLaps,
       feedback: feedback || [],
@@ -98,6 +117,7 @@ export async function POST(request: NextRequest) {
     // Call OpenRouter. cacheSystemPrompt: most of the methodology / RAG
     // block is identical across consecutive review attempts in a session
     // (retry, re-roll, etc.), so caching saves real cost.
+    const callStart = Date.now();
     const response = await callOpenRouter(
       [
         { role: 'system', content: systemPrompt },
@@ -105,6 +125,7 @@ export async function POST(request: NextRequest) {
       ],
       { apiKey, maxTokens: 2000, cacheSystemPrompt: true }
     );
+    const callLatencyMs = Date.now() - callStart;
 
     if (response.error) {
       return NextResponse.json({ error: response.error }, { status: 500 });
@@ -149,9 +170,48 @@ export async function POST(request: NextRequest) {
           sleep_quality: sleepQuality,
           stress_level: stressLevel,
         },
-      }, { onConflict: 'user_id,week_start' });
+      }, { onConflict: 'user_id,week_start,report_type' });
 
-    return NextResponse.json({ analysis: response.content });
+    // Supervisor telemetry + critic
+    const callId = await logCoachCall({
+      user_id: userId,
+      route: '/api/coach/review/analyze',
+      query_type: 'plan_review',
+      model: 'anthropic/claude-sonnet-4',
+      context_tokens: context.totalTokens,
+      context_budget: TOKEN_BUDGETS_PER_QUERY.plan_review,
+      ceiling_hit: context.totalTokens >= TOKEN_BUDGETS_PER_QUERY.plan_review * 0.95,
+      cache_used: true,
+      preflight_ok: preflight.ok,
+      preflight_warnings: serializeWarnings(preflight.warnings),
+      preflight_augmented: !!preflight.augmentedSystemSuffix,
+      latency_ms: callLatencyMs,
+      status: 'ok',
+      error_message: null,
+      plan_modified: false,
+    });
+
+    if (callId) {
+      runCritic({
+        userId,
+        callId,
+        route: '/api/coach/review/analyze',
+        queryType: 'plan_review',
+        userQuery: `Weekly review for week starting ${weekStart}`,
+        coachResponse: response.content,
+        contextSummary: `runs=${(runs || []).length} week_number=${reviewWeekNumber} plan_loaded=${!!activePlan}`,
+        preflightWarnings: preflight.warnings,
+      }).catch(err => console.warn('critic failed:', err?.message));
+    }
+
+    return NextResponse.json({
+      analysis: response.content,
+      supervisor: {
+        callId,
+        preflightOk: preflight.ok,
+        warnings: preflight.warnings,
+      },
+    });
   } catch (error) {
     console.error('Error analyzing week:', error);
     return NextResponse.json({ error: 'Failed to analyze week' }, { status: 500 });

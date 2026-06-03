@@ -137,6 +137,12 @@ lib/
 │   ├── embeddings.ts                 # OpenAI embeddings generation
 │   ├── user-formatter.ts            # User data formatting for context
 │   └── types.ts                      # RAG type definitions
+├── supervisor/                       # Pre/post-flight gate around every AI call
+│   ├── preflight.ts                  # Deterministic coverage rules
+│   ├── critic.ts                     # Haiku response audit
+│   ├── telemetry.ts                  # logCoachCall → coach_calls
+│   ├── types.ts                      # Supervisor types
+│   └── index.ts                      # Barrel export
 ├── validation/
 │   └── schemas.ts                    # Zod validation schemas (feedback, etc.)
 ├── utils/
@@ -168,6 +174,9 @@ All tables have RLS enabled with policies for authenticated users.
 | `strava_tokens` | Strava OAuth tokens per user |
 | `book_embeddings` | RAG: running book methodology chunks |
 | `coach_workouts` | RAG: coach workout pattern embeddings |
+| `coach_phases` | RAG: synthesized phase wisdom (Base / Specific) |
+| `coach_calls` | Supervisor: one row per AI request (tokens, latency, warnings) |
+| `coach_response_audits` | Supervisor: Haiku critic scores per response |
 | `strength_exercises` | Strength training exercises |
 
 ### Key Patterns
@@ -187,6 +196,14 @@ All tables have RLS enabled with policies for authenticated users.
 - Uses `calculateCurrentWeek(plan.start_date, …)` rather than the stored `plan.current_week_num`, so the AI doesn't see a stale phase if the cron hasn't advanced.
 
 **Weekly review prompt:** Renders a PLANNED vs ACTUAL block side-by-side and asks for per-rep interval commentary using the lap detail.
+
+**Supervisor (`lib/supervisor/`):** Three-piece watchdog on every AI call.
+- **Pre-flight (`preflight.ts`)** — deterministic `validateContext(...)` that flags silent gaps (no planned-today workout, no recent runs, no book sources for plan generation, no active plan covering the review week). May inject a "SUPERVISOR NOTES" suffix into the system prompt so the model acknowledges gaps instead of confabulating.
+- **Telemetry (`telemetry.ts`)** — `logCoachCall(...)` writes one row to `runcoach.coach_calls` per AI request (route, query_type, tokens, ceiling_hit, cache_used, latency, preflight warnings, plan_modified).
+- **Post-flight critic (`critic.ts`)** — fire-and-forget call to `anthropic/claude-haiku-4-5` that grades the response on 5 axes (addresses_question / references_plan_day / references_runs_feedback / specific_pace_hr / no_contradiction), persists to `runcoach.coach_response_audits`. Auto-back-links the audit_id onto the coach_calls row.
+- **Weekly health audit (`/api/cron/weekly-health-audit`)** — Sunday 22:30 UTC Vercel cron. Reads coverage / plan drift / RAG embedding completeness / AI quality stats from `coach_calls` + `coach_response_audits` and writes a markdown report into `coach_reports` with `report_type='system_health'`.
+
+Wired into `chat/ask`, `review/analyze`, `plans/generate`. Each route returns a `supervisor: { callId, preflightOk, warnings }` envelope so the UI can surface the warnings inline.
 
 **Strava Sync:** OAuth flow → token storage → manual sync button + automated Vercel Cron (daily at 15:00 and 21:40 UTC). For each new activity: stores summary row, fetches `/activities/{id}/laps` for lap rows, fetches `/activities/{id}/streams?keys=heartrate,time` and buckets the HR stream into the athlete's zones (`pct_z1..pct_z6` via `lib/utils/zones.ts`). Run type classified via `classifyRun` with `workoutName` + `profile` + `zonePercents`. Token refresh on expiry, auto-disconnect on permanent auth failure.
 
