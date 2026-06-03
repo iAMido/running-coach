@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/strava-sync",
       "schedule": "40 21 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-health-audit",
+      "schedule": "30 22 * * 0"
     }
   ]
 }
