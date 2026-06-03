@@ -67,22 +67,32 @@ function FeedbackFormContent({
       <div className="space-y-3">
         <label className="text-sm font-medium" style={{ color: 'var(--rc-ink)' }}>How did you feel?</label>
         <div className="flex flex-wrap gap-2">
-          {feelingOptions.map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => setFeeling(opt.toLowerCase())}
-              className="rc-mono px-3.5 py-[7px] rounded-full text-[11px] font-medium transition-colors"
-              style={{
-                background: feeling === opt.toLowerCase() ? 'var(--rc-ink)' : 'var(--rc-surface-2)',
-                color: feeling === opt.toLowerCase() ? '#fff' : 'var(--rc-ink-3)',
-                border: `1px solid ${feeling === opt.toLowerCase() ? 'var(--rc-ink)' : 'var(--rc-line)'}`,
-                letterSpacing: '0.06em',
-              }}
-            >
-              {opt.toUpperCase()}
-            </button>
-          ))}
+          {feelingOptions.map((opt) => {
+            const isSelected = feeling === opt.toLowerCase();
+            return (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => setFeeling(opt.toLowerCase())}
+                className="rc-mono px-3.5 py-[7px] rounded-full text-[11px] font-medium transition-colors"
+                // Inline hex colors instead of var(--rc-ink) so iOS Safari
+                // can't lose the selected pill's contrast through Radix
+                // portals. -WebkitTextFillColor forces the white text even
+                // if a parent sets a different color-scheme.
+                style={{
+                  WebkitAppearance: 'none',
+                  appearance: 'none',
+                  background: isSelected ? '#0E0F0C' : '#FBFAF6',
+                  color: isSelected ? '#FFFFFF' : '#6B6C66',
+                  WebkitTextFillColor: isSelected ? '#FFFFFF' : '#6B6C66',
+                  border: `1px solid ${isSelected ? '#0E0F0C' : 'rgba(14,15,12,0.08)'}`,
+                  letterSpacing: '0.06em',
+                }}
+              >
+                {opt.toUpperCase()}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -96,22 +106,28 @@ function FeedbackFormContent({
             { value: 'tired', label: 'Tired' },
             { value: 'sore_legs', label: 'Sore legs' },
             { value: 'stressed', label: 'Stressed' },
-          ] as const).map(({ value, label }) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setPreRunFeeling(preRunFeeling === value ? '' : value)}
-              className="rc-mono px-3.5 py-[7px] rounded-full text-[11px] font-medium transition-colors"
-              style={{
-                background: preRunFeeling === value ? 'var(--rc-ink)' : 'var(--rc-surface-2)',
-                color: preRunFeeling === value ? '#fff' : 'var(--rc-ink-3)',
-                border: `1px solid ${preRunFeeling === value ? 'var(--rc-ink)' : 'var(--rc-line)'}`,
-                letterSpacing: '0.06em',
-              }}
-            >
-              {label.toUpperCase()}
-            </button>
-          ))}
+          ] as const).map(({ value, label }) => {
+            const isSelected = preRunFeeling === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setPreRunFeeling(preRunFeeling === value ? '' : value)}
+                className="rc-mono px-3.5 py-[7px] rounded-full text-[11px] font-medium transition-colors"
+                style={{
+                  WebkitAppearance: 'none',
+                  appearance: 'none',
+                  background: isSelected ? '#0E0F0C' : '#FBFAF6',
+                  color: isSelected ? '#FFFFFF' : '#6B6C66',
+                  WebkitTextFillColor: isSelected ? '#FFFFFF' : '#6B6C66',
+                  border: `1px solid ${isSelected ? '#0E0F0C' : 'rgba(14,15,12,0.08)'}`,
+                  letterSpacing: '0.06em',
+                }}
+              >
+                {label.toUpperCase()}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -163,16 +179,31 @@ function FeedbackFormContent({
         />
       </div>
 
-      {/* Submit */}
-      <button
-        onClick={onSubmit}
-        disabled={!selectedRun || submitting}
-        className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-full text-sm font-semibold transition-all disabled:opacity-50"
-        style={{ background: 'var(--rc-blue)', color: '#fff' }}
+      {/* Submit — sticky at the bottom so it's always reachable on mobile
+          (iOS Safari was hiding it under the on-screen keyboard / safe area
+          when the Notes textarea was focused). */}
+      <div
+        className="sticky bottom-0 left-0 right-0 pt-3 pb-[max(env(safe-area-inset-bottom),12px)] -mx-1 px-1"
+        style={{
+          background: 'linear-gradient(to top, var(--rc-surface) 75%, transparent)',
+        }}
       >
-        {submitted ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-        {submitting ? 'Saving...' : submitted ? 'Saved!' : 'Save Feedback'}
-      </button>
+        <button
+          onClick={onSubmit}
+          disabled={!selectedRun || submitting}
+          className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-full text-sm font-semibold transition-all disabled:opacity-50"
+          style={{
+            WebkitAppearance: 'none',
+            appearance: 'none',
+            background: '#2563EB',
+            color: '#FFFFFF',
+            WebkitTextFillColor: '#FFFFFF',
+          }}
+        >
+          {submitted ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+          {submitting ? 'Saving...' : submitted ? 'Saved!' : 'Save Feedback'}
+        </button>
+      </div>
     </div>
   );
 }
