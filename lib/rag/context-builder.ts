@@ -45,6 +45,7 @@ export async function buildContext(
   // Infer workout type from query
   const workoutType = inferWorkoutType(query);
   const category = inferCategory(query);
+  const userResourceTags = inferUserResourceTags(query, queryType, currentPhase, workoutType);
 
   // Build all three contexts in parallel
   const [userContext, coachContext, bookContext] = await Promise.all([
@@ -57,7 +58,7 @@ export async function buildContext(
     ),
     retrieveBookContext(
       query,
-      { phase: currentPhase, workoutType },
+      { phase: currentPhase, workoutType, userResourceTags },
       bookTokens,
       userId,
     ),
@@ -208,6 +209,42 @@ function inferCategory(query: string): string | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * Build a tag-filter hint for user_resources retrieval. We try a small set
+ * of meaningful tags derived from the query + the live training context;
+ * the retriever applies tag overlap as a soft filter (with a no-filter
+ * fallback when nothing matches) so this is best-effort routing.
+ */
+function inferUserResourceTags(
+  query: string,
+  queryType: QueryType,
+  currentPhase: string | undefined,
+  workoutType: string | undefined,
+): string[] {
+  const q = query.toLowerCase();
+  const tags = new Set<string>();
+
+  if (currentPhase) tags.add(currentPhase.toLowerCase());
+  if (workoutType) tags.add(workoutType.toLowerCase());
+
+  // Query-type → tag hints
+  if (queryType === 'plan_generation') tags.add('plan');
+  if (queryType === 'plan_review') tags.add('review');
+
+  // Methodology keywords
+  if (/\bnorwegian|double[\s-]?threshold|lactate/.test(q)) tags.add('norwegian');
+  if (/\btriphasic/.test(q)) tags.add('triphasic');
+  if (/\b80\/20|polarised|polarized/.test(q)) tags.add('80/20');
+
+  // Race-distance keywords
+  if (/\bmarathon\b/.test(q)) tags.add('marathon');
+  if (/\bhalf|half[\s-]?marathon|hm\b/.test(q)) tags.add('half-marathon');
+  if (/\b10k\b/.test(q)) tags.add('10k');
+  if (/\b5k\b/.test(q)) tags.add('5k');
+
+  return Array.from(tags).filter(Boolean);
 }
 
 /**

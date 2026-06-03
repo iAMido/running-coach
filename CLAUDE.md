@@ -180,6 +180,7 @@ All tables have RLS enabled with policies for authenticated users.
 | `user_resources` / `user_resource_chunks` | RAG: athlete-uploaded coach material (per user, pgvector) |
 | `coach_calls` | Supervisor: one row per AI request (tokens, latency, warnings) |
 | `coach_response_audits` | Supervisor: Haiku critic scores per response |
+| `coach_chat_sessions` / `coach_chat_messages` | Persisted chat history (Ask Coach) |
 | `strength_exercises` | Strength training exercises |
 
 ### Key Patterns
@@ -203,6 +204,12 @@ All tables have RLS enabled with policies for authenticated users.
 **User resources (`lib/rag/user-resource-retriever.ts`, `/coach/resources`):** Athlete-uploaded coach material. `POST /api/coach/resources` accepts either `application/json` (`{ title, content, ... }`) or `multipart/form-data` (PDF file via `pdf-parse`). Chunks via `lib/rag/chunker.ts`, embeds via `text-embedding-3-small`, writes to `runcoach.user_resources` + `runcoach.user_resource_chunks`. The book retriever calls `retrieveUserResources(userId, query, ...)` in parallel with its book search and merges results into the same "Methodology Guidelines" block — user resources go first so they win ties when the prompt truncates. Soft-delete via `DELETE /api/coach/resources/[id]` (sets `status='archived'`, retains embeddings).
 
 **Supervisor UI:** The chat (`/coach/ask`) renders the supervisor envelope's warnings as a chip above each assistant bubble (`ShieldAlert` icon, warning codes inline). The dashboard (`/coach`) shows a `CoachHealthWidget` summarising the last 7 days from `/api/coach/health` — total calls, errors, avg critic score, preflight warning count, ceiling-hit count, top warning codes. Both gracefully hide when there's no data yet.
+
+**Chat history persistence:** `/coach/ask` posts `sessionId` along with messages. `/api/coach/chat/ask` resolves or creates a `runcoach.coach_chat_sessions` row (title seeded from the first user message) and persists each user + assistant turn into `runcoach.coach_chat_messages` with the supervisor envelope snapshot. The page has a History dropdown listing past sessions; click loads a session via `GET /api/coach/chat/sessions/[id]`. Soft-archive via `DELETE` (sets `status='archived'`).
+
+**Streaming plan generation:** `/api/coach/plans/generate/stream` is an SSE variant of plan-gen. It emits `meta`, `token` (many), and `done` events. The page consumes the stream, shows a live preview window, and sets the final plan from the `done` payload. Final JSON parse + DB write + supervisor logging + Haiku critic all happen server-side after the stream completes.
+
+**Tag-aware user-resource retrieval:** `runcoach.match_user_resources(...)` takes an optional `match_tags text[]` parameter; when supplied, only resources whose `methodology_tags` overlap with the query tags are returned (with a no-tag-filter fallback if zero match). `context-builder.ts` derives tags from query + current phase + workout type and threads them through `book-retriever.ts` → `user-resource-retriever.ts`.
 
 **Supervisor (`lib/supervisor/`):** Three-piece watchdog on every AI call.
 - **Pre-flight (`preflight.ts`)** — deterministic `validateContext(...)` that flags silent gaps (no planned-today workout, no recent runs, no book sources for plan generation, no active plan covering the review week). May inject a "SUPERVISOR NOTES" suffix into the system prompt so the model acknowledges gaps instead of confabulating.

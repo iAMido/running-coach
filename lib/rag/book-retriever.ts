@@ -16,6 +16,9 @@ export async function retrieveBookContext(
     phase?: string;
     workoutType?: string;
     level?: string;
+    /** Optional tag hints (e.g. ['base','lt1']) passed through to the
+     *  user-resource retriever for methodology_tags filtering. */
+    userResourceTags?: string[];
   },
   maxTokens: number,
   /**
@@ -45,7 +48,9 @@ export async function retrieveBookContext(
   const bookSlots = Math.max(1, Math.ceil(maxTokens / 500) - userResourceLimit);
 
   const [userResults, bookResults] = await Promise.all([
-    userId ? retrieveUserResources(userId, query, userResourceLimit) : Promise.resolve([] as InstructionSearchResult[]),
+    userId
+      ? retrieveUserResources(userId, query, userResourceLimit, filters.userResourceTags)
+      : Promise.resolve([] as InstructionSearchResult[]),
     searchInstructionsFiltered(embeddingResponse.embedding, filters, bookSlots),
   ]);
 
