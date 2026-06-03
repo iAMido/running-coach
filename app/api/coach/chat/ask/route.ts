@@ -161,10 +161,14 @@ export async function POST(request: NextRequest) {
       ...messages,
     ];
 
-    // Call OpenRouter with more tokens for plan modifications
+    // Call OpenRouter with more tokens for plan modifications.
+    // Cache the system block: most consecutive turns in a single chat reuse
+    // the same RAG-built system prompt, so Anthropic prompt caching cuts
+    // the cost of follow-up turns substantially.
     const response = await callOpenRouter(apiMessages, {
       apiKey,
-      maxTokens: isPlanModification ? 4000 : 1500
+      maxTokens: isPlanModification ? 4000 : 1500,
+      cacheSystemPrompt: true,
     });
 
     if (response.error) {

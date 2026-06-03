@@ -10,11 +10,41 @@ export interface OpenRouterConfig {
   apiKey: string;
   model?: string;
   maxTokens?: number;
+  /**
+   * When true and the model is an Anthropic Claude model, the first system
+   * message is sent with a cache_control: ephemeral breakpoint so Anthropic
+   * (via OpenRouter) caches the rendered system prompt for ~5 minutes. The
+   * caller pays write cost on the first request and gets cheap reads on
+   * follow-up requests within the TTL — meaningful for multi-turn chat where
+   * the same RAG-built system block is sent each turn.
+   */
+  cacheSystemPrompt?: boolean;
 }
 
 export interface OpenRouterResponse {
   content: string;
   error?: string;
+}
+
+/**
+ * Convert a flat ChatMessage[] into a payload that flips on prompt caching
+ * for the first system message. Anthropic accepts a structured content
+ * array per message; OpenRouter forwards cache_control as-is.
+ */
+function applyAnthropicCache(messages: ChatMessage[]): unknown[] {
+  let cached = false;
+  return messages.map(m => {
+    if (!cached && m.role === 'system' && typeof m.content === 'string' && m.content.length > 1024) {
+      cached = true;
+      return {
+        role: 'system',
+        content: [
+          { type: 'text', text: m.content, cache_control: { type: 'ephemeral' } },
+        ],
+      };
+    }
+    return m;
+  });
 }
 
 /**
@@ -24,11 +54,16 @@ export async function callOpenRouter(
   messages: ChatMessage[],
   config: OpenRouterConfig
 ): Promise<OpenRouterResponse> {
-  const { apiKey, model = 'anthropic/claude-sonnet-4', maxTokens = 2000 } = config;
+  const { apiKey, model = 'anthropic/claude-sonnet-4', maxTokens = 2000, cacheSystemPrompt } = config;
 
   if (!apiKey) {
     return { content: '', error: 'OpenRouter API key not configured.' };
   }
+
+  const payloadMessages =
+    cacheSystemPrompt && model.startsWith('anthropic/')
+      ? applyAnthropicCache(messages)
+      : messages;
 
   try {
     const response = await fetch(OPENROUTER_API_URL, {
@@ -42,7 +77,7 @@ export async function callOpenRouter(
       body: JSON.stringify({
         model,
         max_tokens: maxTokens,
-        messages,
+        messages: payloadMessages,
       }),
     });
 

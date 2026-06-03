@@ -1,9 +1,13 @@
-import { getRecentRuns } from '@/lib/db/runs';
+import { getRecentRunsWithLaps } from '@/lib/db/runs';
 import { getAthleteProfile } from '@/lib/db/profile';
 import { getActivePlan } from '@/lib/db/plans';
 import { getRecentFeedback, getWeeklySummary } from '@/lib/db/feedback';
-import type { Run, RunFeedback, WeeklySummary, AthleteProfile, TrainingPlan } from '@/lib/db/types';
+import { calculateCurrentWeek, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
+import type { Run, Lap, RunFeedback, WeeklySummary, AthleteProfile, TrainingPlan, Workout } from '@/lib/db/types';
 import type { FormattedUserContext } from './types';
+
+type RunWithLaps = Run & { laps?: Lap[] };
+type FeedbackWithRun = RunFeedback & { run_id?: string | null };
 
 // Approximate tokens per character (conservative estimate)
 const CHARS_PER_TOKEN = 4;
@@ -17,8 +21,8 @@ export async function formatUserContext(
   maxTokens: number
 ): Promise<FormattedUserContext> {
   // Fetch all user data in parallel
-  const [runs, feedback, profile, plan, weeklySummary] = await Promise.all([
-    getRecentRuns(userId, 14), // Last 14 days
+  const [runsWithLaps, feedback, profile, plan, weeklySummary] = await Promise.all([
+    getRecentRunsWithLaps(userId, 14), // Last 14 days, laps attached for quality workouts
     getRecentFeedback(userId, 14),
     getAthleteProfile(userId),
     getActivePlan(userId),
@@ -28,10 +32,11 @@ export async function formatUserContext(
   // Calculate fatigue score
   const fatigueScore = calculateFatigueScore(feedback, weeklySummary);
 
-  // Determine current phase from plan
-  const currentPhase = plan?.plan_json?.weeks?.[
-    (plan.current_week_num || 1) - 1
-  ]?.phase || null;
+  // Determine current week from start_date (authoritative) and current phase
+  const liveWeek = plan?.start_date
+    ? calculateCurrentWeek(plan.start_date, plan.duration_weeks).currentWeek
+    : (plan?.current_week_num || 1);
+  const currentPhase = plan?.plan_json?.weeks?.[liveWeek - 1]?.phase || null;
 
   // Build context sections
   const sections: string[] = [];
@@ -46,18 +51,22 @@ export async function formatUserContext(
   }
 
   // 2. Current training status
-  const statusText = formatTrainingStatus(runs, fatigueScore, currentPhase);
+  const statusText = formatTrainingStatus(runsWithLaps, fatigueScore, currentPhase);
   sections.push(statusText);
   totalChars += statusText.length;
 
-  // 3. Recent runs (fit as many as possible)
-  const runsText = formatRecentRuns(runs, maxChars - totalChars - 500); // Reserve 500 chars for plan
+  // 3. Recent runs (fit as many as possible) — feedback joined inline by run_id or date
+  const runsText = formatRecentRuns(
+    runsWithLaps,
+    feedback as FeedbackWithRun[],
+    maxChars - totalChars - 800, // Reserve ~800 chars for plan
+  );
   sections.push(runsText.text);
   totalChars += runsText.text.length;
 
-  // 4. Active plan summary
-  if (plan && totalChars < maxChars - 200) {
-    const planText = formatActivePlan(plan);
+  // 4. Active plan summary (now includes the current week's per-day workouts)
+  if (plan && totalChars < maxChars - 300) {
+    const planText = formatActivePlan(plan, liveWeek);
     sections.push(planText);
     totalChars += planText.length;
   }
@@ -209,14 +218,23 @@ function getFatigueDescription(score: number): string {
 }
 
 /**
- * Format recent runs for AI
+ * Format recent runs for AI, with per-run feedback and laps inlined.
+ * Feedback is joined to runs by run_id when available, otherwise by date match.
  */
 function formatRecentRuns(
-  runs: Run[],
-  maxChars: number
+  runs: RunWithLaps[],
+  feedback: FeedbackWithRun[],
+  maxChars: number,
 ): { text: string; count: number } {
   if (runs.length === 0) {
     return { text: '## Recent Runs\nNo recent runs recorded.', count: 0 };
+  }
+
+  const byRunId = new Map<string, FeedbackWithRun>();
+  const byDate = new Map<string, FeedbackWithRun>();
+  for (const f of feedback || []) {
+    if (f.run_id) byRunId.set(f.run_id, f);
+    if (f.run_date) byDate.set(f.run_date, f);
   }
 
   const lines: string[] = ['## Recent Runs (Last 14 Days)'];
@@ -224,15 +242,16 @@ function formatRecentRuns(
   let count = 0;
 
   for (const run of runs) {
-    const runLine = formatSingleRun(run);
+    const fb = byRunId.get(run.id) || byDate.get((run.date || '').slice(0, 10));
+    const runBlock = formatRunBlock(run, fb);
 
     // Check if adding this run would exceed limit
-    if (charCount + runLine.length > maxChars && count > 0) {
+    if (charCount + runBlock.length > maxChars && count > 0) {
       break;
     }
 
-    lines.push(runLine);
-    charCount += runLine.length;
+    lines.push(runBlock);
+    charCount += runBlock.length;
     count++;
   }
 
@@ -244,7 +263,22 @@ function formatRecentRuns(
 }
 
 /**
- * Format a single run entry
+ * One run, possibly multi-line: summary + lap detail + my feedback.
+ */
+function formatRunBlock(run: RunWithLaps, fb: FeedbackWithRun | undefined): string {
+  const lines: string[] = [formatSingleRun(run)];
+
+  const lapText = formatRunLaps(run.laps);
+  if (lapText) lines.push(lapText);
+
+  const fbText = formatRunFeedback(fb);
+  if (fbText) lines.push(fbText);
+
+  return lines.join('\n');
+}
+
+/**
+ * Format a single run summary line
  */
 function formatSingleRun(run: Run): string {
   const date = new Date(run.date).toLocaleDateString('en-US', {
@@ -280,27 +314,128 @@ function formatSingleRun(run: Run): string {
 }
 
 /**
- * Format active training plan summary
+ * Compact per-lap summary so the AI can reason about intervals
+ * (Norwegian-style "did pace hold across reps", HR drift, etc.).
+ * Returns empty string when there are no meaningful laps.
  */
-function formatActivePlan(plan: TrainingPlan): string {
+export function formatRunLaps(laps: Lap[] | undefined): string {
+  if (!laps || laps.length < 2) return '';
+
+  // Skip noise: very short laps from auto-laps (<200m) are usually transitions
+  const meaningful = laps.filter(l => (l.distance_km ?? 0) >= 0.2);
+  if (meaningful.length < 2) return '';
+
+  // Cap how many lap lines to emit to stay token-cheap
+  const MAX_LAPS = 16;
+  const slice = meaningful.slice(0, MAX_LAPS);
+  const firstHr = slice[0]?.avg_hr ?? null;
+
+  const lapLines = slice.map(l => {
+    const dist = l.distance_km?.toFixed(2) ?? '?';
+    const dur = l.duration_sec != null ? formatSeconds(l.duration_sec) : '?';
+    const pace = l.avg_pace_str ? `${l.avg_pace_str}/km` : '';
+    const hr = l.avg_hr ? `HR ${l.avg_hr}` : '';
+    const drift = firstHr && l.avg_hr ? ` (${formatDrift(l.avg_hr - firstHr)})` : '';
+    return `    L${l.lap_number}: ${dist}km / ${dur} ${pace} ${hr}${drift}`.trim().replace(/ +/g, ' ');
+  });
+
+  const trailing = meaningful.length > MAX_LAPS ? `\n    … +${meaningful.length - MAX_LAPS} more laps` : '';
+  return `  Laps:\n${lapLines.join('\n')}${trailing}`;
+}
+
+function formatSeconds(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec - m * 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function formatDrift(delta: number): string {
+  if (Math.abs(delta) < 1) return '±0';
+  return delta > 0 ? `+${Math.round(delta)}bpm vs L1` : `${Math.round(delta)}bpm vs L1`;
+}
+
+/**
+ * Show the athlete's own write-up of the run: rating, effort, feeling, comment.
+ * This is the missing piece that made the coach feel "unaware" of logged runs.
+ */
+function formatRunFeedback(fb: FeedbackWithRun | undefined): string {
+  if (!fb) return '';
+  const bits: string[] = [];
+  if (fb.rating != null) bits.push(`rated ${fb.rating}/10`);
+  if (fb.effort_level != null) bits.push(`effort ${fb.effort_level}/10`);
+  if (fb.feeling) bits.push(`felt "${fb.feeling}"`);
+  const fbAny = fb as RunFeedback & { followed_plan?: boolean | null; pre_run_feeling?: string | null };
+  if (fbAny.followed_plan === false) bits.push('deviated from plan');
+  if (fbAny.pre_run_feeling) bits.push(`pre-run: "${fbAny.pre_run_feeling}"`);
+  const head = bits.length ? `  Feedback: ${bits.join(', ')}` : '';
+  const note = fb.comment ? `\n  Note: "${fb.comment}"` : '';
+  if (!head && !note) return '';
+  return `${head}${note}`.trim();
+}
+
+/**
+ * Format active training plan summary, INCLUDING the current week's per-day workouts.
+ * Before this fix the AI saw only phase / focus / total_km, so weekly review couldn't
+ * compare planned vs actual at the workout level.
+ */
+function formatActivePlan(plan: TrainingPlan, liveWeek: number): string {
   const lines: string[] = ['## Active Training Plan'];
 
   lines.push(`Plan: ${plan.plan_type}`);
   lines.push(`Duration: ${plan.duration_weeks} weeks`);
-  lines.push(`Current Week: ${plan.current_week_num}`);
+  lines.push(`Current Week: ${liveWeek} of ${plan.duration_weeks}`);
 
   if (plan.plan_json?.methodology) {
     lines.push(`Methodology: ${plan.plan_json.methodology}`);
   }
 
-  // Current week details
-  const currentWeek = plan.plan_json?.weeks?.[plan.current_week_num - 1];
+  const currentWeek = plan.plan_json?.weeks?.[liveWeek - 1];
   if (currentWeek) {
     lines.push(`Phase: ${currentWeek.phase}`);
     lines.push(`Focus: ${currentWeek.focus}`);
     lines.push(`Target Volume: ${currentWeek.total_km} km`);
+
+    if (currentWeek.workouts && Object.keys(currentWeek.workouts).length > 0) {
+      lines.push('Planned workouts this week:');
+      const sorted = sortWorkoutsByDay(currentWeek.workouts as Record<string, Workout>);
+      for (const [day, w] of sorted) {
+        lines.push(`  ${day}: ${formatPlannedWorkout(w)}`);
+      }
+    }
   }
 
+  return lines.join('\n');
+}
+
+function formatPlannedWorkout(w: Workout): string {
+  const bits: string[] = [];
+  bits.push(w.type || 'Run');
+  if (w.distance) bits.push(w.distance);
+  if (w.duration) bits.push(w.duration);
+  if (w.target_pace) bits.push(`@ ${w.target_pace}`);
+  if (w.target_hr) bits.push(`HR ${w.target_hr}`);
+  const head = bits.join(' / ');
+  const desc = w.description ? ` — ${w.description}` : '';
+  return `${head}${desc}`;
+}
+
+/**
+ * Public helper for the weekly review prompt: render a specific week's
+ * planned workouts as a PLANNED block so the AI can place ACTUAL next to it.
+ */
+export function formatPlannedWeek(plan: TrainingPlan | null, weekNumber: number): string {
+  if (!plan?.plan_json?.weeks) return '';
+  const week = plan.plan_json.weeks[weekNumber - 1];
+  if (!week) return '';
+  const lines: string[] = [
+    `Week ${week.week_number} | Phase: ${week.phase} | Focus: ${week.focus} | Target: ${week.total_km} km`,
+  ];
+  if (week.workouts) {
+    const sorted = sortWorkoutsByDay(week.workouts as Record<string, Workout>);
+    for (const [day, w] of sorted) {
+      lines.push(`  ${day}: ${formatPlannedWorkout(w)}`);
+    }
+  }
   return lines.join('\n');
 }
 

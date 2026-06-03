@@ -7,6 +7,9 @@ import { calculateTrimp } from '@/lib/utils/trimp';
 import { formatPace, calculatePace } from '@/lib/utils/pace';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { stravaSyncSchema, validateInput } from '@/lib/validation/schemas';
+import { getAthleteProfile } from '@/lib/db/profile';
+import { computeZonePercentsFromStream, parseZonesFromProfile, type ZoneBands } from '@/lib/utils/zones';
+import type { AthleteProfile } from '@/lib/db/types';
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser();
@@ -112,6 +115,11 @@ export async function POST(request: NextRequest) {
 
     console.log('Filtered runs:', runs.length);
 
+    // Pull athlete profile once so the classifier + zone bands use the user's
+    // actual HR zones rather than hardcoded defaults.
+    const profile: AthleteProfile | null = await getAthleteProfile(userId);
+    const zoneBands: ZoneBands = parseZonesFromProfile(profile);
+
     let newRunsCount = 0;
     let lapsBackfilledCount = 0;
 
@@ -173,11 +181,39 @@ export async function POST(request: NextRequest) {
       const maxHr = activity.max_heartrate ? Math.round(activity.max_heartrate) : null;
       const avgPaceMinKm = calculatePace(distanceKm, durationMin);
 
+      // Fetch HR + time streams so we can compute zone distribution. Strava
+      // exposes these via /activities/{id}/streams. Best-effort; failure
+      // falls back to a null zone breakdown (same as today).
+      let zonePercents: Awaited<ReturnType<typeof computeZonePercentsFromStream>> | null = null;
+      if (avgHr) {
+        try {
+          const streamResp = await fetch(
+            `https://www.strava.com/api/v3/activities/${activity.id}/streams?keys=heartrate,time&key_by_type=true`,
+            { headers: { Authorization: `Bearer ${accessToken}` } },
+          );
+          if (streamResp.ok) {
+            const streams = await streamResp.json();
+            const hr = streams?.heartrate?.data;
+            const time = streams?.time?.data || null;
+            if (Array.isArray(hr) && hr.length > 0) {
+              zonePercents = computeZonePercentsFromStream(hr, time, zoneBands);
+            }
+          }
+        } catch {
+          // Streams are an enrichment; ignore failures.
+        }
+      }
+
       const runType = classifyRun({
         distanceKm,
         avgHr: avgHr ?? undefined,
         maxHr: maxHr ?? undefined,
         durationMin,
+        workoutName: activity.name,
+        profile,
+        zonePercents: zonePercents
+          ? { z1: zonePercents.pct_z1, z2: zonePercents.pct_z2, z3: zonePercents.pct_z3, z4: zonePercents.pct_z4, z5: zonePercents.pct_z5, z6: zonePercents.pct_z6 }
+          : undefined,
       });
 
       const trimp = avgHr
@@ -202,6 +238,7 @@ export async function POST(request: NextRequest) {
           workout_name: activity.name,
           trimp,
           data_source: 'strava_sync',
+          ...(zonePercents || {}),
         });
 
       if (insertError) {

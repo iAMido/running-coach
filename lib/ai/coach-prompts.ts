@@ -6,8 +6,9 @@
  *   Priority 3: Book Methodology (general rules)
  */
 
-import type { AthleteProfile } from '@/lib/db/types';
+import type { AthleteProfile, Lap, Run, TrainingPlan } from '@/lib/db/types';
 import type { EnhancedContext, QueryType } from '@/lib/rag/types';
+import { formatRunLaps, formatPlannedWeek } from '@/lib/rag/user-formatter';
 
 // Legacy interface for backwards compatibility
 interface LegacyCoachContext {
@@ -256,26 +257,41 @@ Every workout MUST include:
 }
 
 /**
- * Build enhanced prompt for weekly analysis with 3-layer context
+ * Build enhanced prompt for weekly analysis with 3-layer context.
+ *
+ * Major change vs previous version:
+ *  - Renders PLANNED week side-by-side with ACTUAL runs (was missing entirely).
+ *  - Replaces verbose JSON.stringify of runs+laps with compact human-readable
+ *    blocks: one block per run, with lap-level interval data inline.
  */
 export function buildEnhancedWeeklyAnalysisPrompt(
   context: EnhancedContext,
   weekData: {
-    runs: unknown[];
+    runs: (Run & { laps?: Lap[] })[];
     feedback: unknown[];
     overallFeeling?: number;
     sleepQuality?: number;
     stressLevel?: number;
     injuryNotes?: string;
     achievements?: string;
+    plan?: TrainingPlan | null;
+    weekNumber?: number;
   }
 ): string {
+  const plannedBlock = weekData.plan && weekData.weekNumber
+    ? formatPlannedWeek(weekData.plan, weekData.weekNumber)
+    : '';
+
+  const actualBlock = formatActualRunsForReview(weekData.runs);
+
   return `${buildEnhancedCoachSystemPrompt(context)}
 
 ## ANALYSIS TASK: WEEKLY REVIEW
 
-### THIS WEEK'S RUNS
-${JSON.stringify(weekData.runs, null, 2)}
+${plannedBlock ? `### PLANNED FOR THIS WEEK\n${plannedBlock}\n` : '### PLANNED FOR THIS WEEK\n(No active plan, or plan does not cover this week)\n'}
+
+### ACTUAL RUNS LOGGED THIS WEEK
+${actualBlock}
 
 ### ATHLETE FEEDBACK ON RUNS
 ${JSON.stringify(weekData.feedback, null, 2)}
@@ -288,17 +304,50 @@ ${JSON.stringify(weekData.feedback, null, 2)}
 - Achievements: ${weekData.achievements || 'None'}
 
 ### YOUR ANALYSIS SHOULD INCLUDE:
-1. **Week Summary** - Brief overview comparing planned vs actual
+1. **Week Summary** - Compare PLANNED vs ACTUAL day-by-day. Call out any day that was skipped, swapped, or done at the wrong intensity.
 2. **Methodology Check** - Is training aligned with the loaded book principles?
 3. **Previous Coach Comparison** - How does this week compare to their previous coach's typical patterns?
 4. **Intensity Distribution** - Were easy days easy enough? (Check 80/20 rule if relevant)
-5. **What Went Well** - Positive observations
-6. **Areas to Improve** - Specific issues with actionable fixes
-7. **Run-by-Run Notes** - Quick feedback on each run
-8. **Next Week Focus** - 2-3 key priorities
+5. **Interval Quality** - For any quality workout, comment on per-lap pacing consistency and HR drift using the lap data above.
+6. **What Went Well** - Positive observations
+7. **Areas to Improve** - Specific issues with actionable fixes
+8. **Run-by-Run Notes** - Quick feedback on each run
+9. **Next Week Focus** - 2-3 key priorities
 
 Be specific about HR zones and pacing. If runs were too hard, say so clearly.
 Reference the athlete's previous coach workouts when suggesting changes.`;
+}
+
+/**
+ * Compact, AI-friendly render of a week of runs with lap data inline.
+ * Replaces a previously-verbose JSON.stringify dump.
+ */
+function formatActualRunsForReview(runs: (Run & { laps?: Lap[] })[]): string {
+  if (!runs || runs.length === 0) return '(No runs logged this week)';
+  return runs
+    .map(r => {
+      const d = new Date(r.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+      const head = [
+        `- ${d}: ${r.workout_name || r.run_type || 'Run'} — ${r.distance_km?.toFixed(2) ?? '?'}km`,
+        r.duration_min != null ? `${r.duration_min.toFixed(0)}min` : '',
+        r.avg_pace_str ? `@ ${r.avg_pace_str}/km` : '',
+        r.avg_hr ? `HR avg ${r.avg_hr}` : '',
+        r.max_hr ? `max ${r.max_hr}` : '',
+      ].filter(Boolean).join(' ');
+      const zones = formatZoneDistribution(r);
+      const laps = formatRunLaps(r.laps);
+      return [head, zones, laps].filter(Boolean).join('\n');
+    })
+    .join('\n');
+}
+
+function formatZoneDistribution(r: Run): string {
+  const z: [string, number | undefined][] = [
+    ['Z1', r.pct_z1], ['Z2', r.pct_z2], ['Z3', r.pct_z3], ['Z4', r.pct_z4], ['Z5', r.pct_z5], ['Z6', r.pct_z6],
+  ];
+  const present = z.filter(([, v]) => v != null && v > 0);
+  if (present.length === 0) return '';
+  return `  Zones: ${present.map(([k, v]) => `${k} ${Math.round(v!)}%`).join(' / ')}`;
 }
 
 /**

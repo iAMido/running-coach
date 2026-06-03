@@ -195,7 +195,31 @@ export const QUERY_WEIGHTS: Record<QueryType, ContextWeights> = {
   grocky:          { userDataWeight: 0.55, oldCoachWeight: 0.10, bookWeight: 0.35 },
 };
 
-export const TOTAL_CONTEXT_TOKENS = 8000;
+/**
+ * Default RAG context budget (in tokens) when the per-query map is not used.
+ * Kept for backwards-compat with code that still imports TOTAL_CONTEXT_TOKENS.
+ * Bumped from the original 8000 to better use Sonnet 4's 200k window — the
+ * old budget was forcing the coach layer down to ~800 tokens, surfacing only
+ * 5 of 69 historical workouts and dropping run feedback / lap detail.
+ */
+export const TOTAL_CONTEXT_TOKENS = 24000;
+
+/**
+ * Per-query-type total context budget. Higher for plan generation and weekly
+ * review where the model genuinely benefits from more methodology + more
+ * workout history; modest for ask_coach / grocky which are conversational.
+ *
+ * Tokens are split between user / coach / book layers using QUERY_WEIGHTS.
+ * Sonnet 4 supports 200k context, so even the largest budget here is ~25%
+ * of capacity — leaves plenty of room for the actual conversation.
+ */
+export const TOKEN_BUDGETS_PER_QUERY: Record<QueryType, number> = {
+  daily_advice:    24000,
+  plan_review:     32000,
+  plan_generation: 48000,
+  ask_coach:       20000,
+  grocky:          20000,
+};
 
 // ============================================
 // CONTEXT BUILDER TYPES
