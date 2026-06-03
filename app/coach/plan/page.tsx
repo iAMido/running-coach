@@ -33,6 +33,9 @@ export default function TrainingPlanPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>('generate');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  // Streaming progress
+  const [streamChars, setStreamChars] = useState(0);
+  const [streamPreview, setStreamPreview] = useState('');
 
   useEffect(() => {
     fetchPlan();
@@ -67,9 +70,13 @@ export default function TrainingPlanPage() {
   const handleGenerate = async () => {
     setGenerating(true);
     setError(null);
+    setStreamChars(0);
+    setStreamPreview('');
 
     try {
-      const response = await fetch('/api/coach/plans/generate', {
+      // Stream the generation so the user sees progress live instead of
+      // staring at a spinner for 30-60s. Each SSE chunk extends streamPreview.
+      const response = await fetch('/api/coach/plans/generate/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -80,13 +87,49 @@ export default function TrainingPlanPage() {
         }),
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to generate plan');
+      if (!response.ok || !response.body) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.error || `Stream failed (${response.status})`);
       }
 
-      setActivePlan(data.plan);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalPlan: TrainingPlan | null = null;
+      let totalChars = 0;
+      const previewWindow: string[] = [];
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
+        for (const raw of events) {
+          const eventLine = raw.split('\n').find(l => l.startsWith('event:'));
+          const dataLine = raw.split('\n').find(l => l.startsWith('data:'));
+          if (!eventLine || !dataLine) continue;
+          const eventName = eventLine.slice(6).trim();
+          let data: unknown;
+          try { data = JSON.parse(dataLine.slice(5).trim()); } catch { continue; }
+          if (eventName === 'token') {
+            const text = (data as { text: string }).text;
+            totalChars += text.length;
+            setStreamChars(totalChars);
+            previewWindow.push(text);
+            if (previewWindow.length > 200) previewWindow.shift();
+            setStreamPreview(previewWindow.join(''));
+          } else if (eventName === 'done') {
+            finalPlan = (data as { plan: TrainingPlan }).plan;
+          } else if (eventName === 'error') {
+            throw new Error((data as { message: string }).message);
+          }
+        }
+      }
+
+      if (!finalPlan) throw new Error('Stream ended without a plan');
+
+      setActivePlan(finalPlan);
       setCalculatedCurrentWeek(1);
       setViewingWeek(1);
       setSuccessMessage('Your training plan has been generated successfully!');
@@ -478,9 +521,27 @@ export default function TrainingPlanPage() {
             </button>
 
             {generating && (
-              <p className="text-sm text-center animate-pulse" style={{ color: 'var(--rc-ink-3)' }}>
-                Creating your personalized plan...
-              </p>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="animate-pulse rc-mono" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.08em' }}>
+                    STREAMING · {streamChars.toLocaleString()} chars
+                  </span>
+                  <span className="rc-mono" style={{ color: 'var(--rc-ink-4)' }}>
+                    {duration} weeks · {planTypes.find(p => p.value === planType)?.label || planType}
+                  </span>
+                </div>
+                <div
+                  className="rounded-lg p-3 max-h-56 overflow-y-auto text-[11px] rc-mono whitespace-pre-wrap"
+                  style={{
+                    background: 'var(--rc-surface-2)',
+                    border: '1px solid var(--rc-line)',
+                    color: 'var(--rc-ink-3)',
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {streamPreview || 'Waiting for first tokens…'}
+                </div>
+              </div>
             )}
           </div>
         </div>

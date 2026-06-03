@@ -115,11 +115,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
-    const { messages } = validation.data as { messages: ChatMessage[] };
+    const { messages, sessionId: incomingSessionId } = validation.data as {
+      messages: ChatMessage[];
+      sessionId?: string | null;
+    };
 
     // Get the user's query from the last message
     const lastUserMessage = messages.filter(m => m.role === 'user').pop();
     const query = lastUserMessage?.content || '';
+
+    // Resolve or create a chat session. The page sends sessionId on
+    // continuing conversations; on the very first turn we create one and
+    // seed the title from the first user message.
+    let chatSessionId: string | null = incomingSessionId ?? null;
+    if (!chatSessionId && query) {
+      const { data: newSession } = await supabase
+        .from('coach_chat_sessions')
+        .insert({ user_id: userId, title: query.slice(0, 80) })
+        .select('id')
+        .single();
+      chatSessionId = newSession?.id ?? null;
+    }
+
+    // Persist the latest user message (others assumed already persisted).
+    if (chatSessionId && lastUserMessage) {
+      await supabase.from('coach_chat_messages').insert({
+        session_id: chatSessionId,
+        user_id: userId,
+        role: 'user',
+        content: lastUserMessage.content,
+      });
+    }
 
     // Detect query type and build 3-layer context
     const queryType = detectQueryType(query);
@@ -313,6 +339,31 @@ export async function POST(request: NextRequest) {
       }).catch(err => console.warn('critic failed:', err?.message));
     }
 
+    // Persist the assistant message + supervisor envelope, and bump the
+    // session updated_at so the sidebar can sort by recency.
+    if (chatSessionId) {
+      await supabase.from('coach_chat_messages').insert({
+        session_id: chatSessionId,
+        user_id: userId,
+        role: 'assistant',
+        content: displayContent,
+        supervisor: {
+          callId,
+          preflightOk: preflight.ok,
+          warnings: preflight.warnings,
+        },
+      });
+      // Recount + bump
+      const { count } = await supabase
+        .from('coach_chat_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('session_id', chatSessionId);
+      await supabase
+        .from('coach_chat_sessions')
+        .update({ message_count: count || 0, updated_at: new Date().toISOString() })
+        .eq('id', chatSessionId);
+    }
+
     return NextResponse.json({
       content: displayContent,
       sources: {
@@ -333,6 +384,7 @@ export async function POST(request: NextRequest) {
         preflightOk: preflight.ok,
         warnings: preflight.warnings,
       },
+      sessionId: chatSessionId,
     });
   } catch (error) {
     console.error('Error in chat:', error);

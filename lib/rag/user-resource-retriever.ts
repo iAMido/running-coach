@@ -32,6 +32,9 @@ export async function retrieveUserResources(
   userId: string,
   query: string,
   limit: number,
+  /** Optional tag filter. When supplied, only resources whose
+   *  methodology_tags overlap with these tags are returned. */
+  tags?: string[],
 ): Promise<InstructionSearchResult[]> {
   if (!userId) return [];
 
@@ -41,12 +44,42 @@ export async function retrieveUserResources(
     return [];
   }
 
+  const tagFilter = tags && tags.length > 0 ? tags.map(t => t.toLowerCase()) : null;
+
   const { data, error } = await supabase.rpc('match_user_resources', {
     query_embedding: embeddingResponse.embedding,
     match_user_id: userId,
     match_threshold: 0.65, // slightly lower than books so personal notes win ties
     match_count: limit,
+    match_tags: tagFilter,
   });
+
+  // If the tag filter returns nothing, retry without filter so the user
+  // still gets relevant material — tags are best-effort routing, not a
+  // hard requirement.
+  if (!error && (!data || (data as unknown[]).length === 0) && tagFilter) {
+    const fallback = await supabase.rpc('match_user_resources', {
+      query_embedding: embeddingResponse.embedding,
+      match_user_id: userId,
+      match_threshold: 0.65,
+      match_count: limit,
+      match_tags: null,
+    });
+    if (!fallback.error && fallback.data) {
+      const rows = fallback.data as UserResourceMatch[];
+      return rows.map(r => ({
+        id: r.id,
+        book_id: r.resource_id,
+        book_title: r.resource_title,
+        methodology: 'Your Coach Library',
+        chapter_title: undefined,
+        section_title: r.section_title || undefined,
+        content: r.content,
+        key_rules: r.key_rules || undefined,
+        similarity: r.similarity,
+      }));
+    }
+  }
 
   if (error) {
     console.warn('match_user_resources failed:', error.message);
