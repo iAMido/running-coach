@@ -221,7 +221,13 @@ export default function LogRunsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
-  const [loggedRunIds, setLoggedRunIds] = useState<Set<string>>(new Set());
+  // Map run_id → ISO timestamp of the most recent feedback for that run, so
+  // the UI can distinguish "I logged this 2 weeks ago" from "I just saved
+  // this one". Replaces an older Set<string> shape.
+  const [loggedRunMeta, setLoggedRunMeta] = useState<Map<string, string>>(new Map());
+  // Tracks the run_id whose Save was triggered in this session, so we can
+  // briefly highlight it as "Just saved".
+  const [justSavedRunId, setJustSavedRunId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRuns();
@@ -244,12 +250,16 @@ export default function LogRunsPage() {
     try {
       const response = await fetch('/api/coach/feedback?days=60');
       const data = await response.json();
-      const ids = new Set<string>(
-        (data.feedback || [])
-          .filter((f: { run_id: string | null }) => f.run_id)
-          .map((f: { run_id: string }) => f.run_id)
-      );
-      setLoggedRunIds(ids);
+      // Build run_id → latest created_at (or run_date as a fallback) so the
+      // badge can show *when* this run was logged.
+      const map = new Map<string, string>();
+      for (const f of (data.feedback || []) as Array<{ run_id: string | null; created_at?: string; run_date?: string }>) {
+        if (!f.run_id) continue;
+        const ts = f.created_at || f.run_date || '';
+        const existing = map.get(f.run_id);
+        if (!existing || ts > existing) map.set(f.run_id, ts);
+      }
+      setLoggedRunMeta(map);
     } catch (error) {
       console.error('Failed to fetch feedback:', error);
     }
@@ -293,7 +303,15 @@ export default function LogRunsPage() {
         setFollowedPlan('');
         setComment('');
         setMobileSheetOpen(false);
-        setLoggedRunIds(prev => new Set([...prev, runData.id]));
+        setLoggedRunMeta(prev => {
+          const next = new Map(prev);
+          next.set(runData.id, new Date().toISOString());
+          return next;
+        });
+        setJustSavedRunId(runData.id);
+        // Clear the just-saved highlight after a short beat so it stays
+        // distinguishable on the list.
+        setTimeout(() => setJustSavedRunId(prev => (prev === runData.id ? null : prev)), 6000);
         setSelectedRun('');
         setTimeout(() => setSubmitted(false), 3000);
       }
@@ -304,7 +322,14 @@ export default function LogRunsPage() {
     }
   };
 
-  const isLogged = (run: Run) => loggedRunIds.has(run.id);
+  const isLogged = (run: Run) => loggedRunMeta.has(run.id);
+  const loggedDateLabel = (run: Run): string | null => {
+    const ts = loggedRunMeta.get(run.id);
+    if (!ts) return null;
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
+  };
 
   const handleRunSelect = (runId: string) => {
     setSelectedRun(runId);
@@ -374,6 +399,8 @@ export default function LogRunsPage() {
               {runs.map((run) => {
                 const logged = isLogged(run);
                 const isSelected = selectedRun === run.id;
+                const justSaved = justSavedRunId === run.id;
+                const loggedOn = loggedDateLabel(run);
                 return (
                   <div
                     key={run.id}
@@ -385,7 +412,11 @@ export default function LogRunsPage() {
                     style={{
                       gridTemplateColumns: '36px 1fr auto',
                       borderBottom: '1px solid var(--rc-line)',
-                      background: isSelected ? 'var(--rc-blue-soft)' : 'transparent',
+                      background: justSaved
+                        ? 'oklch(0.96 0.08 150)'
+                        : isSelected
+                          ? 'var(--rc-blue-soft)'
+                          : 'transparent',
                     }}
                   >
                     {/* Logged ribbon */}
@@ -405,13 +436,27 @@ export default function LogRunsPage() {
                       {logged ? <CheckCircle className="w-4 h-4" /> : <Activity className="w-4 h-4" />}
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-[14.5px] font-semibold" style={{ letterSpacing: '-0.005em', color: 'var(--rc-ink)' }}>
                           {run.workout_name || 'Run'}
                         </span>
-                        {logged && (
-                          <span className="rc-mono text-[9px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: 'oklch(0.96 0.08 150)', color: '#059669', letterSpacing: '0.06em' }}>
-                            LOGGED
+                        {justSaved && (
+                          // Strong pill only on the row we *just* saved this
+                          // session, so the user can tell new from old.
+                          <span
+                            className="rc-mono text-[9px] px-2 py-0.5 rounded-full font-semibold"
+                            style={{ background: '#059669', color: '#FFFFFF', WebkitTextFillColor: '#FFFFFF', letterSpacing: '0.06em' }}
+                          >
+                            JUST SAVED
+                          </span>
+                        )}
+                        {logged && !justSaved && (
+                          <span
+                            className="rc-mono text-[9px] px-1.5 py-0.5 rounded-full font-semibold"
+                            style={{ background: 'oklch(0.96 0.08 150)', color: '#059669', letterSpacing: '0.06em' }}
+                            title={loggedOn ? `Feedback saved on ${loggedOn}` : undefined}
+                          >
+                            LOGGED{loggedOn ? ` · ${loggedOn}` : ''}
                           </span>
                         )}
                       </div>
