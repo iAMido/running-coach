@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Run } from './types';
+import type { Run, Lap } from './types';
 
 /**
  * Get all runs for a user, sorted by date descending
@@ -32,6 +32,50 @@ export async function getRecentRuns(userId: string, days = 14): Promise<Run[]> {
 
   if (error) throw error;
   return data || [];
+}
+
+/**
+ * Get runs from the last N days WITH laps attached for quality workouts.
+ * Quality = intervals/tempo/fartlek/long run, or any run with >15% time in Z4+.
+ * Easy/recovery runs skip the lap pull to save tokens & bandwidth.
+ */
+const QUALITY_RUN_TYPES = new Set(['Intervals', 'Tempo', 'Fartlek', 'Long Run', 'Race', 'Threshold', 'VO2max']);
+
+function isQualityRun(run: Run): boolean {
+  if (run.run_type && QUALITY_RUN_TYPES.has(run.run_type)) return true;
+  const z4plus = (run.pct_z4 ?? 0) + (run.pct_z5 ?? 0) + (run.pct_z6 ?? 0);
+  return z4plus > 15;
+}
+
+export async function getRecentRunsWithLaps(
+  userId: string,
+  days = 14,
+): Promise<(Run & { laps?: Lap[] })[]> {
+  const runs = await getRecentRuns(userId, days);
+  if (runs.length === 0) return [];
+
+  const qualityRunIds = runs.filter(isQualityRun).map(r => r.id);
+  if (qualityRunIds.length === 0) return runs;
+
+  const { data: laps, error } = await supabase
+    .from('laps')
+    .select('*')
+    .in('run_id', qualityRunIds)
+    .order('lap_number', { ascending: true });
+
+  if (error) {
+    // Laps are an enrichment, not a hard requirement — fall back gracefully.
+    return runs;
+  }
+
+  const lapsByRun = new Map<string, Lap[]>();
+  for (const lap of laps || []) {
+    const arr = lapsByRun.get(lap.run_id) || [];
+    arr.push(lap);
+    lapsByRun.set(lap.run_id, arr);
+  }
+
+  return runs.map(r => ({ ...r, laps: lapsByRun.get(r.id) }));
 }
 
 /**

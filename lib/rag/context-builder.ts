@@ -11,6 +11,7 @@ import {
   TOTAL_CONTEXT_TOKENS,
 } from './types';
 import { getActivePlan } from '@/lib/db/plans';
+import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
 
 /**
  * Build enhanced context for AI coach
@@ -30,11 +31,14 @@ export async function buildContext(
   const coachTokens = Math.floor(TOTAL_CONTEXT_TOKENS * weights.oldCoachWeight);
   const bookTokens = Math.floor(TOTAL_CONTEXT_TOKENS * weights.bookWeight);
 
-  // Get current phase from active plan (needed for filtering)
+  // Get current phase from active plan (needed for filtering).
+  // Compute current week from start_date — the stored current_week_num can drift
+  // when the cron that advances it doesn't run, leaving the AI on the wrong phase.
   const plan = await getActivePlan(userId);
-  const currentPhase = plan?.plan_json?.weeks?.[
-    (plan.current_week_num || 1) - 1
-  ]?.phase;
+  const liveWeek = plan?.start_date
+    ? calculateCurrentWeek(plan.start_date, plan.duration_weeks).currentWeek
+    : (plan?.current_week_num || 1);
+  const currentPhase = plan?.plan_json?.weeks?.[liveWeek - 1]?.phase;
 
   // Infer workout type from query
   const workoutType = inferWorkoutType(query);

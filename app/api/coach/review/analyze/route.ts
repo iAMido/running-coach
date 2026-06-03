@@ -7,6 +7,9 @@ import { buildEnhancedWeeklyAnalysisPrompt, buildEnhancedCoachSystemPrompt } fro
 import { buildContext } from '@/lib/rag/context-builder';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { reviewAnalysisSchema, validateInput } from '@/lib/validation/schemas';
+import { getActivePlan } from '@/lib/db/plans';
+import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
+import type { Run, Lap } from '@/lib/db/types';
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser();
@@ -53,16 +56,16 @@ export async function POST(request: NextRequest) {
       .eq('user_id', userId)
       .gte('run_date', monday.toISOString().split('T')[0]);
 
-    // Fetch laps for this week's runs
-    const runIds = (runs || []).map((r: { id: string }) => r.id);
-    const { data: laps } = runIds.length > 0
+    // Fetch laps for this week's runs and attach to each run
+    const runRows = (runs || []) as Run[];
+    const runIds = runRows.map(r => r.id);
+    const { data: lapsData } = runIds.length > 0
       ? await supabase.from('laps').select('*').in('run_id', runIds).order('lap_number', { ascending: true })
       : { data: [] };
-
-    // Attach laps to each run
-    const runsWithLaps = (runs || []).map((run: { id: string }) => ({
+    const lapRows = (lapsData || []) as Lap[];
+    const runsWithLaps: (Run & { laps?: Lap[] })[] = runRows.map(run => ({
       ...run,
-      laps: (laps || []).filter((l: { run_id: string }) => l.run_id === run.id),
+      laps: lapRows.filter(l => l.run_id === run.id),
     }));
 
     // Build 3-layer RAG context
@@ -71,6 +74,12 @@ export async function POST(request: NextRequest) {
       'weekly review analysis',
       'plan_review'
     );
+
+    // Resolve the planned week for this calendar week so the prompt can show PLANNED vs ACTUAL.
+    const activePlan = await getActivePlan(userId);
+    const reviewWeekNumber = activePlan?.start_date
+      ? calculateCurrentWeek(activePlan.start_date, activePlan.duration_weeks, monday).currentWeek
+      : undefined;
 
     // Build prompts using enhanced system
     const systemPrompt = buildEnhancedCoachSystemPrompt(context);
@@ -82,6 +91,8 @@ export async function POST(request: NextRequest) {
       stressLevel,
       injuryNotes,
       achievements,
+      plan: activePlan,
+      weekNumber: reviewWeekNumber,
     });
 
     // Call OpenRouter

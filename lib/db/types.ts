@@ -128,11 +128,14 @@ export interface Workout {
 export interface RunFeedback {
   id: string;
   user_id: string;
+  run_id?: string | null;
   run_date: string;
   rating?: number;
   effort_level?: number;
   feeling?: string;
   comment?: string;
+  followed_plan?: boolean | null;
+  pre_run_feeling?: string | null;
   created_at?: string;
 }
 
