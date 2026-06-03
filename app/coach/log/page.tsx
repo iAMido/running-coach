@@ -25,13 +25,16 @@ interface FeedbackFormProps {
   selectedRun: string;
   submitting: boolean;
   submitted: boolean;
+  submitError: string | null;
+  isEditing: boolean;
   onSubmit: () => void;
 }
 
 function FeedbackFormContent({
   rating, setRating, effort, setEffort, feeling, setFeeling,
   preRunFeeling, setPreRunFeeling, followedPlan, setFollowedPlan,
-  comment, setComment, selectedRun, submitting, submitted, onSubmit,
+  comment, setComment, selectedRun, submitting, submitted, submitError,
+  isEditing, onSubmit,
 }: FeedbackFormProps) {
   return (
     <div className="space-y-6">
@@ -188,6 +191,18 @@ function FeedbackFormContent({
           background: 'linear-gradient(to top, var(--rc-surface) 75%, transparent)',
         }}
       >
+        {submitError && (
+          <div
+            className="mb-2 text-xs px-3 py-2 rounded-lg"
+            style={{
+              background: 'oklch(0.96 0.05 25)',
+              color: 'var(--rc-bad)',
+              border: '1px solid oklch(0.88 0.07 25)',
+            }}
+          >
+            Couldn&apos;t save: {submitError}
+          </div>
+        )}
         <button
           onClick={onSubmit}
           disabled={!selectedRun || submitting}
@@ -201,11 +216,23 @@ function FeedbackFormContent({
           }}
         >
           {submitted ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-          {submitting ? 'Saving...' : submitted ? 'Saved!' : 'Save Feedback'}
+          {submitting ? 'Saving...' : submitted ? 'Saved!' : isEditing ? 'Update feedback' : 'Save Feedback'}
         </button>
       </div>
     </div>
   );
+}
+
+interface FeedbackRow {
+  run_id: string;
+  run_date?: string | null;
+  rating?: number | null;
+  effort_level?: number | null;
+  feeling?: string | null;
+  comment?: string | null;
+  followed_plan?: string | null;
+  pre_run_feeling?: string | null;
+  created_at?: string | null;
 }
 
 export default function LogRunsPage() {
@@ -228,6 +255,12 @@ export default function LogRunsPage() {
   // Tracks the run_id whose Save was triggered in this session, so we can
   // briefly highlight it as "Just saved".
   const [justSavedRunId, setJustSavedRunId] = useState<string | null>(null);
+  // Cache of the latest feedback row per run, so reopening an already-logged
+  // run shows what was actually saved instead of leaking the previous run's
+  // form state.
+  const [feedbackByRunId, setFeedbackByRunId] = useState<Map<string, FeedbackRow>>(new Map());
+  // Surface API failures inline rather than silently swallowing them.
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRuns();
@@ -250,19 +283,43 @@ export default function LogRunsPage() {
     try {
       const response = await fetch('/api/coach/feedback?days=60');
       const data = await response.json();
-      // Build run_id → latest created_at (or run_date as a fallback) so the
-      // badge can show *when* this run was logged.
-      const map = new Map<string, string>();
-      for (const f of (data.feedback || []) as Array<{ run_id: string | null; created_at?: string; run_date?: string }>) {
+      // Build run_id → latest created_at so the badge can show when this
+      // run was logged, AND cache the latest feedback row so reopening an
+      // already-logged run pre-fills the form with what was actually saved.
+      const tsMap = new Map<string, string>();
+      const rowMap = new Map<string, FeedbackRow>();
+      for (const f of (data.feedback || []) as FeedbackRow[]) {
         if (!f.run_id) continue;
         const ts = f.created_at || f.run_date || '';
-        const existing = map.get(f.run_id);
-        if (!existing || ts > existing) map.set(f.run_id, ts);
+        const existing = tsMap.get(f.run_id);
+        if (!existing || ts > existing) {
+          tsMap.set(f.run_id, ts);
+          rowMap.set(f.run_id, f);
+        }
       }
-      setLoggedRunMeta(map);
+      setLoggedRunMeta(tsMap);
+      setFeedbackByRunId(rowMap);
     } catch (error) {
       console.error('Failed to fetch feedback:', error);
     }
+  };
+
+  const resetFormFields = () => {
+    setRating([5]);
+    setEffort([5]);
+    setFeeling('');
+    setPreRunFeeling('');
+    setFollowedPlan('');
+    setComment('');
+  };
+
+  const loadFormFromFeedback = (fb: FeedbackRow) => {
+    setRating([fb.rating ?? 5]);
+    setEffort([fb.effort_level ?? 5]);
+    setFeeling(fb.feeling ?? '');
+    setPreRunFeeling(fb.pre_run_feeling ?? '');
+    setFollowedPlan(fb.followed_plan ?? '');
+    setComment(fb.comment ?? '');
   };
 
   const getSelectedRunData = () => {
@@ -277,46 +334,72 @@ export default function LogRunsPage() {
 
     setSubmitting(true);
     setSubmitted(false);
+    setSubmitError(null);
+
+    // Normalize the payload. Empty strings were silently failing Zod's
+    // enum validation server-side ("" is neither undefined nor one of
+    // the listed values), which manifested as Save appearing to succeed
+    // while no row actually landed in run_feedback. Send undefined for
+    // any empty value so .optional() can accept it.
+    const payload = {
+      run_id: runData.id,
+      run_date: runData.date.split('T')[0],
+      rating: rating[0],
+      effort_level: effort[0],
+      feeling: feeling || undefined,
+      comment: comment || undefined,
+      followed_plan: followedPlan || undefined,
+      pre_run_feeling: preRunFeeling || undefined,
+    };
 
     try {
       const response = await fetch('/api/coach/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          run_id: runData.id,
-          run_date: runData.date.split('T')[0],
-          rating: rating[0],
-          effort_level: effort[0],
-          feeling,
-          comment,
-          followed_plan: followedPlan || undefined,
-          pre_run_feeling: preRunFeeling || undefined,
-        }),
+        body: JSON.stringify(payload),
       });
 
-      if (response.ok) {
-        setSubmitted(true);
-        setRating([5]);
-        setEffort([5]);
-        setFeeling('');
-        setPreRunFeeling('');
-        setFollowedPlan('');
-        setComment('');
-        setMobileSheetOpen(false);
-        setLoggedRunMeta(prev => {
-          const next = new Map(prev);
-          next.set(runData.id, new Date().toISOString());
-          return next;
-        });
-        setJustSavedRunId(runData.id);
-        // Clear the just-saved highlight after a short beat so it stays
-        // distinguishable on the list.
-        setTimeout(() => setJustSavedRunId(prev => (prev === runData.id ? null : prev)), 6000);
-        setSelectedRun('');
-        setTimeout(() => setSubmitted(false), 3000);
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const msg = (result && (result.error || result.message)) || `Save failed (${response.status})`;
+        setSubmitError(typeof msg === 'string' ? msg : 'Save failed');
+        return;
       }
+
+      // Success — cache the freshly-saved row, mark, close, reset.
+      const savedRow: FeedbackRow = {
+        run_id: runData.id,
+        run_date: payload.run_date,
+        rating: payload.rating,
+        effort_level: payload.effort_level,
+        feeling: payload.feeling ?? null,
+        comment: payload.comment ?? null,
+        followed_plan: payload.followed_plan ?? null,
+        pre_run_feeling: payload.pre_run_feeling ?? null,
+        created_at: new Date().toISOString(),
+      };
+
+      setSubmitted(true);
+      setMobileSheetOpen(false);
+      setLoggedRunMeta(prev => {
+        const next = new Map(prev);
+        next.set(runData.id, savedRow.created_at!);
+        return next;
+      });
+      setFeedbackByRunId(prev => {
+        const next = new Map(prev);
+        next.set(runData.id, savedRow);
+        return next;
+      });
+      setJustSavedRunId(runData.id);
+      setTimeout(() => setJustSavedRunId(prev => (prev === runData.id ? null : prev)), 6000);
+      resetFormFields();
+      setSelectedRun('');
+      setTimeout(() => setSubmitted(false), 3000);
     } catch (error) {
       console.error('Failed to submit feedback:', error);
+      setSubmitError(error instanceof Error ? error.message : 'Network error');
     } finally {
       setSubmitting(false);
     }
@@ -333,6 +416,16 @@ export default function LogRunsPage() {
 
   const handleRunSelect = (runId: string) => {
     setSelectedRun(runId);
+    setSubmitError(null);
+    // Pre-fill the form: if this run already has feedback, show what was
+    // actually saved; otherwise reset to defaults so we never leak the
+    // previous run's form state into a new one.
+    const existing = feedbackByRunId.get(runId);
+    if (existing) {
+      loadFormFromFeedback(existing);
+    } else {
+      resetFormFields();
+    }
     if (window.innerWidth < 1024) {
       setMobileSheetOpen(true);
     }
@@ -342,6 +435,8 @@ export default function LogRunsPage() {
     rating, setRating, effort, setEffort, feeling, setFeeling,
     preRunFeeling, setPreRunFeeling, followedPlan, setFollowedPlan,
     comment, setComment, selectedRun, submitting, submitted,
+    submitError,
+    isEditing: !!selectedRun && feedbackByRunId.has(selectedRun),
     onSubmit: handleSubmit,
   };
 

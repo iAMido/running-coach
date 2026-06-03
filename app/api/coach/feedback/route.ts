@@ -50,6 +50,39 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
+    // If this run already has feedback for this user, update in place;
+    // otherwise insert. Avoids piling on duplicate rows when the athlete
+    // re-saves to correct something.
+    if (validation.data.run_id) {
+      const { data: existing } = await supabase
+        .from('run_feedback')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('run_id', validation.data.run_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existing?.id) {
+        const { data, error } = await supabase
+          .from('run_feedback')
+          .update({
+            run_date: validation.data.run_date,
+            rating: validation.data.rating,
+            effort_level: validation.data.effort_level,
+            feeling: validation.data.feeling,
+            comment: validation.data.comment,
+            followed_plan: validation.data.followed_plan,
+            pre_run_feeling: validation.data.pre_run_feeling,
+          })
+          .eq('id', existing.id)
+          .select()
+          .single();
+        if (error) throw error;
+        return NextResponse.json({ feedback: data, updated: true });
+      }
+    }
+
     const { data, error } = await supabase
       .from('run_feedback')
       .insert({
