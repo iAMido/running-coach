@@ -20,17 +20,24 @@ import {
 } from 'lucide-react';
 import { signOut } from 'next-auth/react';
 
+// Primary nav, in the order the athlete asked for: Home → Log → Training
+// Plan → Review → Coach → Grocky → Sync Strava → Settings.
 const navItems = [
-  { href: '/coach', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/coach/log', label: 'Log Runs', icon: ClipboardList },
-  { href: '/coach/review', label: 'Weekly Review', icon: Calendar },
+  { href: '/coach', label: 'Home', icon: LayoutDashboard },
+  { href: '/coach/log', label: 'Log', icon: ClipboardList },
   { href: '/coach/plan', label: 'Training Plan', icon: Target },
-  { href: '/coach/ask', label: 'Ask Coach', icon: MessageSquare },
+  { href: '/coach/review', label: 'Review', icon: Calendar },
+  { href: '/coach/ask', label: 'Coach', icon: MessageSquare },
   { href: '/coach/grocky', label: 'Grocky', icon: Dumbbell },
-  { href: '/coach/reports', label: 'Coach Reports', icon: FileText },
-  { href: '/coach/resources', label: 'Coach Library', icon: BookOpen },
   { href: '/coach/strava', label: 'Sync Strava', icon: RefreshCw },
   { href: '/coach/settings', label: 'Settings', icon: Settings },
+];
+
+// Secondary nav: things we built that aren't in the user's primary order
+// but still need a reachable link. Rendered below a visual divider.
+const secondaryNavItems = [
+  { href: '/coach/resources', label: 'Coach Library', icon: BookOpen },
+  { href: '/coach/reports', label: 'Coach Reports', icon: FileText },
 ];
 
 export function CoachSidebar() {
@@ -113,6 +120,42 @@ export function CoachSidebar() {
               <Icon
                 className="w-4 h-4 shrink-0"
                 style={{ color: isActive ? 'var(--rc-blue)' : 'var(--rc-ink-3)' }}
+              />
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
+
+        {/* Secondary nav — kept reachable but visually subordinated */}
+        <div
+          className="my-2 mx-2"
+          style={{ borderTop: '1px solid var(--rc-line)' }}
+        />
+        {secondaryNavItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                'relative flex items-center gap-[11px] px-3 py-[8px] rounded-[10px] text-[13px] font-medium transition-colors',
+              )}
+              style={{
+                color: isActive ? 'var(--rc-ink)' : 'var(--rc-ink-3)',
+                background: isActive ? 'var(--rc-surface)' : 'transparent',
+                boxShadow: isActive ? 'var(--rc-shadow-1)' : 'none',
+              }}
+            >
+              {isActive && (
+                <span
+                  className="absolute -left-[18px] top-2.5 bottom-2.5 w-[3px] rounded-sm"
+                  style={{ background: 'var(--rc-blue)' }}
+                />
+              )}
+              <Icon
+                className="w-4 h-4 shrink-0"
+                style={{ color: isActive ? 'var(--rc-blue)' : 'var(--rc-ink-4)' }}
               />
               <span>{item.label}</span>
             </Link>

@@ -9,6 +9,8 @@ import {
   Calendar,
   MessageSquare,
   Menu,
+  BookOpen,
+  FileText,
 } from 'lucide-react';
 import { useState } from 'react';
 import {
@@ -21,18 +23,27 @@ import {
 import { signOut } from 'next-auth/react';
 import { Target, Dumbbell, RefreshCw, Settings, LogOut, ChevronLeft, UtensilsCrossed } from 'lucide-react';
 
+// Bottom-tab slots — first four items from the athlete's requested order:
+// Home → Log → Training Plan → Review.
 const mainNavItems = [
   { href: '/coach', label: 'Home', icon: LayoutDashboard },
   { href: '/coach/log', label: 'Log', icon: ClipboardList },
+  { href: '/coach/plan', label: 'Plan', icon: Target },
   { href: '/coach/review', label: 'Review', icon: Calendar },
-  { href: '/coach/ask', label: 'Coach', icon: MessageSquare },
 ];
 
+// "More" sheet — remaining items in the requested order, then a divider,
+// then the secondary pages (Library, Reports).
 const menuItems = [
-  { href: '/coach/plan', label: 'Training Plan', icon: Target },
+  { href: '/coach/ask', label: 'Coach', icon: MessageSquare },
   { href: '/coach/grocky', label: 'Grocky', icon: Dumbbell },
   { href: '/coach/strava', label: 'Sync Strava', icon: RefreshCw },
   { href: '/coach/settings', label: 'Settings', icon: Settings },
+];
+
+const secondaryMenuItems = [
+  { href: '/coach/resources', label: 'Coach Library', icon: BookOpen },
+  { href: '/coach/reports', label: 'Coach Reports', icon: FileText },
 ];
 
 export function BottomNav() {
@@ -163,6 +174,31 @@ export function BottomNav() {
                       <Icon className="w-5 h-5" />
                     </div>
                     <span className="font-medium text-base">{item.label}</span>
+                  </Link>
+                );
+              })}
+
+              {/* Secondary pages — kept reachable but subordinated */}
+              <div className="my-3" style={{ borderTop: '1px solid rgba(14,15,12,0.08)' }} />
+              {secondaryMenuItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMenuOpen(false)}
+                    className="flex items-center gap-4 px-4 py-3 rounded-xl transition-all active:scale-[0.98]"
+                    style={{
+                      background: isActive ? 'rgba(37,99,235,0.08)' : '#FFFFFF',
+                      color: isActive ? '#1D4ED8' : '#3D3E3A',
+                      border: `1px solid ${isActive ? 'rgba(0,0,0,0.04)' : 'rgba(14,15,12,0.08)'}`,
+                    }}
+                  >
+                    <div className="p-2 rounded-lg" style={{ background: isActive ? 'rgba(37,99,235,0.08)' : '#FBFAF6' }}>
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <span className="font-medium text-[15px]">{item.label}</span>
                   </Link>
                 );
               })}
