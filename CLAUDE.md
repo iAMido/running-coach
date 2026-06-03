@@ -131,12 +131,20 @@ lib/
 │   ├── coach-workouts.ts             # Coach workout patterns
 │   └── strength.ts                   # Strength training data
 ├── rag/                              # 3-layer RAG system
-│   ├── book-retriever.ts             # Book methodology retrieval
+│   ├── book-retriever.ts             # Book methodology retrieval (merges user_resources too)
 │   ├── coach-retriever.ts            # Coach patterns retrieval
 │   ├── context-builder.ts            # Combines all RAG layers
 │   ├── embeddings.ts                 # OpenAI embeddings generation
+│   ├── chunker.ts                    # Paragraph-aware chunker for ingestion
 │   ├── user-formatter.ts            # User data formatting for context
+│   ├── user-resource-retriever.ts   # Per-user uploaded material retrieval
 │   └── types.ts                      # RAG type definitions
+├── supervisor/                       # Pre/post-flight gate around every AI call
+│   ├── preflight.ts                  # Deterministic coverage rules
+│   ├── critic.ts                     # Haiku response audit
+│   ├── telemetry.ts                  # logCoachCall → coach_calls
+│   ├── types.ts                      # Supervisor types
+│   └── index.ts                      # Barrel export
 ├── validation/
 │   └── schemas.ts                    # Zod validation schemas (feedback, etc.)
 ├── utils/
@@ -168,6 +176,11 @@ All tables have RLS enabled with policies for authenticated users.
 | `strava_tokens` | Strava OAuth tokens per user |
 | `book_embeddings` | RAG: running book methodology chunks |
 | `coach_workouts` | RAG: coach workout pattern embeddings |
+| `coach_phases` | RAG: synthesized phase wisdom (Base / Specific) |
+| `user_resources` / `user_resource_chunks` | RAG: athlete-uploaded coach material (per user, pgvector) |
+| `coach_calls` | Supervisor: one row per AI request (tokens, latency, warnings) |
+| `coach_response_audits` | Supervisor: Haiku critic scores per response |
+| `coach_chat_sessions` / `coach_chat_messages` | Persisted chat history (Ask Coach) |
 | `strength_exercises` | Strength training exercises |
 
 ### Key Patterns
@@ -187,6 +200,24 @@ All tables have RLS enabled with policies for authenticated users.
 - Uses `calculateCurrentWeek(plan.start_date, …)` rather than the stored `plan.current_week_num`, so the AI doesn't see a stale phase if the cron hasn't advanced.
 
 **Weekly review prompt:** Renders a PLANNED vs ACTUAL block side-by-side and asks for per-rep interval commentary using the lap detail.
+
+**User resources (`lib/rag/user-resource-retriever.ts`, `/coach/resources`):** Athlete-uploaded coach material. `POST /api/coach/resources` accepts either `application/json` (`{ title, content, ... }`) or `multipart/form-data` (PDF file via `pdf-parse`). Chunks via `lib/rag/chunker.ts`, embeds via `text-embedding-3-small`, writes to `runcoach.user_resources` + `runcoach.user_resource_chunks`. The book retriever calls `retrieveUserResources(userId, query, ...)` in parallel with its book search and merges results into the same "Methodology Guidelines" block — user resources go first so they win ties when the prompt truncates. Soft-delete via `DELETE /api/coach/resources/[id]` (sets `status='archived'`, retains embeddings).
+
+**Supervisor UI:** The chat (`/coach/ask`) renders the supervisor envelope's warnings as a chip above each assistant bubble (`ShieldAlert` icon, warning codes inline). The dashboard (`/coach`) shows a `CoachHealthWidget` summarising the last 7 days from `/api/coach/health` — total calls, errors, avg critic score, preflight warning count, ceiling-hit count, top warning codes. Both gracefully hide when there's no data yet.
+
+**Chat history persistence:** `/coach/ask` posts `sessionId` along with messages. `/api/coach/chat/ask` resolves or creates a `runcoach.coach_chat_sessions` row (title seeded from the first user message) and persists each user + assistant turn into `runcoach.coach_chat_messages` with the supervisor envelope snapshot. The page has a History dropdown listing past sessions; click loads a session via `GET /api/coach/chat/sessions/[id]`. Soft-archive via `DELETE` (sets `status='archived'`).
+
+**Streaming plan generation:** `/api/coach/plans/generate/stream` is an SSE variant of plan-gen. It emits `meta`, `token` (many), and `done` events. The page consumes the stream, shows a live preview window, and sets the final plan from the `done` payload. Final JSON parse + DB write + supervisor logging + Haiku critic all happen server-side after the stream completes.
+
+**Tag-aware user-resource retrieval:** `runcoach.match_user_resources(...)` takes an optional `match_tags text[]` parameter; when supplied, only resources whose `methodology_tags` overlap with the query tags are returned (with a no-tag-filter fallback if zero match). `context-builder.ts` derives tags from query + current phase + workout type and threads them through `book-retriever.ts` → `user-resource-retriever.ts`.
+
+**Supervisor (`lib/supervisor/`):** Three-piece watchdog on every AI call.
+- **Pre-flight (`preflight.ts`)** — deterministic `validateContext(...)` that flags silent gaps (no planned-today workout, no recent runs, no book sources for plan generation, no active plan covering the review week). May inject a "SUPERVISOR NOTES" suffix into the system prompt so the model acknowledges gaps instead of confabulating.
+- **Telemetry (`telemetry.ts`)** — `logCoachCall(...)` writes one row to `runcoach.coach_calls` per AI request (route, query_type, tokens, ceiling_hit, cache_used, latency, preflight warnings, plan_modified).
+- **Post-flight critic (`critic.ts`)** — fire-and-forget call to `anthropic/claude-haiku-4-5` that grades the response on 5 axes (addresses_question / references_plan_day / references_runs_feedback / specific_pace_hr / no_contradiction), persists to `runcoach.coach_response_audits`. Auto-back-links the audit_id onto the coach_calls row.
+- **Weekly health audit (`/api/cron/weekly-health-audit`)** — Sunday 22:30 UTC Vercel cron. Reads coverage / plan drift / RAG embedding completeness / AI quality stats from `coach_calls` + `coach_response_audits` and writes a markdown report into `coach_reports` with `report_type='system_health'`.
+
+Wired into `chat/ask`, `review/analyze`, `plans/generate`. Each route returns a `supervisor: { callId, preflightOk, warnings }` envelope so the UI can surface the warnings inline.
 
 **Strava Sync:** OAuth flow → token storage → manual sync button + automated Vercel Cron (daily at 15:00 and 21:40 UTC). For each new activity: stores summary row, fetches `/activities/{id}/laps` for lap rows, fetches `/activities/{id}/streams?keys=heartrate,time` and buckets the HR stream into the athlete's zones (`pct_z1..pct_z6` via `lib/utils/zones.ts`). Run type classified via `classifyRun` with `workoutName` + `profile` + `zonePercents`. Token refresh on expiry, auto-disconnect on permanent auth failure.
 

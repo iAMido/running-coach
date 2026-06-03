@@ -9,6 +9,14 @@ import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { chatRequestSchema, validateInput } from '@/lib/validation/schemas';
 import { supabase } from '@/lib/db/supabase';
 import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
+import { getActivePlan } from '@/lib/db/plans';
+import {
+  validateContext as supervisorValidate,
+  serializeWarnings,
+  logCoachCall,
+  runCritic,
+} from '@/lib/supervisor';
+import { TOKEN_BUDGETS_PER_QUERY } from '@/lib/rag/types';
 
 // Detect if user wants to modify their training plan
 function detectPlanModificationIntent(query: string): boolean {
@@ -107,11 +115,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
-    const { messages } = validation.data as { messages: ChatMessage[] };
+    const { messages, sessionId: incomingSessionId } = validation.data as {
+      messages: ChatMessage[];
+      sessionId?: string | null;
+    };
 
     // Get the user's query from the last message
     const lastUserMessage = messages.filter(m => m.role === 'user').pop();
     const query = lastUserMessage?.content || '';
+
+    // Resolve or create a chat session. The page sends sessionId on
+    // continuing conversations; on the very first turn we create one and
+    // seed the title from the first user message.
+    let chatSessionId: string | null = incomingSessionId ?? null;
+    if (!chatSessionId && query) {
+      const { data: newSession } = await supabase
+        .from('coach_chat_sessions')
+        .insert({ user_id: userId, title: query.slice(0, 80) })
+        .select('id')
+        .single();
+      chatSessionId = newSession?.id ?? null;
+    }
+
+    // Persist the latest user message (others assumed already persisted).
+    if (chatSessionId && lastUserMessage) {
+      await supabase.from('coach_chat_messages').insert({
+        session_id: chatSessionId,
+        user_id: userId,
+        role: 'user',
+        content: lastUserMessage.content,
+      });
+    }
 
     // Detect query type and build 3-layer context
     const queryType = detectQueryType(query);
@@ -155,6 +189,21 @@ export async function POST(request: NextRequest) {
       systemPrompt = buildEnhancedCoachSystemPrompt(context);
     }
 
+    // Pre-flight supervisor gate. Reads the assembled context, flags silent
+    // gaps (no planned-today workout, no recent runs, etc.), and may inject
+    // a short "SUPERVISOR NOTES" block at the end of the system prompt so
+    // the model acknowledges gaps instead of confabulating around them.
+    const activePlanForPreflight = activePlan ?? await getActivePlan(userId);
+    const preflight = supervisorValidate({
+      context,
+      queryType,
+      plan: activePlanForPreflight,
+      hasActivePlan: !!activePlanForPreflight,
+    });
+    if (preflight.augmentedSystemSuffix) {
+      systemPrompt = systemPrompt + preflight.augmentedSystemSuffix;
+    }
+
     // Build messages array
     const apiMessages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
@@ -165,11 +214,13 @@ export async function POST(request: NextRequest) {
     // Cache the system block: most consecutive turns in a single chat reuse
     // the same RAG-built system prompt, so Anthropic prompt caching cuts
     // the cost of follow-up turns substantially.
+    const callStart = Date.now();
     const response = await callOpenRouter(apiMessages, {
       apiKey,
       maxTokens: isPlanModification ? 4000 : 1500,
       cacheSystemPrompt: true,
     });
+    const callLatencyMs = Date.now() - callStart;
 
     if (response.error) {
       return NextResponse.json({ error: response.error }, { status: 500 });
@@ -255,6 +306,64 @@ export async function POST(request: NextRequest) {
       displayContent += `\n\n✅ **Your training plan has been updated!** The changes are now reflected in your Plan page.`;
     }
 
+    // Telemetry: one row per call into coach_calls.
+    const callId = await logCoachCall({
+      user_id: userId,
+      route: '/api/coach/chat/ask',
+      query_type: queryType,
+      model: 'anthropic/claude-sonnet-4',
+      context_tokens: stats.totalTokens,
+      context_budget: TOKEN_BUDGETS_PER_QUERY[queryType],
+      ceiling_hit: stats.totalTokens >= TOKEN_BUDGETS_PER_QUERY[queryType] * 0.95,
+      cache_used: true,
+      preflight_ok: preflight.ok,
+      preflight_warnings: serializeWarnings(preflight.warnings),
+      preflight_augmented: !!preflight.augmentedSystemSuffix,
+      latency_ms: callLatencyMs,
+      status: response.error ? 'error' : 'ok',
+      error_message: response.error ?? null,
+      plan_modified: planUpdated,
+    });
+
+    // Fire-and-forget critic: grades response, persists to coach_response_audits.
+    if (!response.error && callId) {
+      runCritic({
+        userId,
+        callId,
+        route: '/api/coach/chat/ask',
+        queryType,
+        userQuery: query,
+        coachResponse: displayContent,
+        contextSummary: summarizeContext(context, isPlanModification, currentWeek),
+        preflightWarnings: preflight.warnings,
+      }).catch(err => console.warn('critic failed:', err?.message));
+    }
+
+    // Persist the assistant message + supervisor envelope, and bump the
+    // session updated_at so the sidebar can sort by recency.
+    if (chatSessionId) {
+      await supabase.from('coach_chat_messages').insert({
+        session_id: chatSessionId,
+        user_id: userId,
+        role: 'assistant',
+        content: displayContent,
+        supervisor: {
+          callId,
+          preflightOk: preflight.ok,
+          warnings: preflight.warnings,
+        },
+      });
+      // Recount + bump
+      const { count } = await supabase
+        .from('coach_chat_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('session_id', chatSessionId);
+      await supabase
+        .from('coach_chat_sessions')
+        .update({ message_count: count || 0, updated_at: new Date().toISOString() })
+        .eq('id', chatSessionId);
+    }
+
     return NextResponse.json({
       content: displayContent,
       sources: {
@@ -270,9 +379,29 @@ export async function POST(request: NextRequest) {
         planUpdated,
         adjustmentSummary,
       },
+      supervisor: {
+        callId,
+        preflightOk: preflight.ok,
+        warnings: preflight.warnings,
+      },
+      sessionId: chatSessionId,
     });
   } catch (error) {
     console.error('Error in chat:', error);
     return NextResponse.json({ error: 'Failed to get response' }, { status: 500 });
   }
+}
+
+function summarizeContext(
+  context: import('@/lib/rag/types').EnhancedContext,
+  isPlanModification: boolean,
+  currentWeek: number,
+): string {
+  const u = context.userContext.metadata;
+  const lines = [
+    `current_phase=${u.currentPhase || 'none'} fatigue=${u.fatigueScore.toFixed(1)}/10 runs_in_context=${u.runsIncluded} has_plan=${u.hasActivePlan}`,
+    `book_sources=${context.bookContext.sources.length} coach_workouts=${context.coachContext.workoutsIncluded.length}`,
+    `query_week=${currentWeek} plan_modification=${isPlanModification}`,
+  ];
+  return lines.join('\n');
 }

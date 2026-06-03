@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/db/supabase';
 import { generateEmbedding } from './embeddings';
+import { retrieveUserResources } from './user-resource-retriever';
 import type { FormattedBookContext, InstructionSearchResult } from './types';
 
 // Approximate tokens per character
@@ -15,8 +16,18 @@ export async function retrieveBookContext(
     phase?: string;
     workoutType?: string;
     level?: string;
+    /** Optional tag hints (e.g. ['base','lt1']) passed through to the
+     *  user-resource retriever for methodology_tags filtering. */
+    userResourceTags?: string[];
   },
-  maxTokens: number
+  maxTokens: number,
+  /**
+   * When provided, the user's own uploaded resources are also searched
+   * (runcoach.match_user_resources) and merged into the same
+   * Methodology Guidelines block. They get a small dedicated slice of the
+   * budget so they always appear ahead of generic books when relevant.
+   */
+  userId?: string,
 ): Promise<FormattedBookContext> {
   // Generate embedding for the query
   const embeddingResponse = await generateEmbedding(query);
@@ -30,12 +41,21 @@ export async function retrieveBookContext(
     };
   }
 
-  // Search for relevant instructions
-  const instructions = await searchInstructionsFiltered(
-    embeddingResponse.embedding,
-    filters,
-    Math.ceil(maxTokens / 500) // Estimate ~500 tokens per instruction
-  );
+  // Carve out ~25% of the book budget for the athlete's personal resources
+  // when a userId is supplied — capped at 8 chunks since they're usually
+  // smaller / more focused than book chapters.
+  const userResourceLimit = userId ? 8 : 0;
+  const bookSlots = Math.max(1, Math.ceil(maxTokens / 500) - userResourceLimit);
+
+  const [userResults, bookResults] = await Promise.all([
+    userId
+      ? retrieveUserResources(userId, query, userResourceLimit, filters.userResourceTags)
+      : Promise.resolve([] as InstructionSearchResult[]),
+    searchInstructionsFiltered(embeddingResponse.embedding, filters, bookSlots),
+  ]);
+
+  // User resources go FIRST so they win ties when the prompt truncates.
+  const instructions: InstructionSearchResult[] = [...userResults, ...bookResults];
 
   if (instructions.length === 0) {
     return {

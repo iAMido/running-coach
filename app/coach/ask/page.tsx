@@ -1,15 +1,33 @@
 'use client';
 
-import { MessageSquare, Send, Trash2, User, Bot, Wand2, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { MessageSquare, Send, Trash2, User, Bot, Wand2, CheckCircle2, AlertTriangle, ShieldAlert, History, Plus } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChatMessage, TrainingPlan } from '@/lib/db/types';
 
+interface ChatSession {
+  id: string;
+  title: string | null;
+  message_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface SupervisorWarning {
+  code: string;
+  message: string;
+  severity: 'warn' | 'block';
+}
+type DisplayMessage = ChatMessage & { supervisor?: { warnings: SupervisorWarning[] } };
+
 export default function AskCoachPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [activePlan, setActivePlan] = useState<TrainingPlan | null>(null);
   const [showAdjustPanel, setShowAdjustPanel] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
@@ -31,7 +49,49 @@ export default function AskCoachPage() {
 
   useEffect(() => {
     fetchActivePlan();
+    fetchSessions();
   }, []);
+
+  const fetchSessions = useCallback(async () => {
+    try {
+      const r = await fetch('/api/coach/chat/sessions');
+      if (r.ok) {
+        const data = await r.json();
+        setSessions(data.sessions || []);
+      }
+    } catch {}
+  }, []);
+
+  const loadSession = useCallback(async (id: string) => {
+    try {
+      const r = await fetch(`/api/coach/chat/sessions/${id}`);
+      if (!r.ok) return;
+      const data = await r.json();
+      const msgs: DisplayMessage[] = (data.messages || []).map((m: { role: string; content: string; supervisor?: { warnings?: SupervisorWarning[] } }) => ({
+        role: m.role as ChatMessage['role'],
+        content: m.content,
+        supervisor: m.supervisor && m.supervisor.warnings ? { warnings: m.supervisor.warnings } : undefined,
+      }));
+      setSessionId(id);
+      setMessages(msgs);
+      setHistoryOpen(false);
+    } catch {}
+  }, []);
+
+  const newSession = useCallback(() => {
+    setSessionId(null);
+    setMessages([]);
+    setAdjustmentResult(null);
+    setShowAdjustPanel(false);
+    setHistoryOpen(false);
+  }, []);
+
+  const archiveSession = useCallback(async (id: string) => {
+    if (!confirm('Archive this conversation?')) return;
+    await fetch(`/api/coach/chat/sessions/${id}`, { method: 'DELETE' });
+    if (id === sessionId) newSession();
+    fetchSessions();
+  }, [fetchSessions, newSession, sessionId]);
 
   const fetchActivePlan = async () => {
     try {
@@ -58,7 +118,7 @@ export default function AskCoachPage() {
       const response = await fetch('/api/coach/chat/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: updatedMessages }),
+        body: JSON.stringify({ messages: updatedMessages, sessionId }),
       });
 
       const data = await response.json();
@@ -67,9 +127,21 @@ export default function AskCoachPage() {
         throw new Error(data.error || 'Failed to get response');
       }
 
-      const assistantMessage: ChatMessage = {
+      // Capture the server-issued sessionId so subsequent turns target the
+      // same conversation, and refresh the list so the sidebar reflects
+      // the new session.
+      if (data.sessionId && data.sessionId !== sessionId) {
+        setSessionId(data.sessionId);
+        fetchSessions();
+      } else if (data.sessionId) {
+        // existing session — bump its position in the list
+        fetchSessions();
+      }
+
+      const assistantMessage: DisplayMessage = {
         role: 'assistant',
         content: data.content,
+        supervisor: data.supervisor ? { warnings: data.supervisor.warnings || [] } : undefined,
       };
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
@@ -162,16 +234,74 @@ export default function AskCoachPage() {
             </span>
           </h1>
         </div>
-        {messages.length > 0 && (
+        <div className="flex items-center gap-2 relative">
           <button
-            onClick={handleClear}
+            onClick={newSession}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium transition-colors"
             style={{ background: 'var(--rc-surface)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink-3)' }}
           >
-            <Trash2 className="w-3.5 h-3.5" />
-            Clear
+            <Plus className="w-3.5 h-3.5" />
+            New chat
           </button>
-        )}
+          <button
+            onClick={() => setHistoryOpen(v => !v)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium transition-colors"
+            style={{ background: 'var(--rc-surface)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink-3)' }}
+          >
+            <History className="w-3.5 h-3.5" />
+            History ({sessions.length})
+          </button>
+          {messages.length > 0 && (
+            <button
+              onClick={handleClear}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium transition-colors"
+              style={{ background: 'var(--rc-surface)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink-3)' }}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Clear
+            </button>
+          )}
+
+          {historyOpen && (
+            <div
+              className="absolute right-0 top-full mt-2 w-[320px] max-h-[400px] overflow-y-auto rounded-xl shadow-lg z-30"
+              style={{ background: 'var(--rc-paper)', border: '1px solid var(--rc-line)' }}
+            >
+              <div className="p-2 border-b" style={{ borderColor: 'var(--rc-line)' }}>
+                <div className="rc-kicker px-2 py-1">Past conversations</div>
+              </div>
+              {sessions.length === 0 ? (
+                <div className="p-4 text-sm text-center" style={{ color: 'var(--rc-ink-4)' }}>No saved chats yet.</div>
+              ) : (
+                <ul>
+                  {sessions.map(s => (
+                    <li
+                      key={s.id}
+                      className="flex items-start justify-between gap-2 px-3 py-2 hover:bg-[var(--rc-surface-2)] cursor-pointer"
+                      style={{ borderBottom: '1px solid var(--rc-line)' }}
+                    >
+                      <button onClick={() => loadSession(s.id)} className="flex-1 text-left min-w-0">
+                        <div className="text-sm truncate" style={{ color: s.id === sessionId ? 'var(--rc-blue)' : 'var(--rc-ink)' }}>
+                          {s.title || 'Untitled'}
+                        </div>
+                        <div className="rc-mono text-[10px] mt-0.5" style={{ color: 'var(--rc-ink-4)', letterSpacing: '0.06em' }}>
+                          {s.message_count} msgs · {new Date(s.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                        </div>
+                      </button>
+                      <button
+                        onClick={e => { e.stopPropagation(); archiveSession(s.id); }}
+                        className="opacity-50 hover:opacity-100"
+                        title="Archive"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Plan Adjustment Panel */}
@@ -298,14 +428,39 @@ export default function AskCoachPage() {
                       <Bot className="w-4 h-4 text-white" />
                     </div>
                   )}
-                  <div
-                    className="max-w-[80%] rounded-2xl px-4 py-3"
-                    style={{
-                      background: message.role === 'user' ? 'var(--rc-blue)' : 'var(--rc-surface-2)',
-                      color: message.role === 'user' ? '#fff' : 'var(--rc-ink)',
-                    }}
-                  >
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                  <div className="max-w-[80%] flex flex-col gap-1.5">
+                    {message.role === 'assistant' && message.supervisor && message.supervisor.warnings.length > 0 && (
+                      <div
+                        className="flex flex-wrap items-center gap-1.5 text-[11px] rounded-lg px-2.5 py-1.5"
+                        style={{
+                          background: 'oklch(0.96 0.05 75)',
+                          border: '1px solid oklch(0.90 0.08 75)',
+                          color: 'oklch(0.40 0.10 75)',
+                        }}
+                        title={message.supervisor.warnings.map(w => `${w.code}: ${w.message}`).join('\n')}
+                      >
+                        <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                        <span className="font-medium">Coach context note{message.supervisor.warnings.length > 1 ? 's' : ''}:</span>
+                        {message.supervisor.warnings.map(w => (
+                          <span
+                            key={w.code}
+                            className="rc-mono"
+                            style={{ padding: '1px 6px', borderRadius: 4, background: 'rgba(0,0,0,0.04)' }}
+                          >
+                            {w.code}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div
+                      className="rounded-2xl px-4 py-3"
+                      style={{
+                        background: message.role === 'user' ? 'var(--rc-blue)' : 'var(--rc-surface-2)',
+                        color: message.role === 'user' ? '#fff' : 'var(--rc-ink)',
+                      }}
+                    >
+                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    </div>
                   </div>
                   {message.role === 'user' && (
                     <div
