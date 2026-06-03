@@ -1,11 +1,18 @@
 'use client';
 
-import { MessageSquare, Send, Trash2, User, Bot, Wand2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { MessageSquare, Send, Trash2, User, Bot, Wand2, CheckCircle2, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import type { ChatMessage, TrainingPlan } from '@/lib/db/types';
 
+interface SupervisorWarning {
+  code: string;
+  message: string;
+  severity: 'warn' | 'block';
+}
+type DisplayMessage = ChatMessage & { supervisor?: { warnings: SupervisorWarning[] } };
+
 export default function AskCoachPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -67,9 +74,10 @@ export default function AskCoachPage() {
         throw new Error(data.error || 'Failed to get response');
       }
 
-      const assistantMessage: ChatMessage = {
+      const assistantMessage: DisplayMessage = {
         role: 'assistant',
         content: data.content,
+        supervisor: data.supervisor ? { warnings: data.supervisor.warnings || [] } : undefined,
       };
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
@@ -298,14 +306,39 @@ export default function AskCoachPage() {
                       <Bot className="w-4 h-4 text-white" />
                     </div>
                   )}
-                  <div
-                    className="max-w-[80%] rounded-2xl px-4 py-3"
-                    style={{
-                      background: message.role === 'user' ? 'var(--rc-blue)' : 'var(--rc-surface-2)',
-                      color: message.role === 'user' ? '#fff' : 'var(--rc-ink)',
-                    }}
-                  >
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                  <div className="max-w-[80%] flex flex-col gap-1.5">
+                    {message.role === 'assistant' && message.supervisor && message.supervisor.warnings.length > 0 && (
+                      <div
+                        className="flex flex-wrap items-center gap-1.5 text-[11px] rounded-lg px-2.5 py-1.5"
+                        style={{
+                          background: 'oklch(0.96 0.05 75)',
+                          border: '1px solid oklch(0.90 0.08 75)',
+                          color: 'oklch(0.40 0.10 75)',
+                        }}
+                        title={message.supervisor.warnings.map(w => `${w.code}: ${w.message}`).join('\n')}
+                      >
+                        <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                        <span className="font-medium">Coach context note{message.supervisor.warnings.length > 1 ? 's' : ''}:</span>
+                        {message.supervisor.warnings.map(w => (
+                          <span
+                            key={w.code}
+                            className="rc-mono"
+                            style={{ padding: '1px 6px', borderRadius: 4, background: 'rgba(0,0,0,0.04)' }}
+                          >
+                            {w.code}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div
+                      className="rounded-2xl px-4 py-3"
+                      style={{
+                        background: message.role === 'user' ? 'var(--rc-blue)' : 'var(--rc-surface-2)',
+                        color: message.role === 'user' ? '#fff' : 'var(--rc-ink)',
+                      }}
+                    >
+                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    </div>
                   </div>
                   {message.role === 'user' && (
                     <div

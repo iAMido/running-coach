@@ -1,9 +1,11 @@
 /**
  * User-resource ingestion + listing.
  *
- * POST: accept { title, content, ...metadata } from the athlete, chunk it,
- *       embed each chunk via OpenAI, and write rows into
- *       runcoach.user_resources + runcoach.user_resource_chunks.
+ * POST: accept athlete material in one of two formats:
+ *   - application/json: { title, content, ...metadata } (paste-text path)
+ *   - multipart/form-data: file (PDF) + title + metadata fields (file path)
+ *   Chunks the text, embeds via OpenAI, writes
+ *   runcoach.user_resources + runcoach.user_resource_chunks.
  * GET:  list active resources with chunk + token counts for the UI.
  *
  * The retriever (lib/rag/user-resource-retriever.ts) surfaces chunks back
@@ -17,8 +19,10 @@ import { supabase } from '@/lib/db/supabase';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { generateEmbeddingsBatch, formatEmbeddingForStorage } from '@/lib/rag/embeddings';
 import { chunkText } from '@/lib/rag/chunker';
+import { PDFParse } from 'pdf-parse';
 
 const MAX_BODY_CHARS = 250_000; // ~62k tokens, plenty for a coach handbook
+const MAX_PDF_BYTES = 15 * 1024 * 1024; // 15MB
 
 export async function GET() {
   const auth = await getAuthenticatedUser();
@@ -40,6 +44,92 @@ export async function GET() {
   return NextResponse.json({ resources: data || [] });
 }
 
+interface PostFields {
+  title: string;
+  content: string;
+  description?: string;
+  methodology_tags?: string[];
+  source_type?: string;
+  original_filename?: string;
+  applies_to_phase?: string;
+  applies_to_workout_type?: string;
+}
+
+async function parseJsonBody(request: NextRequest): Promise<PostFields | { error: string }> {
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return { error: 'Invalid JSON body' };
+  }
+  const title = String(body.title || '').trim();
+  const content = String(body.content || '').trim();
+  if (!title) return { error: 'title required' };
+  if (!content) return { error: 'content required' };
+  return {
+    title,
+    content,
+    description: typeof body.description === 'string' ? body.description : undefined,
+    methodology_tags: Array.isArray(body.methodology_tags) ? body.methodology_tags as string[] : undefined,
+    source_type: typeof body.source_type === 'string' ? body.source_type : 'pasted_text',
+    original_filename: typeof body.original_filename === 'string' ? body.original_filename : undefined,
+    applies_to_phase: typeof body.applies_to_phase === 'string' ? body.applies_to_phase : undefined,
+    applies_to_workout_type: typeof body.applies_to_workout_type === 'string' ? body.applies_to_workout_type : undefined,
+  };
+}
+
+async function parseFormBody(request: NextRequest): Promise<PostFields | { error: string }> {
+  let form: FormData;
+  try {
+    form = await request.formData();
+  } catch {
+    return { error: 'Invalid form body' };
+  }
+  const title = (form.get('title')?.toString() || '').trim();
+  if (!title) return { error: 'title required' };
+
+  const file = form.get('file');
+  if (!(file instanceof File)) return { error: 'file required' };
+  if (file.size > MAX_PDF_BYTES) {
+    return { error: `file exceeds ${(MAX_PDF_BYTES / 1024 / 1024).toFixed(0)}MB` };
+  }
+  const filename = file.name || 'document.pdf';
+  const lower = filename.toLowerCase();
+  const isPdf = lower.endsWith('.pdf') || file.type === 'application/pdf';
+  if (!isPdf) return { error: 'only PDF uploads are supported (.pdf)' };
+
+  let extractedText: string;
+  try {
+    const buf = new Uint8Array(await file.arrayBuffer());
+    const parser = new PDFParse({ data: buf });
+    try {
+      const result = await parser.getText();
+      extractedText = (result.text || '').trim();
+    } finally {
+      await parser.destroy().catch(() => {});
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'unknown';
+    return { error: `Failed to parse PDF: ${msg}` };
+  }
+
+  if (!extractedText) return { error: 'PDF contained no extractable text (scanned image?)' };
+
+  const tagsRaw = form.get('methodology_tags')?.toString() || '';
+  const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
+
+  return {
+    title,
+    content: extractedText,
+    description: form.get('description')?.toString() || undefined,
+    methodology_tags: tags.length ? tags : undefined,
+    source_type: 'pdf',
+    original_filename: filename,
+    applies_to_phase: form.get('applies_to_phase')?.toString() || undefined,
+    applies_to_workout_type: form.get('applies_to_workout_type')?.toString() || undefined,
+  };
+}
+
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser();
   if (!auth.authenticated || !auth.userId) {
@@ -50,26 +140,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'OPENAI_API_KEY not configured' }, { status: 500 });
   }
 
-  let body: {
-    title?: string;
-    content?: string;
-    description?: string;
-    methodology_tags?: string[];
-    source_type?: string;
-    original_filename?: string;
-    applies_to_phase?: string;
-    applies_to_workout_type?: string;
-  };
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  const contentType = request.headers.get('content-type') || '';
+  const parsed = contentType.includes('multipart/form-data')
+    ? await parseFormBody(request)
+    : await parseJsonBody(request);
+
+  if ('error' in parsed) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
-  const title = (body.title || '').trim();
-  const content = (body.content || '').trim();
-  if (!title) return NextResponse.json({ error: 'title required' }, { status: 400 });
-  if (!content) return NextResponse.json({ error: 'content required' }, { status: 400 });
+  const body = parsed;
+  const title = body.title;
+  const content = body.content;
   if (content.length > MAX_BODY_CHARS) {
     return NextResponse.json({ error: `content exceeds ${MAX_BODY_CHARS} chars` }, { status: 413 });
   }

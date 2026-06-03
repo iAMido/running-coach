@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
-import { BookOpen, Trash2, Plus, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { BookOpen, Trash2, Plus, CheckCircle, AlertTriangle, FileUp } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 
 interface Resource {
@@ -30,6 +31,7 @@ export default function ResourcesPage() {
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState('');
   const [content, setContent] = useState('');
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
 
   const fetchResources = useCallback(async () => {
     setLoading(true);
@@ -48,7 +50,7 @@ export default function ResourcesPage() {
     fetchResources();
   }, [fetchResources]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmitText = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !content.trim()) return;
     setSubmitting(true);
@@ -75,6 +77,37 @@ export default function ResourcesPage() {
       setDescription('');
       setTags('');
       setContent('');
+      fetchResources();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Upload failed';
+      setStatusMessage({ kind: 'err', text: msg });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSubmitPdf = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !pdfFile) return;
+    setSubmitting(true);
+    setStatusMessage(null);
+    try {
+      const fd = new FormData();
+      fd.set('title', title.trim());
+      if (description.trim()) fd.set('description', description.trim());
+      if (tags.trim()) fd.set('methodology_tags', tags.trim());
+      fd.set('file', pdfFile);
+      const r = await fetch('/api/coach/resources', { method: 'POST', body: fd });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Upload failed');
+      setStatusMessage({
+        kind: 'ok',
+        text: `Saved "${data.resource.title}" — ${data.resource.chunk_count} chunks, ~${data.resource.total_tokens} tokens from ${pdfFile.name}.`,
+      });
+      setTitle('');
+      setDescription('');
+      setTags('');
+      setPdfFile(null);
       fetchResources();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Upload failed';
@@ -111,56 +144,118 @@ export default function ResourcesPage() {
             Add resource
           </CardTitle>
           <CardDescription>
-            Paste any text you want the coach to use as reference. Markdown headings (`#`, `##`) become section
-            titles. ~250k chars max per upload.
+            Upload a PDF or paste raw text. The coach retrieves chunks of this material whenever it answers you.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div className="grid md:grid-cols-2 gap-3">
-              <div>
-                <label className="text-sm font-medium block mb-1">Title *</label>
-                <Input
-                  value={title}
-                  onChange={e => setTitle(e.target.value)}
-                  placeholder="e.g. Old coach: Base phase principles"
-                  required
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium block mb-1">Methodology tags</label>
-                <Input
-                  value={tags}
-                  onChange={e => setTags(e.target.value)}
-                  placeholder="comma-separated, e.g. lt1,base,marathon"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium block mb-1">Description</label>
-              <Input
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                placeholder="Short context — who wrote it, why you want the AI to use it"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium block mb-1">Content *</label>
-              <Textarea
-                value={content}
-                onChange={e => setContent(e.target.value)}
-                placeholder="Paste the document content here..."
-                rows={12}
-                required
-              />
-              <p className="text-xs mt-1" style={{ color: 'var(--rc-ink-4)' }}>
-                {content.length.toLocaleString()} characters
-              </p>
-            </div>
-            <Button type="submit" disabled={submitting || !title.trim() || !content.trim()}>
-              {submitting ? 'Embedding…' : 'Add to library'}
-            </Button>
-          </form>
+          <Tabs defaultValue="text">
+            <TabsList className="mb-3">
+              <TabsTrigger value="text">Paste text</TabsTrigger>
+              <TabsTrigger value="pdf">Upload PDF</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="text">
+              <form onSubmit={handleSubmitText} className="space-y-3">
+                <div className="grid md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm font-medium block mb-1">Title *</label>
+                    <Input
+                      value={title}
+                      onChange={e => setTitle(e.target.value)}
+                      placeholder="e.g. Old coach: Base phase principles"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium block mb-1">Methodology tags</label>
+                    <Input
+                      value={tags}
+                      onChange={e => setTags(e.target.value)}
+                      placeholder="comma-separated, e.g. lt1,base,marathon"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium block mb-1">Description</label>
+                  <Input
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
+                    placeholder="Short context — who wrote it, why you want the AI to use it"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium block mb-1">Content *</label>
+                  <Textarea
+                    value={content}
+                    onChange={e => setContent(e.target.value)}
+                    placeholder="Paste the document content here..."
+                    rows={12}
+                    required
+                  />
+                  <p className="text-xs mt-1" style={{ color: 'var(--rc-ink-4)' }}>
+                    {content.length.toLocaleString()} characters
+                  </p>
+                </div>
+                <Button type="submit" disabled={submitting || !title.trim() || !content.trim()}>
+                  {submitting ? 'Embedding…' : 'Add to library'}
+                </Button>
+              </form>
+            </TabsContent>
+
+            <TabsContent value="pdf">
+              <form onSubmit={handleSubmitPdf} className="space-y-3">
+                <div className="grid md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm font-medium block mb-1">Title *</label>
+                    <Input
+                      value={title}
+                      onChange={e => setTitle(e.target.value)}
+                      placeholder="Defaults to filename if blank"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium block mb-1">Methodology tags</label>
+                    <Input
+                      value={tags}
+                      onChange={e => setTags(e.target.value)}
+                      placeholder="comma-separated"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium block mb-1">Description</label>
+                  <Input
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
+                    placeholder="Short context"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium block mb-1">PDF file *</label>
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    onChange={e => {
+                      const f = e.target.files?.[0] || null;
+                      setPdfFile(f);
+                      if (f && !title.trim()) setTitle(f.name.replace(/\.pdf$/i, ''));
+                    }}
+                    required
+                    className="block w-full text-sm rounded-md border px-3 py-2"
+                    style={{ borderColor: 'var(--rc-line)' }}
+                  />
+                  <p className="text-xs mt-1" style={{ color: 'var(--rc-ink-4)' }}>
+                    Max 15MB. Scanned-image PDFs without an OCR text layer will be rejected.
+                  </p>
+                </div>
+                <Button type="submit" disabled={submitting || !title.trim() || !pdfFile}>
+                  <FileUp className="w-4 h-4 mr-1" />
+                  {submitting ? 'Parsing & embedding…' : 'Upload PDF'}
+                </Button>
+              </form>
+            </TabsContent>
+          </Tabs>
 
           {statusMessage && (
             <div
