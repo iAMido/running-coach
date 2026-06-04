@@ -39,42 +39,55 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [profileRes, allMealsRes, weightRes, runsRes, waterRes] =
-      await Promise.all([
-        caltrackDb
-          .from('user_profile')
-          .select(
-            'id,current_weight_kg,target_weight_kg,height_cm,age,sex,bmr,tdee,target_daily_calories'
-          )
-          .limit(1)
-          .single(),
-        // Fetch ALL meals in the date range (not just today)
-        caltrackDb
+    // #1 — fetch profile FIRST, then scope every other read to its user_id.
+    const profileRes = await caltrackDb
+      .from('user_profile')
+      .select('id,current_weight_kg,target_weight_kg,height_cm,age,sex,bmr,tdee,target_daily_calories')
+      .limit(1)
+      .single();
+    const profile = profileRes.data;
+    const userId = profile?.id as string | undefined;
+
+    const [allMealsRes, weightRes, runsRes, waterRes] = await Promise.all([
+      // Fetch ALL meals in the date range (not just today)
+      (() => {
+        let q = caltrackDb
           .from('meals')
-          .select(
-            'id,meal_type,total_calories,total_protein_g,total_carbs_g,total_fat_g,total_fiber_g,eaten_at'
-          )
+          .select('id,meal_type,total_calories,total_protein_g,total_carbs_g,total_fat_g,total_fiber_g,eaten_at')
           .eq('status', 'confirmed')
           .gte('eaten_at', `${startStr}T00:00:00`)
-          .lte('eaten_at', `${todayStr}T23:59:59`),
-        caltrackDb
+          .lte('eaten_at', `${todayStr}T23:59:59`);
+        if (userId) q = q.eq('user_id', userId);
+        return q;
+      })(),
+      (() => {
+        let q = caltrackDb
           .from('weight_log')
           .select('weight_kg,measured_at')
           .gte('measured_at', `${startStr}T00:00:00`)
-          .order('measured_at', { ascending: true }),
-        caltrackDb
+          .order('measured_at', { ascending: true });
+        if (userId) q = q.eq('user_id', userId);
+        return q;
+      })(),
+      (() => {
+        let q = caltrackDb
           .from('caltrack_runs')
           .select('calories_burned,run_date,distance_km,duration_minutes')
           .gte('run_date', `${startStr}T00:00:00`)
-          .lte('run_date', `${todayStr}T23:59:59`),
-        caltrackDb
+          .lte('run_date', `${todayStr}T23:59:59`);
+        if (userId) q = q.eq('user_id', userId);
+        return q;
+      })(),
+      (() => {
+        let q = caltrackDb
           .from('water_log')
           .select('amount_ml,logged_at')
           .gte('logged_at', `${todayStr}T00:00:00`)
-          .lte('logged_at', `${todayStr}T23:59:59`),
-      ]);
-
-    const profile = profileRes.data;
+          .lte('logged_at', `${todayStr}T23:59:59`);
+        if (userId) q = q.eq('user_id', userId);
+        return q;
+      })(),
+    ]);
     const allMeals = allMealsRes.data || [];
     const weights = weightRes.data || [];
     const allRuns = runsRes.data || [];

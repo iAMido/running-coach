@@ -13,6 +13,12 @@ export interface CaltrackMeal {
   notes: string | null;
   status: string;
   item_names?: string[];
+  /**
+   * Lowest ai_confidence across this meal's items, or null when no item
+   * has a recorded confidence. Used by the dashboard to flag meals whose
+   * weights the user should probably verify.
+   */
+  min_confidence?: number | null;
 }
 
 export interface CoachReport {

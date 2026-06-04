@@ -25,6 +25,16 @@ export async function GET(request: NextRequest) {
   const offset = parseInt(searchParams.get('offset') || '0');
 
   try {
+    // #1 — user_id filter. Currently single-tenant, but every read should
+    // be scoped to the calling user's profile id to prevent cross-leakage
+    // the moment a second profile exists.
+    const { data: profileRow } = await caltrackDb
+      .from('user_profile')
+      .select('id')
+      .limit(1)
+      .single();
+    const userId = profileRow?.id as string | undefined;
+
     if (mealId) {
       const [mealRes, itemsRes] = await Promise.all([
         caltrackDb
@@ -56,6 +66,10 @@ export async function GET(request: NextRequest) {
       .order('eaten_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
     if (from) {
       query = query.gte('eaten_at', `${from}T00:00:00`);
     }
@@ -74,16 +88,25 @@ export async function GET(request: NextRequest) {
     const mealIds = meals.map((m: { id: string }) => m.id);
 
     let itemsByMeal: Record<string, string[]> = {};
+    // #2 — also track minimum item confidence per meal so the UI can flag
+    // low-confidence meals with a ⚠️ badge.
+    const minConfidenceByMeal: Record<string, number> = {};
     if (mealIds.length > 0) {
       const { data: items } = await caltrackDb
         .from('meal_items')
-        .select('meal_id,ingredient_name')
+        .select('meal_id,ingredient_name,ai_confidence')
         .in('meal_id', mealIds);
 
       if (items) {
         for (const item of items) {
           if (!itemsByMeal[item.meal_id]) itemsByMeal[item.meal_id] = [];
           itemsByMeal[item.meal_id].push(item.ingredient_name);
+          const c = typeof item.ai_confidence === 'number' ? item.ai_confidence : null;
+          if (c !== null) {
+            const prev = minConfidenceByMeal[item.meal_id];
+            minConfidenceByMeal[item.meal_id] =
+              prev === undefined ? c : Math.min(prev, c);
+          }
         }
       }
     }
@@ -91,6 +114,8 @@ export async function GET(request: NextRequest) {
     const enrichedMeals = meals.map((m: { id: string }) => ({
       ...m,
       item_names: itemsByMeal[m.id] || [],
+      min_confidence:
+        minConfidenceByMeal[m.id] !== undefined ? minConfidenceByMeal[m.id] : null,
     }));
 
     // Generate signed URLs for meals that have photos (1 hour TTL)

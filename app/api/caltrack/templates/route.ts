@@ -131,6 +131,89 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function PUT(request: NextRequest) {
+  const auth = await getAuthenticatedUser();
+  if (!auth.authenticated) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (!isCaltrackConfigured()) {
+    return NextResponse.json({ error: 'CalTrack not configured' }, { status: 503 });
+  }
+
+  try {
+    const body = (await request.json()) as {
+      id: string;
+      name?: string;
+      ingredients?: TemplateIngredient[];
+    };
+
+    if (!body.id) {
+      return NextResponse.json({ error: 'id required' }, { status: 400 });
+    }
+
+    // Rename only?
+    if (body.name !== undefined && !body.ingredients) {
+      const { error } = await caltrackDb
+        .from('meal_templates')
+        .update({ name: body.name.trim() })
+        .eq('id', body.id);
+      if (error) throw error;
+      return NextResponse.json({ success: true });
+    }
+
+    // Full replace — recompute totals + swap items
+    if (body.ingredients && body.ingredients.length > 0) {
+      const totals = body.ingredients.reduce(
+        (acc, ing) => ({
+          cal: acc.cal + (ing.calories || 0),
+          prot: acc.prot + (ing.protein_g || 0),
+          carb: acc.carb + (ing.carbs_g || 0),
+          fat: acc.fat + (ing.fat_g || 0),
+        }),
+        { cal: 0, prot: 0, carb: 0, fat: 0 }
+      );
+
+      const updates: Record<string, unknown> = {
+        total_calories: totals.cal,
+        total_protein_g: Math.round(totals.prot * 10) / 10,
+        total_carbs_g: Math.round(totals.carb * 10) / 10,
+        total_fat_g: Math.round(totals.fat * 10) / 10,
+      };
+      if (body.name !== undefined) updates.name = body.name.trim();
+
+      const { error: updErr } = await caltrackDb
+        .from('meal_templates')
+        .update(updates)
+        .eq('id', body.id);
+      if (updErr) throw updErr;
+
+      // Replace items
+      await caltrackDb.from('meal_template_items').delete().eq('template_id', body.id);
+      for (const ing of body.ingredients) {
+        const { error: itemError } = await caltrackDb.from('meal_template_items').insert({
+          template_id: body.id,
+          ingredient_name: ing.name_en,
+          fdc_id: ing.fdc_id || null,
+          weight_grams: Math.round(ing.weight_grams),
+          calories: ing.calories,
+          protein_g: ing.protein_g,
+          carbs_g: ing.carbs_g,
+          fat_g: ing.fat_g,
+          fiber_g: ing.fiber_g || 0,
+        });
+        if (itemError) throw itemError;
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    return NextResponse.json({ error: 'name or ingredients required' }, { status: 400 });
+  } catch (error) {
+    console.error('Templates PUT error:', error);
+    return NextResponse.json({ error: 'Failed to update template' }, { status: 500 });
+  }
+}
+
+
 export async function DELETE(request: NextRequest) {
   const auth = await getAuthenticatedUser();
   if (!auth.authenticated) {

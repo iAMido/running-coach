@@ -1434,6 +1434,18 @@ export default function MealsPage() {
                             >
                               {meal.meal_type}
                             </span>
+                            {/* #2 — low-confidence badge: AI was uncertain about
+                                at least one item's weight. Click into the meal
+                                to review and correct. */}
+                            {typeof meal.min_confidence === 'number' && meal.min_confidence < 0.5 && (
+                              <span
+                                className="ct-mono text-[10px] font-medium uppercase inline-flex items-center gap-1 px-2 py-1 rounded-[5px] mb-1.5 ml-1.5"
+                                style={{ background: 'rgba(251,191,36,0.15)', color: '#b45309', letterSpacing: '0.08em' }}
+                                title={`Low AI confidence (${Math.round(meal.min_confidence * 100)}%) — verify weights`}
+                              >
+                                ⚠ verify
+                              </span>
+                            )}
                             {(meal.notes || (meal.item_names && meal.item_names.length > 0)) && (
                               <div className="text-[14.5px] font-medium truncate max-w-[400px]" style={{ color: 'var(--ct-ink)', letterSpacing: '-0.005em' }}>
                                 {meal.notes || (
