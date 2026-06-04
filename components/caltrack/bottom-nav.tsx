@@ -9,6 +9,7 @@ import {
   Scale,
   Apple,
   BookOpen,
+  Bookmark,
   LogOut,
 } from 'lucide-react';
 import { signOut } from 'next-auth/react';
@@ -16,6 +17,7 @@ import { signOut } from 'next-auth/react';
 const navItems = [
   { href: '/caltrack', label: 'Overview', icon: LayoutDashboard },
   { href: '/caltrack/meals', label: 'Meals', icon: UtensilsCrossed },
+  { href: '/caltrack/templates', label: 'Templates', icon: Bookmark },
   { href: '/caltrack/weight', label: 'Weight', icon: Scale },
   { href: '/caltrack/foods', label: 'Foods', icon: Apple },
   { href: '/caltrack/coach', label: 'Dietitian', icon: BookOpen },
