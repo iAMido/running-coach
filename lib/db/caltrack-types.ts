@@ -8,7 +8,7 @@ export interface CaltrackMeal {
   total_carbs_g: number;
   total_fat_g: number;
   total_fiber_g: number;
-  photo_storage_path: string | null;
+  photo_path: string | null;
   photo_url?: string | null;
   notes: string | null;
   status: string;

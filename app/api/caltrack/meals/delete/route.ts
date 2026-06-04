@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { NextRequest } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { caltrackDb, isCaltrackConfigured } from '@/lib/db/supabase-caltrack';
+import { israelDateFromIso } from '@/lib/db/caltrack-date';
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser();
@@ -58,8 +59,9 @@ export async function POST(request: NextRequest) {
 
     if (deleteError) throw deleteError;
 
-    // Refresh daily summary
-    const mealDate = meal.eaten_at.split('T')[0];
+    // Refresh daily summary — Israel local date so we update the day the
+    // deleted meal actually belonged to.
+    const summaryDate = israelDateFromIso(meal.eaten_at);
     const profileRes = await caltrackDb
       .from('user_profile')
       .select('id,target_daily_calories')
@@ -70,14 +72,15 @@ export async function POST(request: NextRequest) {
       const { data: dayMeals } = await caltrackDb
         .from('meals')
         .select(
-          'total_calories,total_protein_g,total_carbs_g,total_fat_g,total_fiber_g'
+          'total_calories,total_protein_g,total_carbs_g,total_fat_g,total_fiber_g,eaten_at'
         )
         .eq('user_id', profileRes.data.id)
-        .eq('status', 'confirmed')
-        .gte('eaten_at', `${mealDate}T00:00:00`)
-        .lte('eaten_at', `${mealDate}T23:59:59`);
+        .eq('status', 'confirmed');
 
-      const dayTotals = (dayMeals || []).reduce(
+      const sameDay = (dayMeals || []).filter(
+        (m: { eaten_at: string }) => israelDateFromIso(m.eaten_at) === summaryDate
+      );
+      const dayTotals = sameDay.reduce(
         (acc, m) => ({
           cal: acc.cal + (m.total_calories || 0),
           pro: acc.pro + (m.total_protein_g || 0),
@@ -91,16 +94,16 @@ export async function POST(request: NextRequest) {
       await caltrackDb.from('daily_summary').upsert(
         {
           user_id: profileRes.data.id,
-          date: mealDate,
+          date: summaryDate,
           total_calories_in: dayTotals.cal,
           total_protein_g: Math.round(dayTotals.pro * 10) / 10,
           total_carbs_g: Math.round(dayTotals.carb * 10) / 10,
           total_fat_g: Math.round(dayTotals.fat * 10) / 10,
           total_fiber_g: Math.round(dayTotals.fib * 10) / 10,
           target_calories: profileRes.data.target_daily_calories || 2000,
-          net_calories: dayTotals.cal,
+          meal_count: sameDay.length,
         },
-        { onConflict: 'date' }
+        { onConflict: 'user_id,date' }
       );
     }
 

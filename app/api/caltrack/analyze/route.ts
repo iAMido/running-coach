@@ -3,7 +3,7 @@ export const runtime = 'nodejs';
 import { NextResponse } from 'next/server';
 import { NextRequest } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
-import { caltrackDb, isCaltrackConfigured } from '@/lib/db/supabase-caltrack';
+import { isCaltrackConfigured } from '@/lib/db/supabase-caltrack';
 
 const ANALYZE_PROMPT = `You are a clinical dietitian AI for a calorie tracking app.
 The user describes what they ate in Hebrew or English. Your job:
@@ -117,47 +117,41 @@ export async function POST(request: NextRequest) {
     const parsed = JSON.parse(content);
     const ingredients: AnalyzedIngredient[] = parsed.ingredients || [];
 
-    // Try to match each ingredient against USDA for better accuracy
-    const enriched = await Promise.all(
-      ingredients.map(async (ing: AnalyzedIngredient) => {
-        const { data: usdaMatch } = await caltrackDb
-          .from('usda_foundation')
-          .select('fdc_id,description,calories_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g,fiber_per_100g')
-          .ilike('description', `%${ing.name_en}%`)
-          .limit(1);
-
-        const usda = usdaMatch?.[0];
-        const factor = ing.estimated_grams / 100;
-
-        const cal100 = usda?.calories_per_100g || ing.calories_per_100g;
-        const pro100 = usda?.protein_per_100g || ing.protein_per_100g;
-        const carb100 = usda?.carbs_per_100g || ing.carbs_per_100g;
-        const fat100 = usda?.fat_per_100g || ing.fat_per_100g;
-        const fib100 = usda?.fiber_per_100g || ing.fiber_per_100g;
-
-        return {
-          name_en: usda?.description || ing.name_en,
-          name_he: ing.name_he,
-          fdc_id: usda?.fdc_id || null,
-          source: usda ? 'usda' : 'ai',
-          estimated_grams: ing.estimated_grams,
-          per_100g: {
-            calories: cal100,
-            protein: pro100,
-            carbs: carb100,
-            fat: fat100,
-            fiber: fib100,
-          },
-          calculated: {
-            calories: Math.round(cal100 * factor),
-            protein: Math.round(pro100 * factor * 10) / 10,
-            carbs: Math.round(carb100 * factor * 10) / 10,
-            fat: Math.round(fat100 * factor * 10) / 10,
-            fiber: Math.round(fib100 * factor * 10) / 10,
-          },
-        };
-      })
-    );
+    // IMPORTANT: We do NOT override AI per-100g with USDA matches here.
+    // A naive `ilike('description', '%${name}%').limit(1)` returns an
+    // arbitrary first match — e.g. "egg" → "Egg, whole, dried" at 575
+    // kcal/100g — and that wrecks accuracy for the user. The bot's /add
+    // command stopped doing this exact thing for the same reason
+    // (see CalTrack CLAUDE.md). The AI is told to never return 0 and
+    // is the source of truth for composite/Israeli foods.
+    //
+    // If a strong USDA match (first-segment exact, no modifier penalty)
+    // is desirable in the future, do it client-side by calling the bot's
+    // scored matcher — but never blindly override AI nutrition values.
+    const enriched = ingredients.map((ing: AnalyzedIngredient) => {
+      const factor = ing.estimated_grams / 100;
+      return {
+        name_en: ing.name_en,
+        name_he: ing.name_he,
+        fdc_id: null as number | null,
+        source: 'ai',
+        estimated_grams: ing.estimated_grams,
+        per_100g: {
+          calories: ing.calories_per_100g,
+          protein: ing.protein_per_100g,
+          carbs: ing.carbs_per_100g,
+          fat: ing.fat_per_100g,
+          fiber: ing.fiber_per_100g,
+        },
+        calculated: {
+          calories: Math.round(ing.calories_per_100g * factor),
+          protein: Math.round(ing.protein_per_100g * factor * 10) / 10,
+          carbs: Math.round(ing.carbs_per_100g * factor * 10) / 10,
+          fat: Math.round(ing.fat_per_100g * factor * 10) / 10,
+          fiber: Math.round(ing.fiber_per_100g * factor * 10) / 10,
+        },
+      };
+    });
 
     const totals = enriched.reduce(
       (acc, ing) => ({
