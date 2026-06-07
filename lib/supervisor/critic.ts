@@ -15,7 +15,9 @@ import { supabase } from '@/lib/db/supabase';
 import type { QueryType } from '@/lib/rag/types';
 import type { CriticAudit, CriticScores, PreflightWarning } from './types';
 
-const CRITIC_MODEL = 'anthropic/claude-haiku-4-5';
+import { MODEL_FOR } from '@/lib/ai/model-registry';
+
+const CRITIC_MODEL = MODEL_FOR.critic;
 
 export interface CriticInput {
   userId: string;

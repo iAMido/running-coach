@@ -17,6 +17,7 @@ import {
   runCritic,
 } from '@/lib/supervisor';
 import { TOKEN_BUDGETS_PER_QUERY } from '@/lib/rag/types';
+import { MODEL_FOR } from '@/lib/ai/model-registry';
 
 // Detect if user wants to modify their training plan
 function detectPlanModificationIntent(query: string): boolean {
@@ -214,9 +215,15 @@ export async function POST(request: NextRequest) {
     // Cache the system block: most consecutive turns in a single chat reuse
     // the same RAG-built system prompt, so Anthropic prompt caching cuts
     // the cost of follow-up turns substantially.
+    // Pick the model from the registry: plan modifications need structured
+    // JSON output + accuracy, so they go through Sonnet; everything else
+    // through the chat_default model. (A future Haiku-router can split
+    // simple "should I run today" queries off to chat_quick.)
+    const chatModel = isPlanModification ? MODEL_FOR.plan_modification : MODEL_FOR.chat_default;
     const callStart = Date.now();
     const response = await callOpenRouter(apiMessages, {
       apiKey,
+      model: chatModel,
       maxTokens: isPlanModification ? 4000 : 1500,
       cacheSystemPrompt: true,
     });
@@ -311,7 +318,7 @@ export async function POST(request: NextRequest) {
       user_id: userId,
       route: '/api/coach/chat/ask',
       query_type: queryType,
-      model: 'anthropic/claude-sonnet-4',
+      model: chatModel,
       context_tokens: stats.totalTokens,
       context_budget: TOKEN_BUDGETS_PER_QUERY[queryType],
       ceiling_hit: stats.totalTokens >= TOKEN_BUDGETS_PER_QUERY[queryType] * 0.95,

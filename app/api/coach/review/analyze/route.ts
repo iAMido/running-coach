@@ -17,6 +17,7 @@ import {
   runCritic,
 } from '@/lib/supervisor';
 import { TOKEN_BUDGETS_PER_QUERY } from '@/lib/rag/types';
+import { MODEL_FOR } from '@/lib/ai/model-registry';
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser();
@@ -123,7 +124,7 @@ export async function POST(request: NextRequest) {
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      { apiKey, maxTokens: 2000, cacheSystemPrompt: true }
+      { apiKey, model: MODEL_FOR.weekly_review, maxTokens: 2000, cacheSystemPrompt: true }
     );
     const callLatencyMs = Date.now() - callStart;
 
@@ -177,7 +178,7 @@ export async function POST(request: NextRequest) {
       user_id: userId,
       route: '/api/coach/review/analyze',
       query_type: 'plan_review',
-      model: 'anthropic/claude-sonnet-4',
+      model: MODEL_FOR.weekly_review,
       context_tokens: context.totalTokens,
       context_budget: TOKEN_BUDGETS_PER_QUERY.plan_review,
       ceiling_hit: context.totalTokens >= TOKEN_BUDGETS_PER_QUERY.plan_review * 0.95,

@@ -34,6 +34,7 @@ import {
   runCritic,
 } from '@/lib/supervisor';
 import { TOKEN_BUDGETS_PER_QUERY } from '@/lib/rag/types';
+import { MODEL_FOR } from '@/lib/ai/model-registry';
 
 void callOpenRouter; // streaming-only, but referenced via openrouter types
 
@@ -109,7 +110,7 @@ export async function POST(request: NextRequest) {
             { role: 'system', content: systemPrompt },
             { role: 'user', content: `Generate my ${durationWeeks}-week ${planType} training plan. IMPORTANT: Return ONLY the raw JSON object with no markdown code blocks, no explanation, no extra text — just the JSON.` },
           ],
-          { apiKey, maxTokens: 16000 },
+          { apiKey, model: MODEL_FOR.plan_generation, maxTokens: 16000 },
         );
 
         for await (const chunk of generator) {
@@ -175,7 +176,7 @@ export async function POST(request: NextRequest) {
         user_id: userId,
         route: '/api/coach/plans/generate/stream',
         query_type: 'plan_generation',
-        model: 'anthropic/claude-sonnet-4',
+        model: MODEL_FOR.plan_generation,
         context_tokens: context.totalTokens,
         context_budget: TOKEN_BUDGETS_PER_QUERY.plan_generation,
         ceiling_hit: context.totalTokens >= TOKEN_BUDGETS_PER_QUERY.plan_generation * 0.95,
