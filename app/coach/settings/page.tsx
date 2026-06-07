@@ -19,6 +19,8 @@ export default function SettingsPage() {
   const [maxHr, setMaxHr] = useState('');
   const [ltHr, setLtHr] = useState('');
   const [goal, setGoal] = useState('');
+  const [longTermGoal, setLongTermGoal] = useState('');
+  const [activeGoalFocus, setActiveGoalFocus] = useState('');
   const [trainingDays, setTrainingDays] = useState('');
 
   // HR Zones state
@@ -50,6 +52,8 @@ export default function SettingsPage() {
         setMaxHr(p.max_hr?.toString() || '');
         setLtHr(p.lactate_threshold_hr?.toString() || '');
         setGoal(p.current_goal || '');
+        setLongTermGoal(p.long_term_goal || '');
+        setActiveGoalFocus(p.active_goal_focus || '');
         setTrainingDays(p.training_days || '');
         setZone1(p.hr_zone_z1 || '');
         setZone2(p.hr_zone_z2 || '');
@@ -80,6 +84,8 @@ export default function SettingsPage() {
           max_hr: maxHr ? parseInt(maxHr) : null,
           lactate_threshold_hr: ltHr ? parseInt(ltHr) : null,
           current_goal: goal,
+          long_term_goal: longTermGoal,
+          active_goal_focus: activeGoalFocus,
           training_days: trainingDays,
           hr_zone_z1: zone1,
           hr_zone_z2: zone2,
@@ -116,6 +122,8 @@ export default function SettingsPage() {
           max_hr: maxHr ? parseInt(maxHr) : null,
           lactate_threshold_hr: ltHr ? parseInt(ltHr) : null,
           current_goal: goal,
+          long_term_goal: longTermGoal,
+          active_goal_focus: activeGoalFocus,
           training_days: trainingDays,
           hr_zone_z1: zone1,
           hr_zone_z2: zone2,
@@ -213,8 +221,37 @@ export default function SettingsPage() {
                 </div>
               </div>
 
+              {/* Long-term aspiration vs active focus. Pre-fix there was one
+                  goal field and the coach kept reaching for it even when the
+                  current plan was for a different horizon. Now you can hold
+                  both. */}
               <div className="space-y-2">
-                <label className="text-sm font-medium">Current Goal</label>
+                <label className="text-sm font-medium">Long-term goal</label>
+                <Input
+                  value={longTermGoal}
+                  onChange={(e) => setLongTermGoal(e.target.value)}
+                  placeholder="e.g. 1:50 half marathon in 12 months"
+                />
+                <p className="text-xs" style={{ color: 'var(--rc-ink-4)' }}>
+                  The big-picture aspiration. Stays stable for months/years.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Active focus (current plan)</label>
+                <Input
+                  value={activeGoalFocus}
+                  onChange={(e) => setActiveGoalFocus(e.target.value)}
+                  placeholder="e.g. Return from break — base build → 10K"
+                />
+                <p className="text-xs" style={{ color: 'var(--rc-ink-4)' }}>
+                  What your current plan is for. Changes when you start a new plan.
+                  The coach anchors day-to-day advice here.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-muted-foreground">
+                  Legacy single goal (kept for backwards compat)
+                </label>
                 <Input value={goal} onChange={(e) => setGoal(e.target.value)} />
               </div>
 

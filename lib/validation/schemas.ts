@@ -118,6 +118,8 @@ export const profileSchema = z.object({
   max_hr: positiveInt.max(250).optional(),
   lactate_threshold_hr: positiveInt.max(250).optional(),
   current_goal: safeString.max(500).optional(),
+  long_term_goal: safeString.max(500).optional(),
+  active_goal_focus: safeString.max(500).optional(),
   training_days: safeString.max(100).optional(),
   injury_history: safeText.max(2000).optional(),
   hr_zone_z1: safeString.max(20).optional(),

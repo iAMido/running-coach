@@ -150,7 +150,19 @@ function formatProfile(profile: AthleteProfile): string {
   if (profile.name) lines.push(`Name: ${profile.name}`);
   if (profile.age) lines.push(`Age: ${profile.age}`);
   if (profile.weight_kg) lines.push(`Weight: ${profile.weight_kg} kg`);
-  if (profile.current_goal) lines.push(`Goal: ${profile.current_goal}`);
+  // Render long-term aspiration + active focus separately so the coach
+  // can anchor day-to-day advice on the active focus and treat the
+  // long-term goal as background context (not the target this week).
+  if (profile.long_term_goal) {
+    lines.push(`Long-term aspiration: ${profile.long_term_goal}`);
+  }
+  if (profile.active_goal_focus) {
+    lines.push(`Active focus (current plan): ${profile.active_goal_focus}`);
+  }
+  // Backwards-compat: still emit current_goal when neither split field is set
+  if (!profile.long_term_goal && !profile.active_goal_focus && profile.current_goal) {
+    lines.push(`Goal: ${profile.current_goal}`);
+  }
 
   // HR zones
   if (profile.max_hr) {

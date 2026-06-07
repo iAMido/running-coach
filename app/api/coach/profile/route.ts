@@ -55,6 +55,8 @@ export async function PUT(request: NextRequest) {
         max_hr: validation.data.max_hr,
         lactate_threshold_hr: validation.data.lactate_threshold_hr,
         current_goal: validation.data.current_goal,
+        long_term_goal: validation.data.long_term_goal,
+        active_goal_focus: validation.data.active_goal_focus,
         training_days: validation.data.training_days,
         injury_history: validation.data.injury_history,
         hr_zone_z1: validation.data.hr_zone_z1,
