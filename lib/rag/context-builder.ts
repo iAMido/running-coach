@@ -13,6 +13,7 @@ import {
 } from './types';
 import { getActivePlan } from '@/lib/db/plans';
 import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
+import { classifyQuery } from '@/lib/ai/query-classifier';
 
 /**
  * Build enhanced context for AI coach
@@ -42,10 +43,25 @@ export async function buildContext(
     : (plan?.current_week_num || 1);
   const currentPhase = plan?.plan_json?.weeks?.[liveWeek - 1]?.phase;
 
-  // Infer workout type from query
-  const workoutType = inferWorkoutType(query);
-  const category = inferCategory(query);
-  const userResourceTags = inferUserResourceTags(query, queryType, currentPhase, workoutType);
+  // Single Haiku classifier call replaces three keyword regex passes
+  // (workoutType, category, user-resource tags). The classifier handles
+  // Hebrew, slang, negation, and implicit phrasing that the regex missed.
+  // Falls back to keyword inference on Haiku failure for resilience.
+  const classification = await classifyQuery(query);
+  const workoutType = classification.workoutType;
+  // Category mirrors workoutType for the coach-retriever's substring search;
+  // when Haiku didn't pick a workout we leave it undefined.
+  const category = workoutType;
+  // Combine LLM-extracted tags with deterministic phase/queryType hints
+  // so the retriever still has anchors even when the classifier yields
+  // nothing topical.
+  const userResourceTags = Array.from(new Set([
+    ...classification.tags,
+    ...(currentPhase ? [currentPhase.toLowerCase()] : []),
+    ...(workoutType ? [workoutType.toLowerCase()] : []),
+    ...(queryType === 'plan_generation' ? ['plan'] : []),
+    ...(queryType === 'plan_review' ? ['review'] : []),
+  ])).filter(Boolean);
 
   // Build all three contexts in parallel
   const [userContext, coachContext, bookContext] = await Promise.all([
@@ -156,96 +172,10 @@ function getFatigueLevel(score: number): string {
   return 'Very Fatigued - Prioritize rest';
 }
 
-/**
- * Infer workout type from query
- */
-function inferWorkoutType(query: string): string | undefined {
-  const queryLower = query.toLowerCase();
-
-  const workoutPatterns: Record<string, string> = {
-    'easy': 'Easy',
-    'recovery': 'Easy',
-    'tempo': 'Tempo',
-    'threshold': 'Tempo',
-    'interval': 'Intervals',
-    'speed': 'Intervals',
-    'track': 'Intervals',
-    'repeat': 'Intervals',
-    'long run': 'Long Run',
-    'long': 'Long Run',
-    'endurance': 'Long Run',
-    'fartlek': 'Fartlek',
-    'race': 'Race',
-    'warm': 'Warmup',
-    'cool': 'Cooldown',
-  };
-
-  for (const [pattern, type] of Object.entries(workoutPatterns)) {
-    if (queryLower.includes(pattern)) {
-      return type;
-    }
-  }
-
-  return undefined;
-}
-
-/**
- * Infer category from query
- */
-function inferCategory(query: string): string | undefined {
-  const queryLower = query.toLowerCase();
-
-  if (queryLower.includes('recovery') || queryLower.includes('rest') || queryLower.includes('easy')) {
-    return 'Easy';
-  }
-  if (queryLower.includes('tempo') || queryLower.includes('threshold')) {
-    return 'Tempo';
-  }
-  if (queryLower.includes('interval') || queryLower.includes('speed') || queryLower.includes('track')) {
-    return 'Intervals';
-  }
-  if (queryLower.includes('long') || queryLower.includes('endurance')) {
-    return 'Long Run';
-  }
-
-  return undefined;
-}
-
-/**
- * Build a tag-filter hint for user_resources retrieval. We try a small set
- * of meaningful tags derived from the query + the live training context;
- * the retriever applies tag overlap as a soft filter (with a no-filter
- * fallback when nothing matches) so this is best-effort routing.
- */
-function inferUserResourceTags(
-  query: string,
-  queryType: QueryType,
-  currentPhase: string | undefined,
-  workoutType: string | undefined,
-): string[] {
-  const q = query.toLowerCase();
-  const tags = new Set<string>();
-
-  if (currentPhase) tags.add(currentPhase.toLowerCase());
-  if (workoutType) tags.add(workoutType.toLowerCase());
-
-  // Query-type → tag hints
-  if (queryType === 'plan_generation') tags.add('plan');
-  if (queryType === 'plan_review') tags.add('review');
-
-  // Methodology keywords
-  if (/\bnorwegian|double[\s-]?threshold|lactate/.test(q)) tags.add('norwegian');
-  if (/\btriphasic/.test(q)) tags.add('triphasic');
-  if (/\b80\/20|polarised|polarized/.test(q)) tags.add('80/20');
-
-  // Race-distance keywords
-  if (/\bmarathon\b/.test(q)) tags.add('marathon');
-  if (/\bhalf|half[\s-]?marathon|hm\b/.test(q)) tags.add('half-marathon');
-  if (/\b10k\b/.test(q)) tags.add('10k');
-  if (/\b5k\b/.test(q)) tags.add('5k');
-
-  return Array.from(tags).filter(Boolean);
-}
+// inferWorkoutType / inferCategory / inferUserResourceTags removed —
+// the Haiku classifier in lib/ai/query-classifier.ts now does all three
+// in a single LLM call (and falls back to a keyword path on Haiku
+// failure, so the legacy logic is still reachable in degradation mode).
 
 /**
  * Detect query type from user message
