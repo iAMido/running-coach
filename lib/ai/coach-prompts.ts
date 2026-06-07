@@ -21,6 +21,29 @@ interface LegacyCoachContext {
  * Build enhanced coach system prompt with 3-layer hierarchy
  * This is the main prompt builder for the RAG system
  */
+/**
+ * Goal-anchoring instruction prepended to the system prompt. Tells the model
+ * to anchor day-to-day advice on the active plan focus, treating the long-term
+ * aspiration as background context — not the target this week.
+ *
+ * Pre-fix behaviour: the prompt rendered a single "current_goal" pulled from
+ * athlete_profile, which was the long-term goal (1:50 HM). The chat coach
+ * kept reaching back to that even when the user had an active 8-week 10K
+ * base-build plan and was asking about today's run.
+ */
+const GOAL_ANCHORING_INSTRUCTION = `
+## GOAL ANCHORING
+The athlete's profile may show BOTH a long-term aspiration and an active
+focus from the current plan. When they differ:
+- Anchor your day-to-day, week-to-week advice on the **active focus** —
+  that's what the plan is for, that's what the athlete is doing right now.
+- Treat the long-term aspiration as background context. Mention it only
+  when (a) explaining how current work serves the long-term goal, or
+  (b) the athlete explicitly asks about the long-term goal.
+- Never override the active focus with the long-term goal just because
+  the latter is more ambitious — that's how athletes get injured.
+`;
+
 export function buildEnhancedCoachSystemPrompt(context: EnhancedContext): string {
   const queryTypeDescriptions: Record<QueryType, string> = {
     daily_advice: 'daily training advice',
@@ -48,7 +71,7 @@ ${context.bookContext.text || 'No methodology data available.'}
 
 ## YOUR TASK
 You are providing: ${queryTypeDescriptions[context.queryType]}
-
+${GOAL_ANCHORING_INSTRUCTION}
 ## COACHING INSTRUCTIONS
 
 ### When Making Recommendations:

@@ -50,6 +50,10 @@ export interface AthleteProfile {
   max_hr?: number;
   lactate_threshold_hr?: number;
   current_goal?: string;
+  /** Long-horizon aspiration ("1:50 half marathon"). Stays stable for months/years. */
+  long_term_goal?: string;
+  /** What the *active plan* is for ("Return-from-break 10K base"). Changes per plan. */
+  active_goal_focus?: string;
   training_days?: string;
   injury_history?: string;
   hr_zone_z1?: string;
