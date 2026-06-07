@@ -25,6 +25,14 @@ export default function TrainingPlanPage() {
   const [duration, setDuration] = useState('8');
   const [runsPerWeek, setRunsPerWeek] = useState('4');
   const [notes, setNotes] = useState('');
+  // Rich plan-gen intake (server reads these into the PLAN GENERATION INTAKE
+  // block; gives Opus the runway it needs beyond the default 14-day RAG.)
+  const [raceDate, setRaceDate] = useState('');
+  const [targetTime, setTargetTime] = useState('');
+  const [recentRaceResult, setRecentRaceResult] = useState('');
+  const [currentWeeklyKm, setCurrentWeeklyKm] = useState('');
+  const [addressesWhat, setAddressesWhat] = useState('');
+  const [limitations, setLimitations] = useState('');
   const [generating, setGenerating] = useState(false);
   const [activePlan, setActivePlan] = useState<TrainingPlan | null>(null);
   const [loading, setLoading] = useState(true);
@@ -84,6 +92,14 @@ export default function TrainingPlanPage() {
           durationWeeks: parseInt(duration),
           runsPerWeek: parseInt(runsPerWeek),
           notes,
+          // Rich intake — server reads into PLAN GENERATION INTAKE block.
+          // Each field is optional; omit empty strings so Zod accepts them.
+          ...(raceDate ? { raceDate } : {}),
+          ...(targetTime ? { targetTime } : {}),
+          ...(recentRaceResult ? { recentRaceResult } : {}),
+          ...(currentWeeklyKm ? { currentWeeklyKm: parseFloat(currentWeeklyKm) } : {}),
+          ...(addressesWhat ? { addressesWhat } : {}),
+          ...(limitations ? { limitations } : {}),
         }),
       });
 
@@ -496,13 +512,104 @@ export default function TrainingPlanPage() {
               </select>
             </div>
 
+            {/* Rich intake — feeds the server's PLAN GENERATION INTAKE block.
+                Everything here is optional; server auto-computes 90-day stats,
+                PRs, and prior plan continuity regardless. These fields are the
+                athlete-supplied half: race date, target time, recent race,
+                what to address, limitations. The server-computed half is the
+                last-90-days run history. Both go into the prompt. */}
+            <div className="rc-card p-5 space-y-4" style={{ background: 'oklch(0.97 0.02 240)', border: '1px solid var(--rc-line)' }}>
+              <div className="flex items-center gap-2 mb-1">
+                <Sparkles className="w-4 h-4" style={{ color: 'var(--rc-blue-deep)' }} />
+                <span className="rc-mono text-[11px] font-medium uppercase" style={{ color: 'var(--rc-ink-2)', letterSpacing: '0.08em' }}>
+                  Plan Intake — give the model context
+                </span>
+              </div>
+              <p className="text-xs" style={{ color: 'var(--rc-ink-3)' }}>
+                Everything below is optional. The server already pulls your last 90 days of runs, PRs across distances, and your prior plan&apos;s outcome — but these fields make the plan dramatically better when filled.
+              </p>
+
+              <div className="grid md:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="rc-mono text-[10.5px] font-medium uppercase" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.08em' }}>Target race date</label>
+                  <input
+                    type="date"
+                    value={raceDate}
+                    onChange={e => setRaceDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2"
+                    style={{ background: 'var(--rc-surface)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink)' }}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="rc-mono text-[10.5px] font-medium uppercase" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.08em' }}>Target time</label>
+                  <input
+                    type="text"
+                    value={targetTime}
+                    onChange={e => setTargetTime(e.target.value)}
+                    placeholder="e.g. 52:00 or 1:50:00"
+                    className="w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2"
+                    style={{ background: 'var(--rc-surface)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink)' }}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="rc-mono text-[10.5px] font-medium uppercase" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.08em' }}>Recent race or time trial</label>
+                <input
+                  type="text"
+                  value={recentRaceResult}
+                  onChange={e => setRecentRaceResult(e.target.value)}
+                  placeholder="e.g. ran 10K in 52:00 three weeks ago"
+                  className="w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2"
+                  style={{ background: 'var(--rc-surface)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink)' }}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="rc-mono text-[10.5px] font-medium uppercase" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.08em' }}>Current weekly km <span style={{ textTransform: 'none', letterSpacing: 0, color: 'var(--rc-ink-4)' }}>(auto-computed from last 90 days if blank)</span></label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={currentWeeklyKm}
+                  onChange={e => setCurrentWeeklyKm(e.target.value)}
+                  placeholder="e.g. 35"
+                  className="w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2"
+                  style={{ background: 'var(--rc-surface)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink)' }}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="rc-mono text-[10.5px] font-medium uppercase" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.08em' }}>What should this plan address?</label>
+                <textarea
+                  value={addressesWhat}
+                  onChange={e => setAddressesWhat(e.target.value)}
+                  placeholder="e.g. carry the 80/20 discipline forward from the last block, lift threshold pace by 10s/km, build long-run capacity to 18km"
+                  rows={2}
+                  className="w-full px-3 py-2 rounded-lg text-sm resize-none focus:outline-none focus:ring-2"
+                  style={{ background: 'var(--rc-surface)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink)' }}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="rc-mono text-[10.5px] font-medium uppercase" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.08em' }}>Limitations to respect</label>
+                <textarea
+                  value={limitations}
+                  onChange={e => setLimitations(e.target.value)}
+                  placeholder="e.g. evenings only Mon/Wed/Fri, plantar fasciitis history — no double sessions, no quality on Friday before long run"
+                  rows={2}
+                  className="w-full px-3 py-2 rounded-lg text-sm resize-none focus:outline-none focus:ring-2"
+                  style={{ background: 'var(--rc-surface)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink)' }}
+                />
+              </div>
+            </div>
+
             {/* Notes */}
             <div className="space-y-2">
               <label className="rc-mono text-[11px] font-medium uppercase" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.08em' }}>Additional Notes</label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Any specific goals, constraints, or preferences..."
+                placeholder="Anything else the coach should know..."
                 rows={3}
                 className="w-full px-4 py-3 rounded-xl text-sm resize-none focus:outline-none focus:ring-2"
                 style={{ background: 'var(--rc-surface-2)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink)' }}

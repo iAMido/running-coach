@@ -35,6 +35,7 @@ import {
 } from '@/lib/supervisor';
 import { TOKEN_BUDGETS_PER_QUERY } from '@/lib/rag/types';
 import { MODEL_FOR } from '@/lib/ai/model-registry';
+import { buildPlanGenerationContext } from '@/lib/rag/plan-generation-context';
 
 void callOpenRouter; // streaming-only, but referenced via openrouter types
 
@@ -65,11 +66,19 @@ export async function POST(request: NextRequest) {
     return new Response(JSON.stringify({ error: validation.error }), { status: 400 });
   }
 
-  const { planType, durationWeeks, runsPerWeek, targetRace, notes } = validation.data;
+  const {
+    planType, durationWeeks, runsPerWeek, targetRace, notes,
+    raceDate, targetTime, recentRaceResult, currentWeeklyKm, addressesWhat, limitations,
+  } = validation.data;
   const profile = await getAthleteProfile(userId);
 
   const contextQuery = `Create a ${durationWeeks}-week ${planType} training plan for ${targetRace || 'general fitness'}`;
-  const context = await buildContext(userId, contextQuery, 'plan_generation');
+  const [context, planGenCtx] = await Promise.all([
+    buildContext(userId, contextQuery, 'plan_generation'),
+    buildPlanGenerationContext(userId, {
+      raceDate, targetTime, recentRaceResult, currentWeeklyKm, addressesWhat, limitations,
+    }),
+  ]);
 
   const preflight = supervisorValidate({ context, queryType: 'plan_generation' });
 
@@ -80,6 +89,7 @@ export async function POST(request: NextRequest) {
     targetRace,
     notes,
     trainingDays: profile?.training_days,
+    intakeBlock: planGenCtx.intakeBlock,
   });
   if (preflight.augmentedSystemSuffix) {
     systemPrompt = systemPrompt + preflight.augmentedSystemSuffix;

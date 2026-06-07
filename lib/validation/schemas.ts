@@ -43,13 +43,23 @@ export const runSchema = z.object({
   data_source: safeString.max(40).optional(),
 });
 
-// Training plan validation
+// Training plan validation. The intake fields are optional but recommended
+// for plan-gen quality — they carry race date, target time, recent race,
+// current volume, what-to-address, and limitations. The server enriches
+// further from runs/plans tables before building the prompt.
 export const planGenerationSchema = z.object({
   planType: z.enum(['Half Marathon', 'Marathon', '10K', '5K', 'Base Building', 'Custom']),
   durationWeeks: z.number().int().min(1).max(52),
   runsPerWeek: z.number().int().min(1).max(14),
   targetRace: safeString.max(200).optional(),
   notes: safeText.max(2000).optional(),
+  // Rich intake (form-driven)
+  raceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  targetTime: safeString.max(20).optional(),
+  recentRaceResult: safeString.max(300).optional(),
+  currentWeeklyKm: z.number().positive().max(500).optional(),
+  addressesWhat: safeText.max(1000).optional(),
+  limitations: safeText.max(1000).optional(),
 });
 
 export const planSaveSchema = z.object({

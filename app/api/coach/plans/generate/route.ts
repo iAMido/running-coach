@@ -16,6 +16,7 @@ import {
 } from '@/lib/supervisor';
 import { TOKEN_BUDGETS_PER_QUERY } from '@/lib/rag/types';
 import { MODEL_FOR } from '@/lib/ai/model-registry';
+import { buildPlanGenerationContext } from '@/lib/rag/plan-generation-context';
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser();
@@ -39,7 +40,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
-    const { planType, durationWeeks, runsPerWeek, targetRace, notes } = validation.data;
+    const {
+      planType, durationWeeks, runsPerWeek, targetRace, notes,
+      raceDate, targetTime, recentRaceResult, currentWeeklyKm, addressesWhat, limitations,
+    } = validation.data;
 
     // Get athlete profile for training days
     const profile = await getAthleteProfile(userId);
@@ -48,14 +52,21 @@ export async function POST(request: NextRequest) {
     const contextQuery = `Create a ${durationWeeks}-week ${planType} training plan for ${targetRace || 'general fitness'}`;
 
     // Build 3-layer context (uses 'plan_generation' which is 35% user / 10% coach / 55% books)
-    const context = await buildContext(userId, contextQuery, 'plan_generation');
+    // + the dedicated plan-gen intake block (90d run stats, PRs, prior plan outcomes,
+    // athlete-supplied form intake). The intake block runs alongside the 3-layer context.
+    const [context, planGenCtx] = await Promise.all([
+      buildContext(userId, contextQuery, 'plan_generation'),
+      buildPlanGenerationContext(userId, {
+        raceDate, targetTime, recentRaceResult, currentWeeklyKm, addressesWhat, limitations,
+      }),
+    ]);
 
     // Pre-flight supervisor gate for plan generation. Flags zero book
     // sources or zero coach workouts surfaced — both mean the resulting
     // plan will lean entirely on the model's priors.
     const preflight = supervisorValidate({ context, queryType: 'plan_generation' });
 
-    // Build enhanced plan generation prompt with 3-layer context
+    // Build enhanced plan generation prompt with 3-layer context + intake block
     let systemPrompt = buildEnhancedPlanGenerationPrompt(context, {
       planType,
       durationWeeks,
@@ -63,6 +74,7 @@ export async function POST(request: NextRequest) {
       targetRace,
       notes,
       trainingDays: profile?.training_days,
+      intakeBlock: planGenCtx.intakeBlock,
     });
     if (preflight.augmentedSystemSuffix) {
       systemPrompt = systemPrompt + preflight.augmentedSystemSuffix;

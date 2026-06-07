@@ -385,9 +385,13 @@ export function buildEnhancedPlanGenerationPrompt(
     targetRace?: string;
     notes?: string;
     trainingDays?: string;
+    /** Rendered intake block from buildPlanGenerationContext (90-day stats,
+     *  PRs, prior plan outcomes, athlete intake form fields). Wider window
+     *  than the default 14-day RAG context — plan-gen needs the runway. */
+    intakeBlock?: string;
   }
 ): string {
-  const { planType, durationWeeks, runsPerWeek, targetRace, notes, trainingDays } = params;
+  const { planType, durationWeeks, runsPerWeek, targetRace, notes, trainingDays, intakeBlock } = params;
 
   // Calculate phase distribution
   const hasRaceGoal = targetRace && targetRace !== '';
@@ -398,10 +402,13 @@ export function buildEnhancedPlanGenerationPrompt(
 
   return `${buildEnhancedCoachSystemPrompt(context)}
 
+${intakeBlock || ''}
+
 ## PLAN GENERATION TASK
 
 ### IMPORTANT: Use the loaded methodology books as your PRIMARY guide for plan structure.
 ### Reference the athlete's previous coach workouts when filling in specific workout details.
+### ALSO use the PLAN GENERATION INTAKE block above as the authoritative source for current capabilities, prior plan continuity, and athlete-specified constraints.
 
 ### PLAN PARAMETERS
 - Type: ${planType}
