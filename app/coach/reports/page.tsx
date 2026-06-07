@@ -1,9 +1,10 @@
 'use client';
 
 import { Skeleton } from '@/components/ui/skeleton';
-import { FileText, Calendar, ArrowLeft, Activity, Brain } from 'lucide-react';
+import { FileText, Calendar, ArrowLeft, Activity, Brain, UtensilsCrossed } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
+import Link from 'next/link';
 
 interface Report {
   id: string;
@@ -135,6 +136,46 @@ export default function CoachReportsPage() {
             <div className="prose prose-invert prose-sm max-w-none [&_h2]:text-lg [&_h2]:font-bold [&_h2]:mt-6 [&_h2]:mb-3 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mt-5 [&_h3]:mb-2 [&_ul]:space-y-1 [&_li]:text-sm [&_p]:text-sm [&_p]:leading-relaxed [&_strong]:text-white" style={{ color: 'rgba(255,255,255,0.85)' }}>
               <ReactMarkdown>{selectedReport.content || ''}</ReactMarkdown>
             </div>
+          </div>
+
+          {/* CalTrack cross-link — nutrition context is one tap away while
+              reading the running review. Lives on both desktop and mobile.
+              On mobile this is the most-used jump-off because the bottom
+              nav's "Switch to CalTrack" lives in the More sheet. */}
+          <div
+            className="mx-2 md:mx-0 mt-3 rounded-xl"
+            style={{
+              background: 'oklch(0.96 0.05 38)',
+              border: '1px solid oklch(0.90 0.07 38)',
+            }}
+          >
+            <Link
+              href="/caltrack"
+              className="flex items-center justify-between gap-3 px-4 py-3.5 active:scale-[0.99] transition-transform"
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="p-2 rounded-lg"
+                  style={{ background: 'oklch(0.92 0.07 38)', color: 'oklch(0.42 0.13 35)' }}
+                >
+                  <UtensilsCrossed className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold" style={{ color: 'oklch(0.30 0.10 35)' }}>
+                    Open CalTrack
+                  </div>
+                  <div className="text-xs" style={{ color: 'oklch(0.42 0.10 35)' }}>
+                    Check nutrition context for this week
+                  </div>
+                </div>
+              </div>
+              <span
+                className="rc-mono text-[11px] font-semibold"
+                style={{ color: 'oklch(0.42 0.13 35)', letterSpacing: '0.06em' }}
+              >
+                OPEN →
+              </span>
+            </Link>
           </div>
         </div>
       </div>

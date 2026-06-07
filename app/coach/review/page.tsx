@@ -2,9 +2,10 @@
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { Slider } from '@/components/ui/slider';
-import { Calendar, Brain, Activity, TrendingUp, Wand2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Calendar, Brain, Activity, TrendingUp, Wand2, CheckCircle2, AlertTriangle, UtensilsCrossed } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
+import Link from 'next/link';
 import type { Run, TrainingPlan } from '@/lib/db/types';
 
 export default function WeeklyReviewPage() {
@@ -391,6 +392,46 @@ export default function WeeklyReviewPage() {
               </div>
             )}
           </div>
+
+          {/* CalTrack jump-off after the weekly analysis. Same shape as the
+              one in /coach/reports so the muscle memory is consistent. */}
+          {aiAnalysis && !loading && (
+            <div
+              className="mx-2 md:mx-0 mt-3 rounded-xl"
+              style={{
+                background: 'oklch(0.96 0.05 38)',
+                border: '1px solid oklch(0.90 0.07 38)',
+              }}
+            >
+              <Link
+                href="/caltrack"
+                className="flex items-center justify-between gap-3 px-4 py-3.5 active:scale-[0.99] transition-transform"
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className="p-2 rounded-lg"
+                    style={{ background: 'oklch(0.92 0.07 38)', color: 'oklch(0.42 0.13 35)' }}
+                  >
+                    <UtensilsCrossed className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold" style={{ color: 'oklch(0.30 0.10 35)' }}>
+                      Open CalTrack
+                    </div>
+                    <div className="text-xs" style={{ color: 'oklch(0.42 0.10 35)' }}>
+                      Cross-reference nutrition for this week
+                    </div>
+                  </div>
+                </div>
+                <span
+                  className="rc-mono text-[11px] font-semibold"
+                  style={{ color: 'oklch(0.42 0.13 35)', letterSpacing: '0.06em' }}
+                >
+                  OPEN →
+                </span>
+              </Link>
+            </div>
+          )}
         </div>
       )}
 
