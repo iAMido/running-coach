@@ -28,46 +28,46 @@ export const MODEL_FOR = {
    * that Sonnet sometimes blurs. ~5× the per-call cost, but per-year
    * cost is still <$10.
    */
-  plan_generation:      'anthropic/claude-opus-4-7',
+  plan_generation:      'anthropic/claude-opus-4.7',
 
   /**
    * Weekly review — substantial reasoning over the week's runs,
    * intervals, lap data, planned-vs-actual. Runs ~52/year. Sonnet is
    * plenty.
    */
-  weekly_review:        'anthropic/claude-sonnet-4-7',
+  weekly_review:        'anthropic/claude-sonnet-4.6',
 
   /**
    * Plan modification in chat — needs structured JSON output and
    * accuracy on individual workout edits.
    */
-  plan_modification:    'anthropic/claude-sonnet-4-7',
+  plan_modification:    'anthropic/claude-sonnet-4.6',
 
   /**
    * Default chat — for non-trivial questions. The complexity router
    * (see lib/ai/router.ts) picks between chat_quick and chat_default
    * via a cheap Haiku classification call.
    */
-  chat_default:         'anthropic/claude-sonnet-4-7',
+  chat_default:         'anthropic/claude-sonnet-4.6',
 
   /**
    * Quick chat — "should I run today?", "is my HR too high?" etc.
    * Fast + cheap; Haiku's accuracy ceiling is fine for these.
    */
-  chat_quick:           'anthropic/claude-haiku-4-5',
+  chat_quick:           'anthropic/claude-haiku-4.5',
 
   /**
    * Post-flight critic. Cheap grading task; was already Haiku on the
    * supervisor side.
    */
-  critic:               'anthropic/claude-haiku-4-5',
+  critic:               'anthropic/claude-haiku-4.5',
 
   /**
    * Query classifier — replaces the keyword regex with a small Haiku
    * call. Classification is a simple labelling task; budget-hygiene
    * principle says don't spend more on routing than on the answer.
    */
-  classification:       'anthropic/claude-haiku-4-5',
+  classification:       'anthropic/claude-haiku-4.5',
 
   /**
    * Grocky (second opinion). Different model family for voice diversity.
