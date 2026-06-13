@@ -135,20 +135,26 @@ export function BottomNav() {
           </SheetTrigger>
           <SheetContent
             side="bottom"
-            className="h-auto max-h-[70vh] rounded-t-3xl px-4 pb-8 pt-0 border-t-0 [&>button]:hidden"
+            // Behaviour fixes: previously max-h-[70vh] + no overflow meant
+            // the menu silently truncated on small iPhones (URL bar +
+            // home-indicator eat 30%+ of viewport). Now 85vh, an inner
+            // scroll container, and explicit safe-area padding so every
+            // item is reachable.
+            className="h-auto max-h-[85vh] rounded-t-3xl px-4 pt-0 border-t-0 [&>button]:hidden flex flex-col"
             style={{
               background: '#F4F1EA',
               borderTop: '1px solid rgba(14,15,12,0.08)',
               boxShadow: '0 -4px 24px rgba(14,15,12,0.10)',
+              paddingBottom: 'max(env(safe-area-inset-bottom), 16px)',
             }}
           >
-            <div className="flex justify-center pt-3 pb-2 cursor-pointer" onClick={() => setMenuOpen(false)}>
+            <div className="flex justify-center pt-3 pb-2 cursor-pointer shrink-0" onClick={() => setMenuOpen(false)}>
               <div className="w-10 h-1 rounded-full" style={{ background: 'var(--rc-ink-5)' }} />
             </div>
-            <SheetHeader className="pb-4 mb-4">
+            <SheetHeader className="pb-4 mb-4 shrink-0">
               <SheetTitle className="text-center text-base font-semibold" style={{ color: '#0E0F0C' }}>Menu</SheetTitle>
             </SheetHeader>
-            <div className="space-y-2 pb-4">
+            <div className="space-y-2 pb-4 overflow-y-auto flex-1" style={{ WebkitOverflowScrolling: 'touch' }}>
               {menuItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.href;
