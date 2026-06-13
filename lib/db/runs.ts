@@ -150,18 +150,20 @@ export async function getTotalDistance(userId: string): Promise<number> {
  * Get this week's runs and stats
  */
 export async function getThisWeekStats(userId: string): Promise<{ runs: Run[]; totalKm: number }> {
-  // Get Monday of current week
+  // Sunday-anchored week — matches the training plan's Sun-Sat structure
+  // and the dashboard's date range. Previously Mon-based, which caused
+  // Sunday runs to be excluded from "this week" calculations.
   const now = new Date();
-  const dayOfWeek = now.getDay();
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-  monday.setHours(0, 0, 0, 0);
+  const dayOfWeek = now.getDay(); // 0 = Sunday
+  const sunday = new Date(now);
+  sunday.setDate(now.getDate() - dayOfWeek);
+  sunday.setHours(0, 0, 0, 0);
 
   const { data, error } = await supabase
     .from('runs')
     .select('*')
     .eq('user_id', userId)
-    .gte('date', monday.toISOString())
+    .gte('date', sunday.toISOString())
     .order('date', { ascending: false });
 
   if (error) throw error;
@@ -195,7 +197,9 @@ export async function getWeeklyVolume(userId: string, weeks = 12): Promise<{ wee
     const date = new Date(run.date);
     const weekStart = new Date(date);
     const dayOfWeek = weekStart.getDay();
-    weekStart.setDate(date.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    // Sunday-anchored — landing on Sunday means subtracting `dayOfWeek`
+    // (0 stays put, 1=Mon goes back 1, etc.)
+    weekStart.setDate(date.getDate() - dayOfWeek);
     const weekKey = weekStart.toISOString().split('T')[0];
 
     weeklyData[weekKey] = (weeklyData[weekKey] || 0) + (run.distance_km || 0);

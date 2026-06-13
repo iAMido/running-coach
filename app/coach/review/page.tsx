@@ -5,6 +5,7 @@ import { Slider } from '@/components/ui/slider';
 import { Calendar, Brain, Activity, TrendingUp, Wand2, CheckCircle2, AlertTriangle, UtensilsCrossed } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
 import type { Run, TrainingPlan } from '@/lib/db/types';
 
@@ -387,8 +388,8 @@ export default function WeeklyReviewPage() {
                 ))}
               </div>
             ) : (
-              <div className="prose prose-invert prose-sm max-w-none [&_h2]:text-lg [&_h2]:font-bold [&_h2]:mt-6 [&_h2]:mb-3 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mt-5 [&_h3]:mb-2 [&_ul]:space-y-1 [&_li]:text-sm [&_p]:text-sm [&_p]:leading-relaxed [&_strong]:text-white" style={{ color: 'rgba(255,255,255,0.85)' }}>
-                <ReactMarkdown>{aiAnalysis || ''}</ReactMarkdown>
+              <div className="prose prose-invert prose-sm max-w-none [&_h2]:text-lg [&_h2]:font-bold [&_h2]:mt-6 [&_h2]:mb-3 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mt-5 [&_h3]:mb-2 [&_ul]:space-y-1 [&_li]:text-sm [&_p]:text-sm [&_p]:leading-relaxed [&_strong]:text-white [&_table]:my-4 [&_table]:w-full [&_table]:text-sm [&_th]:text-left [&_th]:font-semibold [&_th]:py-2 [&_th]:px-2 [&_th]:border-b [&_th]:border-white/10 [&_td]:py-2 [&_td]:px-2 [&_td]:border-b [&_td]:border-white/5 [&_tr:last-child_td]:border-b-0" style={{ color: 'rgba(255,255,255,0.85)' }}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{aiAnalysis || ''}</ReactMarkdown>
               </div>
             )}
           </div>

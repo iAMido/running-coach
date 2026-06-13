@@ -43,18 +43,22 @@ export async function POST(request: NextRequest) {
 
     const { overallFeeling, sleepQuality, stressLevel, injuryNotes, achievements } = validation.data;
 
-    // Get this week's runs
+    // Get this week's runs. Week starts on SUNDAY to match the training
+    // plan's Sun-Sat structure (and the dashboard's date range). The
+    // previous Mon-based boundary caused the AI to miss runs logged on
+    // Sundays — e.g. Jun 7 Evening Run rendered as "skipped" in the
+    // review because the query window started on Jun 8.
     const now = new Date();
-    const dayOfWeek = now.getDay();
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-    monday.setHours(0, 0, 0, 0);
+    const dayOfWeek = now.getDay();        // 0 = Sunday
+    const sunday = new Date(now);
+    sunday.setDate(now.getDate() - dayOfWeek);
+    sunday.setHours(0, 0, 0, 0);
 
     const { data: runs } = await supabase
       .from('runs')
       .select('*')
       .eq('user_id', userId)
-      .gte('date', monday.toISOString())
+      .gte('date', sunday.toISOString())
       .order('date', { ascending: true });
 
     // Get feedback for this week's runs
@@ -62,7 +66,7 @@ export async function POST(request: NextRequest) {
       .from('run_feedback')
       .select('*')
       .eq('user_id', userId)
-      .gte('run_date', monday.toISOString().split('T')[0]);
+      .gte('run_date', sunday.toISOString().split('T')[0]);
 
     // Fetch laps for this week's runs and attach to each run
     const runRows = (runs || []) as Run[];
@@ -86,7 +90,7 @@ export async function POST(request: NextRequest) {
     // Resolve the planned week for this calendar week so the prompt can show PLANNED vs ACTUAL.
     const activePlan = await getActivePlan(userId);
     const reviewWeekNumber = activePlan?.start_date
-      ? calculateCurrentWeek(activePlan.start_date, activePlan.duration_weeks, monday).currentWeek
+      ? calculateCurrentWeek(activePlan.start_date, activePlan.duration_weeks, sunday).currentWeek
       : undefined;
 
     // Pre-flight supervisor gate. plan_review specifically flags when no
@@ -132,11 +136,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: response.error }, { status: 500 });
     }
 
-    // Save the analysis
-    const weekStart = monday.toISOString().split('T')[0];
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    const weekEnd = sunday.toISOString().split('T')[0];
+    // Save the analysis (Sun-Sat week boundary)
+    const weekStart = sunday.toISOString().split('T')[0];
+    const saturday = new Date(sunday);
+    saturday.setDate(sunday.getDate() + 6);
+    const weekEnd = saturday.toISOString().split('T')[0];
 
     await supabase
       .from('weekly_summaries')

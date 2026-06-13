@@ -137,9 +137,10 @@ export async function updateWeeklyAiAnalysis(
  * Get the start of the current week (Monday)
  */
 export function getCurrentWeekStart(): string {
+  // Sunday-anchored to match the training plan + dashboard week range.
   const now = new Date();
-  const dayOfWeek = now.getDay();
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-  return monday.toISOString().split('T')[0];
+  const dayOfWeek = now.getDay(); // 0 = Sunday
+  const sunday = new Date(now);
+  sunday.setDate(now.getDate() - dayOfWeek);
+  return sunday.toISOString().split('T')[0];
 }
