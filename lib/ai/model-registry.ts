@@ -72,7 +72,9 @@ export const MODEL_FOR = {
   /**
    * Grocky (second opinion). Different model family for voice diversity.
    */
-  grocky:               'x-ai/grok-4',
+  // Grok 4 was deprecated by xAI in late 2026; switched to 4.3 per the
+  // OpenRouter migration notice.
+  grocky:               'x-ai/grok-4.3',
 } as const;
 
 export type ModelTaskKey = keyof typeof MODEL_FOR;

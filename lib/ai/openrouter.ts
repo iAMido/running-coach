@@ -180,7 +180,7 @@ export const AVAILABLE_MODELS = [
   { id: 'anthropic/claude-opus-4.7', name: 'Claude Opus 4.7' },
   { id: 'anthropic/claude-haiku-4.5', name: 'Claude Haiku 4.5' },
   { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' },
-  { id: 'x-ai/grok-4', name: 'Grok 4 (Grocky)' },
+  { id: 'x-ai/grok-4.3', name: 'Grok 4.3 (Grocky)' },
   { id: 'openai/gpt-4o', name: 'GPT-4o' },
   { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini' },
   { id: 'google/gemini-pro', name: 'Gemini Pro' },

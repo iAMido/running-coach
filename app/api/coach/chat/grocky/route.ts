@@ -11,6 +11,7 @@ import { buildContext, getContextStats } from '@/lib/rag/context-builder';
 import type { ChatMessage } from '@/lib/db/types';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { chatRequestSchema, validateInput } from '@/lib/validation/schemas';
+import { MODEL_FOR } from '@/lib/ai/model-registry';
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser();
@@ -61,10 +62,11 @@ export async function POST(request: NextRequest) {
       { role: 'user', content: reviewPlan ? 'Please review my training plan' : query },
     ];
 
-    // Call OpenRouter with Grok model
+    // Call OpenRouter with Grok model. grok-4 was deprecated in late 2026;
+    // pulling from the central registry keeps this in sync with model-registry.ts.
     const response = await callOpenRouter(apiMessages, {
       apiKey,
-      model: 'x-ai/grok-4',
+      model: MODEL_FOR.grocky,
       maxTokens: reviewPlan ? 2500 : 1500
     });
 
