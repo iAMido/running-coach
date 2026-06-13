@@ -11,6 +11,7 @@ import {
   BookOpen,
   Bookmark,
   LogOut,
+  Activity,
 } from 'lucide-react';
 import { signOut } from 'next-auth/react';
 
@@ -75,6 +76,23 @@ export function CaltrackBottomNav() {
           </Link>
         );
       })}
+
+      {/* Switch to RunCoach — mirrors the "Switch to CalTrack" link on the
+          coach side so jumping between the two apps is symmetric on mobile.
+          Lives just before the sign-out separator. */}
+      <div className="shrink-0 ml-2 pl-2" style={{ borderLeft: '1px solid var(--ct-line)' }}>
+        <Link
+          href="/coach"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[13px] font-medium whitespace-nowrap"
+          style={{
+            background: 'oklch(0.96 0.04 240)',
+            color: 'oklch(0.42 0.13 240)',
+          }}
+        >
+          <Activity className="w-4 h-4 shrink-0" />
+          RunCoach
+        </Link>
+      </div>
 
       {/* Sign out */}
       <div className="shrink-0 ml-2 pl-2" style={{ borderLeft: '1px solid var(--ct-line)' }}>
