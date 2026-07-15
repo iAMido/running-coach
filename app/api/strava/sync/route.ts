@@ -98,7 +98,17 @@ export async function POST(request: NextRequest) {
     );
 
     if (!activitiesResponse.ok) {
-      return NextResponse.json({ error: 'Failed to fetch activities' }, { status: 500 });
+      // Surface Strava's actual error body — a 403 with
+      // {"resource":"Application","field":"Status","code":"Inactive"} means
+      // the Strava API app itself was deactivated (re-accept API terms at
+      // strava.com/settings/api), which no amount of token refreshing fixes.
+      const errBody = await activitiesResponse.text().catch(() => '');
+      const inactive = errBody.includes('"Inactive"');
+      return NextResponse.json({
+        error: inactive
+          ? 'Strava has deactivated the API application. Go to strava.com/settings/api and reactivate it (usually re-accepting the API agreement).'
+          : `Strava API error ${activitiesResponse.status}: ${errBody.slice(0, 300)}`,
+      }, { status: 502 });
     }
 
     const activities = await activitiesResponse.json();
