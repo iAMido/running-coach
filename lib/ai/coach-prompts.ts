@@ -44,33 +44,17 @@ focus from the current plan. When they differ:
   the latter is more ambitious — that's how athletes get injured.
 `;
 
-export function buildEnhancedCoachSystemPrompt(context: EnhancedContext): string {
-  const queryTypeDescriptions: Record<QueryType, string> = {
-    daily_advice: 'daily training advice',
-    plan_review: 'weekly review and analysis',
-    plan_generation: 'creating a training plan',
-    ask_coach: 'general coaching question',
-    grocky: 'second opinion analysis',
-  };
-
-  return `You are the "Running Box AI Coach," an expert endurance specialist who knows this athlete's history and their previous coach's methods. You are trained in multiple methodologies including Triphasic Training, 80/20, and the Norwegian Method (lactate-guided double threshold training).
-
-## KNOWLEDGE HIERARCHY (FOLLOW THIS ORDER STRICTLY)
-
-### Priority 1: ATHLETE DATA (Ground Truth)
-This is the athlete's actual recent training and feedback. This is what ACTUALLY happened.
-${context.userContext.text || 'No recent athlete data available.'}
-
-### Priority 2: PREVIOUS COACH PATTERNS (Proven for This Athlete)
-Workout definitions and wisdom from their previous coach. These methods are PROVEN to work for THIS specific athlete.
-${context.coachContext.text || 'No previous coach data available.'}
-
-### Priority 3: METHODOLOGY GUIDELINES (General Rules)
-Coaching book excerpts and methodology. Apply these general rules when they don't conflict with athlete-specific data.
-${context.bookContext.text || 'No methodology data available.'}
-
-## YOUR TASK
-You are providing: ${queryTypeDescriptions[context.queryType]}
+/**
+ * STATIC coach block — persona, methodology knowledge, coaching rules.
+ * Contains NO per-request interpolation, so it is byte-identical across
+ * every call and can carry an Anthropic cache_control breakpoint. Keeping
+ * this stable is what makes prompt caching actually hit: the previous
+ * implementation put the whole system prompt (including retrieved RAG
+ * context) under one cache_control, so the prefix changed every call and
+ * the cache never hit — we paid the +25% cache-write surcharge for nothing.
+ * Do not interpolate anything into this string.
+ */
+export const COACH_STATIC_BLOCK = `You are the "Running Box AI Coach," an expert endurance specialist who knows this athlete's history and their previous coach's methods. You are trained in multiple methodologies including Triphasic Training, 80/20, and the Norwegian Method (lactate-guided double threshold training).
 ${GOAL_ANCHORING_INSTRUCTION}
 ## COACHING INSTRUCTIONS
 
@@ -117,7 +101,49 @@ When creating or adjusting training plans, use these day anchors:
 - **Friday**: Long run day
 - Other days: Easy runs, recovery, or rest as needed
 - Adjust only if the athlete explicitly requests different days
-`;
+
+The KNOWLEDGE HIERARCHY (athlete data, previous coach patterns, methodology guidelines) and YOUR TASK follow in the next block — follow that hierarchy strictly, in order.`;
+
+/**
+ * DYNAMIC coach block — the per-request RAG context and task line.
+ * Changes with every query; must NOT sit under a cache_control breakpoint.
+ */
+export function buildCoachDynamicBlock(context: EnhancedContext): string {
+  const queryTypeDescriptions: Record<QueryType, string> = {
+    daily_advice: 'daily training advice',
+    plan_review: 'weekly review and analysis',
+    plan_generation: 'creating a training plan',
+    ask_coach: 'general coaching question',
+    grocky: 'second opinion analysis',
+  };
+
+  return `## KNOWLEDGE HIERARCHY (FOLLOW THIS ORDER STRICTLY)
+
+### Priority 1: ATHLETE DATA (Ground Truth)
+This is the athlete's actual recent training and feedback. This is what ACTUALLY happened.
+${context.userContext.text || 'No recent athlete data available.'}
+
+### Priority 2: PREVIOUS COACH PATTERNS (Proven for This Athlete)
+Workout definitions and wisdom from their previous coach. These methods are PROVEN to work for THIS specific athlete.
+${context.coachContext.text || 'No previous coach data available.'}
+
+### Priority 3: METHODOLOGY GUIDELINES (General Rules)
+Coaching book excerpts and methodology. Apply these general rules when they don't conflict with athlete-specific data.
+${context.bookContext.text || 'No methodology data available.'}
+
+## YOUR TASK
+You are providing: ${queryTypeDescriptions[context.queryType]}`;
+}
+
+/**
+ * Backwards-compatible single-string builder: static + dynamic concatenated.
+ * Used by callers that don't participate in prompt caching (grocky path,
+ * plan-modification prompt assembly). Cache-aware routes should send
+ * COACH_STATIC_BLOCK via cacheableSystemPrefix and buildCoachDynamicBlock
+ * as the system message instead.
+ */
+export function buildEnhancedCoachSystemPrompt(context: EnhancedContext): string {
+  return `${COACH_STATIC_BLOCK}\n\n${buildCoachDynamicBlock(context)}`;
 }
 
 /**
@@ -307,9 +333,11 @@ export function buildEnhancedWeeklyAnalysisPrompt(
 
   const actualBlock = formatActualRunsForReview(weekData.runs);
 
-  return `${buildEnhancedCoachSystemPrompt(context)}
-
-## ANALYSIS TASK: WEEKLY REVIEW
+  // NOTE: this is the USER message. The system prompt (persona + RAG
+  // context) is sent separately by the route — it was previously embedded
+  // here too, doubling ~20-30k tokens of input on every weekly review.
+  void context;
+  return `## ANALYSIS TASK: WEEKLY REVIEW
 
 ${plannedBlock ? `### PLANNED FOR THIS WEEK\n${plannedBlock}\n` : '### PLANNED FOR THIS WEEK\n(No active plan, or plan does not cover this week)\n'}
 
@@ -400,7 +428,10 @@ export function buildEnhancedPlanGenerationPrompt(
   const supportWeeks = Math.max(2, Math.round(trainingWeeks * 0.5));
   const specificWeeks = Math.max(1, trainingWeeks - baseWeeks - supportWeeks);
 
-  return `${buildEnhancedCoachSystemPrompt(context)}
+  // Dynamic block only — the static persona/instructions block is sent by
+  // the route as cacheableSystemPrefix so plan-gen retries within 5 minutes
+  // hit the Anthropic prompt cache.
+  return `${buildCoachDynamicBlock(context)}
 
 ${intakeBlock || ''}
 

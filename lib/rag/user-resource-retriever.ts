@@ -35,19 +35,26 @@ export async function retrieveUserResources(
   /** Optional tag filter. When supplied, only resources whose
    *  methodology_tags overlap with these tags are returned. */
   tags?: string[],
+  /** Pre-computed embedding for `query`. The book retriever already embeds
+   *  the same string — passing it here avoids a duplicate OpenAI round-trip
+   *  (~250ms + cost) on every request. */
+  precomputedEmbedding?: number[],
 ): Promise<InstructionSearchResult[]> {
   if (!userId) return [];
 
-  // Embed the query (reuses the same OpenAI text-embedding-3-small as books)
-  const embeddingResponse = await generateEmbedding(query);
-  if (!embeddingResponse.embedding?.length || embeddingResponse.error) {
-    return [];
+  let embedding = precomputedEmbedding;
+  if (!embedding?.length) {
+    const embeddingResponse = await generateEmbedding(query);
+    if (!embeddingResponse.embedding?.length || embeddingResponse.error) {
+      return [];
+    }
+    embedding = embeddingResponse.embedding;
   }
 
   const tagFilter = tags && tags.length > 0 ? tags.map(t => t.toLowerCase()) : null;
 
   const { data, error } = await supabase.rpc('match_user_resources', {
-    query_embedding: embeddingResponse.embedding,
+    query_embedding: embedding,
     match_user_id: userId,
     match_threshold: 0.65, // slightly lower than books so personal notes win ties
     match_count: limit,
@@ -59,7 +66,7 @@ export async function retrieveUserResources(
   // hard requirement.
   if (!error && (!data || (data as unknown[]).length === 0) && tagFilter) {
     const fallback = await supabase.rpc('match_user_resources', {
-      query_embedding: embeddingResponse.embedding,
+      query_embedding: embedding,
       match_user_id: userId,
       match_threshold: 0.65,
       match_count: limit,

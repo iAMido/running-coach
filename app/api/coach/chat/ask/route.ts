@@ -1,8 +1,8 @@
 export const runtime = 'nodejs';
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { callOpenRouter } from '@/lib/ai/openrouter';
-import { buildEnhancedCoachSystemPrompt } from '@/lib/ai/coach-prompts';
+import { COACH_STATIC_BLOCK, buildCoachDynamicBlock } from '@/lib/ai/coach-prompts';
 import { buildContext, detectQueryType, getContextStats } from '@/lib/rag/context-builder';
 import type { ChatMessage } from '@/lib/db/types';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
@@ -127,79 +127,66 @@ export async function POST(request: NextRequest) {
 
     // Resolve or create a chat session. The page sends sessionId on
     // continuing conversations; on the very first turn we create one and
-    // seed the title from the first user message.
-    let chatSessionId: string | null = incomingSessionId ?? null;
-    if (!chatSessionId && query) {
-      const { data: newSession } = await supabase
-        .from('coach_chat_sessions')
-        .insert({ user_id: userId, title: query.slice(0, 80) })
-        .select('id')
-        .single();
-      chatSessionId = newSession?.id ?? null;
-    }
-
-    // Persist the latest user message (others assumed already persisted).
-    if (chatSessionId && lastUserMessage) {
-      await supabase.from('coach_chat_messages').insert({
-        session_id: chatSessionId,
-        user_id: userId,
-        role: 'user',
-        content: lastUserMessage.content,
-      });
-    }
-
-    // Detect query type and build 3-layer context
+    // seed the title from the first user message. Session creation stays
+    // synchronous because the response must carry sessionId; message
+    // persistence is deferred to after() below — persisting the user
+    // message only after the AI succeeds also kills the duplicate-turn bug
+    // where a failed call + retry double-inserted the same user message.
     const queryType = detectQueryType(query);
-    const context = await buildContext(userId, query, queryType);
-
-    // Check if this is a plan modification request
     const isPlanModification = detectPlanModificationIntent(query);
-    let activePlan = null;
+
+    // One round of parallel fetches for everything independent: the chat
+    // session (create if new), the active plan (used by plan-mod, preflight,
+    // AND buildContext — previously fetched 3x per request), and the RAG
+    // context itself.
+    const [chatSessionId, activePlan] = await Promise.all([
+      (async (): Promise<string | null> => {
+        if (incomingSessionId) return incomingSessionId;
+        if (!query) return null;
+        const { data: newSession } = await supabase
+          .from('coach_chat_sessions')
+          .insert({ user_id: userId, title: query.slice(0, 80) })
+          .select('id')
+          .single();
+        return newSession?.id ?? null;
+      })(),
+      getActivePlan(userId),
+    ]);
+
+    const context = await buildContext(userId, query, queryType, { plan: activePlan });
+
     let currentWeek = 1;
-
-    if (isPlanModification) {
-      // Get active plan for modification
-      const { data: plan } = await supabase
-        .from('training_plans')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (plan) {
-        activePlan = plan;
-        const startDate = plan.start_date || (plan.created_at ? plan.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
-        const weekInfo = calculateCurrentWeek(startDate, plan.duration_weeks);
-        currentWeek = weekInfo.currentWeek;
-      }
+    if (isPlanModification && activePlan) {
+      const startDate = activePlan.start_date
+        || (activePlan.created_at ? activePlan.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
+      currentWeek = calculateCurrentWeek(startDate, activePlan.duration_weeks).currentWeek;
     }
 
-    // Build system prompt - enhanced for plan modification if needed
+    // Dynamic system block: RAG context (+ plan-modification instructions
+    // when needed). The static persona/instructions block travels separately
+    // as cacheableSystemPrefix so Anthropic's prompt cache actually hits —
+    // it's byte-identical across every call.
     let systemPrompt: string;
     if (isPlanModification && activePlan) {
-      const basePrompt = buildEnhancedCoachSystemPrompt(context);
       systemPrompt = buildPlanModificationPrompt(
-        basePrompt,
+        buildCoachDynamicBlock(context),
         activePlan.plan_json,
         currentWeek,
         query
       );
     } else {
-      systemPrompt = buildEnhancedCoachSystemPrompt(context);
+      systemPrompt = buildCoachDynamicBlock(context);
     }
 
     // Pre-flight supervisor gate. Reads the assembled context, flags silent
     // gaps (no planned-today workout, no recent runs, etc.), and may inject
     // a short "SUPERVISOR NOTES" block at the end of the system prompt so
     // the model acknowledges gaps instead of confabulating around them.
-    const activePlanForPreflight = activePlan ?? await getActivePlan(userId);
     const preflight = supervisorValidate({
       context,
       queryType,
-      plan: activePlanForPreflight,
-      hasActivePlan: !!activePlanForPreflight,
+      plan: activePlan,
+      hasActivePlan: !!activePlan,
     });
     if (preflight.augmentedSystemSuffix) {
       systemPrompt = systemPrompt + preflight.augmentedSystemSuffix;
@@ -211,21 +198,16 @@ export async function POST(request: NextRequest) {
       ...messages,
     ];
 
-    // Call OpenRouter with more tokens for plan modifications.
-    // Cache the system block: most consecutive turns in a single chat reuse
-    // the same RAG-built system prompt, so Anthropic prompt caching cuts
-    // the cost of follow-up turns substantially.
     // Pick the model from the registry: plan modifications need structured
     // JSON output + accuracy, so they go through Sonnet; everything else
-    // through the chat_default model. (A future Haiku-router can split
-    // simple "should I run today" queries off to chat_quick.)
+    // through the chat_default model.
     const chatModel = isPlanModification ? MODEL_FOR.plan_modification : MODEL_FOR.chat_default;
     const callStart = Date.now();
     const response = await callOpenRouter(apiMessages, {
       apiKey,
       model: chatModel,
       maxTokens: isPlanModification ? 4000 : 1500,
-      cacheSystemPrompt: true,
+      cacheableSystemPrefix: COACH_STATIC_BLOCK,
     });
     const callLatencyMs = Date.now() - callStart;
 
@@ -313,63 +295,79 @@ export async function POST(request: NextRequest) {
       displayContent += `\n\n✅ **Your training plan has been updated!** The changes are now reflected in your Plan page.`;
     }
 
-    // Telemetry: one row per call into coach_calls.
-    const callId = await logCoachCall({
-      user_id: userId,
-      route: '/api/coach/chat/ask',
-      query_type: queryType,
-      model: chatModel,
-      context_tokens: stats.totalTokens,
-      context_budget: TOKEN_BUDGETS_PER_QUERY[queryType],
-      ceiling_hit: stats.totalTokens >= TOKEN_BUDGETS_PER_QUERY[queryType] * 0.95,
-      cache_used: true,
-      preflight_ok: preflight.ok,
-      preflight_warnings: serializeWarnings(preflight.warnings),
-      preflight_augmented: !!preflight.augmentedSystemSuffix,
-      latency_ms: callLatencyMs,
-      status: response.error ? 'error' : 'ok',
-      error_message: response.error ?? null,
-      plan_modified: planUpdated,
+    // Everything below is bookkeeping the user shouldn't wait for:
+    // telemetry row, Haiku critic, chat persistence. next/server after()
+    // schedules it post-response with a platform guarantee it runs — the
+    // previous fire-and-forget .catch() pattern survived on Vercel only
+    // when the instance happened to stay warm. Persisting BOTH messages
+    // here (after success) also fixes the duplicate-user-turn bug when a
+    // failed AI call was retried.
+    after(async () => {
+      try {
+        const callId = await logCoachCall({
+          user_id: userId,
+          route: '/api/coach/chat/ask',
+          query_type: queryType,
+          model: chatModel,
+          context_tokens: stats.totalTokens,
+          context_budget: TOKEN_BUDGETS_PER_QUERY[queryType],
+          ceiling_hit: stats.totalTokens >= TOKEN_BUDGETS_PER_QUERY[queryType] * 0.95,
+          cache_used: true,
+          preflight_ok: preflight.ok,
+          preflight_warnings: serializeWarnings(preflight.warnings),
+          preflight_augmented: !!preflight.augmentedSystemSuffix,
+          latency_ms: callLatencyMs,
+          status: response.error ? 'error' : 'ok',
+          error_message: response.error ?? null,
+          plan_modified: planUpdated,
+        });
+
+        if (chatSessionId && lastUserMessage) {
+          await supabase.from('coach_chat_messages').insert([
+            {
+              session_id: chatSessionId,
+              user_id: userId,
+              role: 'user',
+              content: lastUserMessage.content,
+            },
+            {
+              session_id: chatSessionId,
+              user_id: userId,
+              role: 'assistant',
+              content: displayContent,
+              supervisor: {
+                callId,
+                preflightOk: preflight.ok,
+                warnings: preflight.warnings,
+              },
+            },
+          ]);
+          const { count } = await supabase
+            .from('coach_chat_messages')
+            .select('id', { count: 'exact', head: true })
+            .eq('session_id', chatSessionId);
+          await supabase
+            .from('coach_chat_sessions')
+            .update({ message_count: count || 0, updated_at: new Date().toISOString() })
+            .eq('id', chatSessionId);
+        }
+
+        if (!response.error && callId) {
+          await runCritic({
+            userId,
+            callId,
+            route: '/api/coach/chat/ask',
+            queryType,
+            userQuery: query,
+            coachResponse: displayContent,
+            contextSummary: summarizeContext(context, isPlanModification, currentWeek),
+            preflightWarnings: preflight.warnings,
+          });
+        }
+      } catch (err) {
+        console.warn('post-response bookkeeping failed:', err instanceof Error ? err.message : err);
+      }
     });
-
-    // Fire-and-forget critic: grades response, persists to coach_response_audits.
-    if (!response.error && callId) {
-      runCritic({
-        userId,
-        callId,
-        route: '/api/coach/chat/ask',
-        queryType,
-        userQuery: query,
-        coachResponse: displayContent,
-        contextSummary: summarizeContext(context, isPlanModification, currentWeek),
-        preflightWarnings: preflight.warnings,
-      }).catch(err => console.warn('critic failed:', err?.message));
-    }
-
-    // Persist the assistant message + supervisor envelope, and bump the
-    // session updated_at so the sidebar can sort by recency.
-    if (chatSessionId) {
-      await supabase.from('coach_chat_messages').insert({
-        session_id: chatSessionId,
-        user_id: userId,
-        role: 'assistant',
-        content: displayContent,
-        supervisor: {
-          callId,
-          preflightOk: preflight.ok,
-          warnings: preflight.warnings,
-        },
-      });
-      // Recount + bump
-      const { count } = await supabase
-        .from('coach_chat_messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('session_id', chatSessionId);
-      await supabase
-        .from('coach_chat_sessions')
-        .update({ message_count: count || 0, updated_at: new Date().toISOString() })
-        .eq('id', chatSessionId);
-    }
 
     return NextResponse.json({
       content: displayContent,
@@ -387,7 +385,7 @@ export async function POST(request: NextRequest) {
         adjustmentSummary,
       },
       supervisor: {
-        callId,
+        callId: null,
         preflightOk: preflight.ok,
         warnings: preflight.warnings,
       },

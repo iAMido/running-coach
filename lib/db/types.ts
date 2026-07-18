@@ -109,6 +109,14 @@ export interface PlanData {
   weeks?: PlanWeek[];
   current_week?: PlanWeek;
   raw_response?: string; // For unparseable AI responses
+  /** Set by the chat plan-modification flow. */
+  last_adjusted?: string;
+  adjustment_history?: Array<{
+    date: string;
+    type: string;
+    summary?: string;
+    from_week?: number;
+  }>;
 }
 
 export interface PlanWeek {

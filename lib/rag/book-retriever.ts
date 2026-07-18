@@ -49,7 +49,9 @@ export async function retrieveBookContext(
 
   const [userResults, bookResults] = await Promise.all([
     userId
-      ? retrieveUserResources(userId, query, userResourceLimit, filters.userResourceTags)
+      // Pass the embedding we just computed — same query string; skipping
+      // the retriever's own generateEmbedding saves an OpenAI round-trip.
+      ? retrieveUserResources(userId, query, userResourceLimit, filters.userResourceTags, embeddingResponse.embedding)
       : Promise.resolve([] as InstructionSearchResult[]),
     searchInstructionsFiltered(embeddingResponse.embedding, filters, bookSlots),
   ]);

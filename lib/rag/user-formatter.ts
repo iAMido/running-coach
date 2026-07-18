@@ -16,16 +16,26 @@ const CHARS_PER_TOKEN = 4;
  * Format user context for AI consumption
  * Includes recent runs, feedback, profile, and active plan
  */
+export interface UserContextPreload {
+  /** Pass the plan/profile the route already fetched to skip re-querying.
+   *  `null` = checked-and-absent; `undefined` = fetch here. */
+  plan?: TrainingPlan | null;
+  profile?: AthleteProfile | null;
+}
+
 export async function formatUserContext(
   userId: string,
-  maxTokens: number
+  maxTokens: number,
+  preload: UserContextPreload = {},
 ): Promise<FormattedUserContext> {
-  // Fetch all user data in parallel
+  // Fetch all user data in parallel — reusing anything the caller already
+  // fetched (previously the plan was queried up to 3x per request across
+  // route / context-builder / here).
   const [runsWithLaps, feedback, profile, plan, weeklySummary] = await Promise.all([
     getRecentRunsWithLaps(userId, 14), // Last 14 days, laps attached for quality workouts
     getRecentFeedback(userId, 14),
-    getAthleteProfile(userId),
-    getActivePlan(userId),
+    preload.profile !== undefined ? Promise.resolve(preload.profile) : getAthleteProfile(userId),
+    preload.plan !== undefined ? Promise.resolve(preload.plan) : getActivePlan(userId),
     getLatestWeeklySummary(userId),
   ]);
 

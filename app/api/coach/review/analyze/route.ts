@@ -1,9 +1,9 @@
 export const runtime = 'nodejs';
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { callOpenRouter } from '@/lib/ai/openrouter';
-import { buildEnhancedWeeklyAnalysisPrompt, buildEnhancedCoachSystemPrompt } from '@/lib/ai/coach-prompts';
+import { buildEnhancedWeeklyAnalysisPrompt, buildCoachDynamicBlock, COACH_STATIC_BLOCK } from '@/lib/ai/coach-prompts';
 import { buildContext } from '@/lib/rag/context-builder';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { reviewAnalysisSchema, validateInput } from '@/lib/validation/schemas';
@@ -54,41 +54,40 @@ export async function POST(request: NextRequest) {
     sunday.setDate(now.getDate() - dayOfWeek);
     sunday.setHours(0, 0, 0, 0);
 
-    const { data: runs } = await supabase
-      .from('runs')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('date', sunday.toISOString())
-      .order('date', { ascending: true });
+    // Runs, feedback, plan, and the RAG context are all independent —
+    // fetch together (previously 5 serial awaits). The plan is threaded
+    // into buildContext so it isn't re-queried inside (it used to be
+    // fetched 3x per review request across route/context/formatter).
+    const [{ data: runs }, { data: feedback }, activePlan] = await Promise.all([
+      supabase
+        .from('runs')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('date', sunday.toISOString())
+        .order('date', { ascending: true }),
+      supabase
+        .from('run_feedback')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('run_date', sunday.toISOString().split('T')[0]),
+      getActivePlan(userId),
+    ]);
 
-    // Get feedback for this week's runs
-    const { data: feedback } = await supabase
-      .from('run_feedback')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('run_date', sunday.toISOString().split('T')[0]);
-
-    // Fetch laps for this week's runs and attach to each run
+    // Laps need runIds, so they follow; the RAG context can overlap with them.
     const runRows = (runs || []) as Run[];
     const runIds = runRows.map(r => r.id);
-    const { data: lapsData } = runIds.length > 0
-      ? await supabase.from('laps').select('*').in('run_id', runIds).order('lap_number', { ascending: true })
-      : { data: [] };
+    const [{ data: lapsData }, context] = await Promise.all([
+      runIds.length > 0
+        ? supabase.from('laps').select('*').in('run_id', runIds).order('lap_number', { ascending: true })
+        : Promise.resolve({ data: [] as Lap[] }),
+      buildContext(userId, 'weekly review analysis', 'plan_review', { plan: activePlan }),
+    ]);
     const lapRows = (lapsData || []) as Lap[];
     const runsWithLaps: (Run & { laps?: Lap[] })[] = runRows.map(run => ({
       ...run,
       laps: lapRows.filter(l => l.run_id === run.id),
     }));
 
-    // Build 3-layer RAG context
-    const context = await buildContext(
-      userId,
-      'weekly review analysis',
-      'plan_review'
-    );
-
-    // Resolve the planned week for this calendar week so the prompt can show PLANNED vs ACTUAL.
-    const activePlan = await getActivePlan(userId);
     const reviewWeekNumber = activePlan?.start_date
       ? calculateCurrentWeek(activePlan.start_date, activePlan.duration_weeks, sunday).currentWeek
       : undefined;
@@ -102,8 +101,10 @@ export async function POST(request: NextRequest) {
       weekRuns: runsWithLaps as Run[],
     });
 
-    // Build prompts using enhanced system
-    let systemPrompt = buildEnhancedCoachSystemPrompt(context);
+    // Dynamic system block only — the static persona/instructions travel
+    // as cacheableSystemPrefix (byte-stable → Anthropic cache hits on
+    // retries/re-rolls within 5 minutes).
+    let systemPrompt = buildCoachDynamicBlock(context);
     if (preflight.augmentedSystemSuffix) {
       systemPrompt = systemPrompt + preflight.augmentedSystemSuffix;
     }
@@ -119,16 +120,13 @@ export async function POST(request: NextRequest) {
       weekNumber: reviewWeekNumber,
     });
 
-    // Call OpenRouter. cacheSystemPrompt: most of the methodology / RAG
-    // block is identical across consecutive review attempts in a session
-    // (retry, re-roll, etc.), so caching saves real cost.
     const callStart = Date.now();
     const response = await callOpenRouter(
       [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      { apiKey, model: MODEL_FOR.weekly_review, maxTokens: 2000, cacheSystemPrompt: true }
+      { apiKey, model: MODEL_FOR.weekly_review, maxTokens: 2000, cacheableSystemPrefix: COACH_STATIC_BLOCK }
     );
     const callLatencyMs = Date.now() - callStart;
 
@@ -142,77 +140,85 @@ export async function POST(request: NextRequest) {
     saturday.setDate(sunday.getDate() + 6);
     const weekEnd = saturday.toISOString().split('T')[0];
 
-    await supabase
-      .from('weekly_summaries')
-      .upsert({
-        user_id: userId,
-        week_start: weekStart,
-        overall_feeling: overallFeeling,
-        sleep_quality: sleepQuality,
-        stress_level: stressLevel,
-        injury_notes: injuryNotes,
-        achievements,
-        ai_analysis: response.content,
-      }, { onConflict: 'user_id,week_start' });
+    // Persistence + telemetry + critic all run after the response — the
+    // user sees the analysis immediately instead of waiting for four DB
+    // writes and a Haiku call. after() carries a platform guarantee the
+    // work completes (unlike the previous un-awaited .catch pattern).
+    after(async () => {
+      try {
+        await supabase
+          .from('weekly_summaries')
+          .upsert({
+            user_id: userId,
+            week_start: weekStart,
+            overall_feeling: overallFeeling,
+            sleep_quality: sleepQuality,
+            stress_level: stressLevel,
+            injury_notes: injuryNotes,
+            achievements,
+            ai_analysis: response.content,
+          }, { onConflict: 'user_id,week_start' });
 
-    // Save to coach_reports for history
-    const titleMatch = response.content.match(/^##?\s+(.+)/m);
-    const title = titleMatch ? titleMatch[1].replace(/\*+/g, '').trim() : `Weekly Review: ${weekStart}`;
+        const titleMatch = response.content.match(/^##?\s+(.+)/m);
+        const title = titleMatch ? titleMatch[1].replace(/\*+/g, '').trim() : `Weekly Review: ${weekStart}`;
 
-    await supabase
-      .from('coach_reports')
-      .upsert({
-        user_id: userId,
-        report_type: 'weekly_review',
-        title,
-        content: response.content,
-        week_start: weekStart,
-        week_end: weekEnd,
-        metadata: {
-          runs_count: (runs || []).length,
-          total_km: (runs || []).reduce((s: number, r: { distance_km?: number }) => s + (r.distance_km || 0), 0),
-          overall_feeling: overallFeeling,
-          sleep_quality: sleepQuality,
-          stress_level: stressLevel,
-        },
-      }, { onConflict: 'user_id,week_start,report_type' });
+        await supabase
+          .from('coach_reports')
+          .upsert({
+            user_id: userId,
+            report_type: 'weekly_review',
+            title,
+            content: response.content,
+            week_start: weekStart,
+            week_end: weekEnd,
+            metadata: {
+              runs_count: (runs || []).length,
+              total_km: (runs || []).reduce((s: number, r: { distance_km?: number }) => s + (r.distance_km || 0), 0),
+              overall_feeling: overallFeeling,
+              sleep_quality: sleepQuality,
+              stress_level: stressLevel,
+            },
+          }, { onConflict: 'user_id,week_start,report_type' });
 
-    // Supervisor telemetry + critic
-    const callId = await logCoachCall({
-      user_id: userId,
-      route: '/api/coach/review/analyze',
-      query_type: 'plan_review',
-      model: MODEL_FOR.weekly_review,
-      context_tokens: context.totalTokens,
-      context_budget: TOKEN_BUDGETS_PER_QUERY.plan_review,
-      ceiling_hit: context.totalTokens >= TOKEN_BUDGETS_PER_QUERY.plan_review * 0.95,
-      cache_used: true,
-      preflight_ok: preflight.ok,
-      preflight_warnings: serializeWarnings(preflight.warnings),
-      preflight_augmented: !!preflight.augmentedSystemSuffix,
-      latency_ms: callLatencyMs,
-      status: 'ok',
-      error_message: null,
-      plan_modified: false,
+        const callId = await logCoachCall({
+          user_id: userId,
+          route: '/api/coach/review/analyze',
+          query_type: 'plan_review',
+          model: MODEL_FOR.weekly_review,
+          context_tokens: context.totalTokens,
+          context_budget: TOKEN_BUDGETS_PER_QUERY.plan_review,
+          ceiling_hit: context.totalTokens >= TOKEN_BUDGETS_PER_QUERY.plan_review * 0.95,
+          cache_used: true,
+          preflight_ok: preflight.ok,
+          preflight_warnings: serializeWarnings(preflight.warnings),
+          preflight_augmented: !!preflight.augmentedSystemSuffix,
+          latency_ms: callLatencyMs,
+          status: 'ok',
+          error_message: null,
+          plan_modified: false,
+        });
+
+        if (callId) {
+          await runCritic({
+            userId,
+            callId,
+            route: '/api/coach/review/analyze',
+            queryType: 'plan_review',
+            userQuery: `Weekly review for week starting ${weekStart}`,
+            coachResponse: response.content,
+            contextSummary: `runs=${(runs || []).length} week_number=${reviewWeekNumber} plan_loaded=${!!activePlan}`,
+            preflightWarnings: preflight.warnings,
+          });
+        }
+      } catch (err) {
+        console.warn('review post-response bookkeeping failed:', err instanceof Error ? err.message : err);
+      }
     });
-
-    if (callId) {
-      runCritic({
-        userId,
-        callId,
-        route: '/api/coach/review/analyze',
-        queryType: 'plan_review',
-        userQuery: `Weekly review for week starting ${weekStart}`,
-        coachResponse: response.content,
-        contextSummary: `runs=${(runs || []).length} week_number=${reviewWeekNumber} plan_loaded=${!!activePlan}`,
-        preflightWarnings: preflight.warnings,
-      }).catch(err => console.warn('critic failed:', err?.message));
-    }
 
     return NextResponse.json({
       analysis: response.content,
       supervisor: {
-        callId,
+        callId: null,
         preflightOk: preflight.ok,
         warnings: preflight.warnings,
       },

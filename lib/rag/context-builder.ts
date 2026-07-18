@@ -14,16 +14,27 @@ import {
 import { getActivePlan } from '@/lib/db/plans';
 import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
 import { classifyQuery } from '@/lib/ai/query-classifier';
+import type { TrainingPlan, AthleteProfile } from '@/lib/db/types';
 
 /**
  * Build enhanced context for AI coach
  * Orchestrates all three layers: User Data, Old Coach, Books
  * Applies appropriate weighting based on query type
  */
+export interface BuildContextPreload {
+  /** Active plan already fetched by the route. Pass `null` explicitly for
+   *  "we checked, there is none" — undefined means "not fetched, go fetch". */
+  plan?: TrainingPlan | null;
+  /** Athlete profile already fetched by the route. Same null/undefined
+   *  semantics as plan. */
+  profile?: AthleteProfile | null;
+}
+
 export async function buildContext(
   userId: string,
   query: string,
-  queryType: QueryType
+  queryType: QueryType,
+  preload: BuildContextPreload = {},
 ): Promise<EnhancedContext> {
   // Get weights and per-query budget for this query type
   const weights = QUERY_WEIGHTS[queryType];
@@ -34,23 +45,33 @@ export async function buildContext(
   const coachTokens = Math.floor(totalBudget * weights.oldCoachWeight);
   const bookTokens = Math.floor(totalBudget * weights.bookWeight);
 
-  // Get current phase from active plan (needed for filtering).
-  // Compute current week from start_date — the stored current_week_num can drift
-  // when the cron that advances it doesn't run, leaving the AI on the wrong phase.
-  const plan = await getActivePlan(userId);
+  // Only genuinely user-authored free text needs the Haiku classifier.
+  // plan_review / plan_generation / daily_advice arrive with fixed or
+  // template query strings — paying an LLM round-trip to classify a
+  // constant was pure latency. For those we synthesize the classification
+  // deterministically.
+  const needsLlmClassification = queryType === 'ask_coach' || queryType === 'grocky';
+
+  // Plan fetch and classification are independent — run them together.
+  // (Previously sequential: ~100ms plan + ~300-800ms Haiku in series on
+  // the critical path of every AI call.)
+  const [plan, classification] = await Promise.all([
+    preload.plan !== undefined ? Promise.resolve(preload.plan) : getActivePlan(userId),
+    needsLlmClassification
+      ? classifyQuery(query)
+      : Promise.resolve({ queryType, workoutType: undefined, tags: [], source: 'fallback' as const }),
+  ]);
+
+  // Compute current week from start_date — the stored current_week_num can
+  // drift when the cron that advances it doesn't run.
   const liveWeek = plan?.start_date
     ? calculateCurrentWeek(plan.start_date, plan.duration_weeks).currentWeek
     : (plan?.current_week_num || 1);
   const currentPhase = plan?.plan_json?.weeks?.[liveWeek - 1]?.phase;
 
-  // Single Haiku classifier call replaces three keyword regex passes
-  // (workoutType, category, user-resource tags). The classifier handles
-  // Hebrew, slang, negation, and implicit phrasing that the regex missed.
-  // Falls back to keyword inference on Haiku failure for resilience.
-  const classification = await classifyQuery(query);
   const workoutType = classification.workoutType;
   // Category mirrors workoutType for the coach-retriever's substring search;
-  // when Haiku didn't pick a workout we leave it undefined.
+  // when the classifier didn't pick a workout we leave it undefined.
   const category = workoutType;
   // Combine LLM-extracted tags with deterministic phase/queryType hints
   // so the retriever still has anchors even when the classifier yields
@@ -63,9 +84,10 @@ export async function buildContext(
     ...(queryType === 'plan_review' ? ['review'] : []),
   ])).filter(Boolean);
 
-  // Build all three contexts in parallel
+  // Build all three contexts in parallel; thread the already-fetched plan
+  // and profile into the user layer so it doesn't re-query them.
   const [userContext, coachContext, bookContext] = await Promise.all([
-    formatUserContext(userId, userTokens),
+    formatUserContext(userId, userTokens, { plan, profile: preload.profile }),
     retrieveCoachContext(
       userId,
       query,

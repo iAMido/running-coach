@@ -1,9 +1,9 @@
 export const runtime = 'nodejs';
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { callOpenRouter } from '@/lib/ai/openrouter';
-import { buildEnhancedPlanGenerationPrompt } from '@/lib/ai/coach-prompts';
+import { buildEnhancedPlanGenerationPrompt, COACH_STATIC_BLOCK } from '@/lib/ai/coach-prompts';
 import { buildContext, getContextStats } from '@/lib/rag/context-builder';
 import { getAthleteProfile } from '@/lib/db/profile';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
@@ -45,17 +45,15 @@ export async function POST(request: NextRequest) {
       raceDate, targetTime, recentRaceResult, currentWeeklyKm, addressesWhat, limitations,
     } = validation.data;
 
-    // Get athlete profile for training days
-    const profile = await getAthleteProfile(userId);
-
     // Build a query string for context retrieval
     const contextQuery = `Create a ${durationWeeks}-week ${planType} training plan for ${targetRace || 'general fitness'}`;
 
-    // Build 3-layer context (uses 'plan_generation' which is 35% user / 10% coach / 55% books)
-    // + the dedicated plan-gen intake block (90d run stats, PRs, prior plan outcomes,
-    // athlete-supplied form intake). The intake block runs alongside the 3-layer context.
+    // Profile fetched once here and threaded into buildContext (was fetched
+    // again inside the user-formatter). The 3-layer context and the intake
+    // block are independent — run all three together.
+    const profile = await getAthleteProfile(userId);
     const [context, planGenCtx] = await Promise.all([
-      buildContext(userId, contextQuery, 'plan_generation'),
+      buildContext(userId, contextQuery, 'plan_generation', { profile }),
       buildPlanGenerationContext(userId, {
         raceDate, targetTime, recentRaceResult, currentWeeklyKm, addressesWhat, limitations,
       }),
@@ -80,16 +78,15 @@ export async function POST(request: NextRequest) {
       systemPrompt = systemPrompt + preflight.augmentedSystemSuffix;
     }
 
-    // Call OpenRouter. Plan generation prompts the model with a very long
-    // RAG-built system block (books + coach workouts + athlete data) — cache
-    // it so retries within 5 minutes don't re-pay the input cost.
+    // Static persona block travels as cacheableSystemPrefix so plan-gen
+    // retries within 5 minutes hit the Anthropic prompt cache.
     const callStart = Date.now();
     const response = await callOpenRouter(
       [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: `Generate my ${durationWeeks}-week ${planType} training plan. IMPORTANT: Return ONLY the raw JSON object with no markdown code blocks, no explanation, no extra text — just the JSON.` },
       ],
-      { apiKey, model: MODEL_FOR.plan_generation, maxTokens: 16000, cacheSystemPrompt: true }
+      { apiKey, model: MODEL_FOR.plan_generation, maxTokens: 16000, cacheableSystemPrefix: COACH_STATIC_BLOCK }
     );
     const callLatencyMs = Date.now() - callStart;
 
@@ -144,36 +141,44 @@ export async function POST(request: NextRequest) {
     // Get context stats for debugging/monitoring
     const stats = getContextStats(context);
 
-    const callId = await logCoachCall({
-      user_id: userId,
-      route: '/api/coach/plans/generate',
-      query_type: 'plan_generation',
-      model: MODEL_FOR.plan_generation,
-      context_tokens: context.totalTokens,
-      context_budget: TOKEN_BUDGETS_PER_QUERY.plan_generation,
-      ceiling_hit: context.totalTokens >= TOKEN_BUDGETS_PER_QUERY.plan_generation * 0.95,
-      cache_used: true,
-      preflight_ok: preflight.ok,
-      preflight_warnings: serializeWarnings(preflight.warnings),
-      preflight_augmented: !!preflight.augmentedSystemSuffix,
-      latency_ms: callLatencyMs,
-      status: 'ok',
-      error_message: null,
-      plan_modified: false,
-    });
+    // Telemetry + critic run after the response — the plan insert above
+    // stays synchronous because the response carries the saved plan row.
+    after(async () => {
+      try {
+        const callId = await logCoachCall({
+          user_id: userId,
+          route: '/api/coach/plans/generate',
+          query_type: 'plan_generation',
+          model: MODEL_FOR.plan_generation,
+          context_tokens: context.totalTokens,
+          context_budget: TOKEN_BUDGETS_PER_QUERY.plan_generation,
+          ceiling_hit: context.totalTokens >= TOKEN_BUDGETS_PER_QUERY.plan_generation * 0.95,
+          cache_used: true,
+          preflight_ok: preflight.ok,
+          preflight_warnings: serializeWarnings(preflight.warnings),
+          preflight_augmented: !!preflight.augmentedSystemSuffix,
+          latency_ms: callLatencyMs,
+          status: 'ok',
+          error_message: null,
+          plan_modified: false,
+        });
 
-    if (callId) {
-      runCritic({
-        userId,
-        callId,
-        route: '/api/coach/plans/generate',
-        queryType: 'plan_generation',
-        userQuery: `Generate ${durationWeeks}-week ${planType} plan (target: ${targetRace || 'general fitness'})`,
-        coachResponse: response.content,
-        contextSummary: `book_sources=${context.bookContext.sources.length} coach_workouts=${context.coachContext.workoutsIncluded.length} duration_weeks=${durationWeeks}`,
-        preflightWarnings: preflight.warnings,
-      }).catch(err => console.warn('critic failed:', err?.message));
-    }
+        if (callId) {
+          await runCritic({
+            userId,
+            callId,
+            route: '/api/coach/plans/generate',
+            queryType: 'plan_generation',
+            userQuery: `Generate ${durationWeeks}-week ${planType} plan (target: ${targetRace || 'general fitness'})`,
+            coachResponse: response.content,
+            contextSummary: `book_sources=${context.bookContext.sources.length} coach_workouts=${context.coachContext.workoutsIncluded.length} duration_weeks=${durationWeeks}`,
+            preflightWarnings: preflight.warnings,
+          });
+        }
+      } catch (err) {
+        console.warn('plan-gen post-response bookkeeping failed:', err instanceof Error ? err.message : err);
+      }
+    });
 
     return NextResponse.json({
       plan,
@@ -187,7 +192,7 @@ export async function POST(request: NextRequest) {
         contextStats: stats,
       },
       supervisor: {
-        callId,
+        callId: null,
         preflightOk: preflight.ok,
         warnings: preflight.warnings,
       },

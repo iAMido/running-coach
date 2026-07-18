@@ -22,7 +22,7 @@ export const runtime = 'nodejs';
 import { NextRequest } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { streamOpenRouter, callOpenRouter } from '@/lib/ai/openrouter';
-import { buildEnhancedPlanGenerationPrompt } from '@/lib/ai/coach-prompts';
+import { buildEnhancedPlanGenerationPrompt, COACH_STATIC_BLOCK } from '@/lib/ai/coach-prompts';
 import { buildContext, getContextStats } from '@/lib/rag/context-builder';
 import { getAthleteProfile } from '@/lib/db/profile';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
 
   const contextQuery = `Create a ${durationWeeks}-week ${planType} training plan for ${targetRace || 'general fitness'}`;
   const [context, planGenCtx] = await Promise.all([
-    buildContext(userId, contextQuery, 'plan_generation'),
+    buildContext(userId, contextQuery, 'plan_generation', { profile }),
     buildPlanGenerationContext(userId, {
       raceDate, targetTime, recentRaceResult, currentWeeklyKm, addressesWhat, limitations,
     }),
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
             { role: 'system', content: systemPrompt },
             { role: 'user', content: `Generate my ${durationWeeks}-week ${planType} training plan. IMPORTANT: Return ONLY the raw JSON object with no markdown code blocks, no explanation, no extra text — just the JSON.` },
           ],
-          { apiKey, model: MODEL_FOR.plan_generation, maxTokens: 16000 },
+          { apiKey, model: MODEL_FOR.plan_generation, maxTokens: 16000, cacheableSystemPrefix: COACH_STATIC_BLOCK },
         );
 
         for await (const chunk of generator) {

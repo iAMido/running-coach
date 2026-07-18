@@ -92,13 +92,14 @@ async function fetchRelevantWorkouts(
     }
   }
 
-  // 3. Try searching by query keywords
+  // 3. Try searching by query keywords — in parallel (was a sequential
+  //    per-keyword loop: up to 3 serial DB round-trips on the hot path).
   const keywords = extractKeywords(query);
-  for (const keyword of keywords) {
-    const results = await searchCoachWorkouts(userId, keyword);
-    if (results.length > 0) {
-      workouts = [...workouts, ...results];
-    }
+  if (keywords.length > 0) {
+    const keywordResults = await Promise.all(
+      keywords.map(keyword => searchCoachWorkouts(userId, keyword)),
+    );
+    workouts = [...workouts, ...keywordResults.flat()];
   }
 
   // Deduplicate

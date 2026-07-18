@@ -11,14 +11,21 @@ export interface OpenRouterConfig {
   model?: string;
   maxTokens?: number;
   /**
-   * When true and the model is an Anthropic Claude model, the first system
-   * message is sent with a cache_control: ephemeral breakpoint so Anthropic
-   * (via OpenRouter) caches the rendered system prompt for ~5 minutes. The
-   * caller pays write cost on the first request and gets cheap reads on
-   * follow-up requests within the TTL — meaningful for multi-turn chat where
-   * the same RAG-built system block is sent each turn.
+   * @deprecated Caching the whole (RAG-bearing) system prompt never hits —
+   * the prefix changes every call. Use cacheableSystemPrefix instead.
+   * Kept as a no-op alias for one release so stray callers don't break.
    */
   cacheSystemPrompt?: boolean;
+  /**
+   * A byte-stable text block (persona + coaching rules, NO per-request
+   * interpolation) placed FIRST in the system content with an Anthropic
+   * cache_control breakpoint. Because it is identical across calls, cache
+   * reads actually hit (~10% of input price after the first call in any
+   * 5-minute window). The regular system message in `messages` becomes the
+   * uncached dynamic block that follows it. Anthropic-only; other models
+   * get the prefix inlined as plain text.
+   */
+  cacheableSystemPrefix?: string;
 }
 
 export interface OpenRouterResponse {
@@ -27,21 +34,31 @@ export interface OpenRouterResponse {
 }
 
 /**
- * Convert a flat ChatMessage[] into a payload that flips on prompt caching
- * for the first system message. Anthropic accepts a structured content
- * array per message; OpenRouter forwards cache_control as-is.
+ * Merge a stable cacheable prefix with the dynamic system message.
+ * Anthropic path: one system message whose content is
+ *   [ {static, cache_control}, {dynamic} ]
+ * so the cache breakpoint covers only the byte-identical prefix.
+ * Non-Anthropic path: plain-text concatenation.
  */
-function applyAnthropicCache(messages: ChatMessage[]): unknown[] {
-  let cached = false;
+function applySystemPrefix(
+  messages: ChatMessage[],
+  prefix: string,
+  isAnthropic: boolean,
+): unknown[] {
+  let merged = false;
   return messages.map(m => {
-    if (!cached && m.role === 'system' && typeof m.content === 'string' && m.content.length > 1024) {
-      cached = true;
-      return {
-        role: 'system',
-        content: [
-          { type: 'text', text: m.content, cache_control: { type: 'ephemeral' } },
-        ],
-      };
+    if (!merged && m.role === 'system' && typeof m.content === 'string') {
+      merged = true;
+      if (isAnthropic) {
+        return {
+          role: 'system',
+          content: [
+            { type: 'text', text: prefix, cache_control: { type: 'ephemeral' } },
+            { type: 'text', text: m.content },
+          ],
+        };
+      }
+      return { role: 'system', content: `${prefix}\n\n${m.content}` };
     }
     return m;
   });
@@ -54,16 +71,15 @@ export async function callOpenRouter(
   messages: ChatMessage[],
   config: OpenRouterConfig
 ): Promise<OpenRouterResponse> {
-  const { apiKey, model = 'anthropic/claude-sonnet-4.6', maxTokens = 2000, cacheSystemPrompt } = config;
+  const { apiKey, model = 'anthropic/claude-sonnet-4.6', maxTokens = 2000, cacheableSystemPrefix } = config;
 
   if (!apiKey) {
     return { content: '', error: 'OpenRouter API key not configured.' };
   }
 
-  const payloadMessages =
-    cacheSystemPrompt && model.startsWith('anthropic/')
-      ? applyAnthropicCache(messages)
-      : messages;
+  const payloadMessages = cacheableSystemPrefix
+    ? applySystemPrefix(messages, cacheableSystemPrefix, model.startsWith('anthropic/'))
+    : messages;
 
   try {
     const response = await fetch(OPENROUTER_API_URL, {
@@ -111,11 +127,15 @@ export async function* streamOpenRouter(
   messages: ChatMessage[],
   config: OpenRouterConfig
 ): AsyncGenerator<string, void, unknown> {
-  const { apiKey, model = 'anthropic/claude-sonnet-4.6', maxTokens = 2000 } = config;
+  const { apiKey, model = 'anthropic/claude-sonnet-4.6', maxTokens = 2000, cacheableSystemPrefix } = config;
 
   if (!apiKey) {
     throw new Error('OpenRouter API key not configured.');
   }
+
+  const payloadMessages = cacheableSystemPrefix
+    ? applySystemPrefix(messages, cacheableSystemPrefix, model.startsWith('anthropic/'))
+    : messages;
 
   const response = await fetch(OPENROUTER_API_URL, {
     method: 'POST',
@@ -128,7 +148,7 @@ export async function* streamOpenRouter(
     body: JSON.stringify({
       model,
       max_tokens: maxTokens,
-      messages,
+      messages: payloadMessages,
       stream: true,
     }),
   });
