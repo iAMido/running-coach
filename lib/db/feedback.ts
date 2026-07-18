@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { nowInUserTz } from '@/lib/utils/user-time';
 import type { RunFeedback, WeeklySummary } from './types';
 
 // ==================== Run Feedback ====================
@@ -137,8 +138,8 @@ export async function updateWeeklyAiAnalysis(
  * Get the start of the current week (Monday)
  */
 export function getCurrentWeekStart(): string {
-  // Sunday-anchored to match the training plan + dashboard week range.
-  const now = new Date();
+  // Sunday-anchored, in the user's timezone (server is UTC).
+  const now = nowInUserTz();
   const dayOfWeek = now.getDay(); // 0 = Sunday
   const sunday = new Date(now);
   sunday.setDate(now.getDate() - dayOfWeek);

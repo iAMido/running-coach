@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { nowInUserTz, dateInUserTz } from '@/lib/utils/user-time';
 import type { Run, Lap } from './types';
 
 /**
@@ -150,10 +151,10 @@ export async function getTotalDistance(userId: string): Promise<number> {
  * Get this week's runs and stats
  */
 export async function getThisWeekStats(userId: string): Promise<{ runs: Run[]; totalKm: number }> {
-  // Sunday-anchored week — matches the training plan's Sun-Sat structure
-  // and the dashboard's date range. Previously Mon-based, which caused
-  // Sunday runs to be excluded from "this week" calculations.
-  const now = new Date();
+  // Sunday-anchored week in the USER's timezone — matches the training
+  // plan's Sun-Sat structure. (Previously Mon-based, then server-UTC-based;
+  // both mis-bucketed edge runs.)
+  const now = nowInUserTz();
   const dayOfWeek = now.getDay(); // 0 = Sunday
   const sunday = new Date(now);
   sunday.setDate(now.getDate() - dayOfWeek);
@@ -194,11 +195,12 @@ export async function getWeeklyVolume(userId: string, weeks = 12): Promise<{ wee
   const weeklyData: Record<string, number> = {};
 
   (data || []).forEach((run) => {
-    const date = new Date(run.date);
+    // Evaluate the run's calendar date in the user's timezone before
+    // bucketing — a 00:30 Sunday IL run is Saturday 21:30 UTC and would
+    // otherwise land in the previous week.
+    const date = dateInUserTz(new Date(run.date));
     const weekStart = new Date(date);
     const dayOfWeek = weekStart.getDay();
-    // Sunday-anchored — landing on Sunday means subtracting `dayOfWeek`
-    // (0 stays put, 1=Mon goes back 1, etc.)
     weekStart.setDate(date.getDate() - dayOfWeek);
     const weekKey = weekStart.toISOString().split('T')[0];
 

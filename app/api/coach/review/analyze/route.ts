@@ -9,6 +9,7 @@ import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { reviewAnalysisSchema, validateInput } from '@/lib/validation/schemas';
 import { getActivePlan } from '@/lib/db/plans';
 import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
+import { nowInUserTz } from '@/lib/utils/user-time';
 import type { Run, Lap } from '@/lib/db/types';
 import {
   validateContext as supervisorValidate,
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
     // previous Mon-based boundary caused the AI to miss runs logged on
     // Sundays — e.g. Jun 7 Evening Run rendered as "skipped" in the
     // review because the query window started on Jun 8.
-    const now = new Date();
+    const now = nowInUserTz(); // Israel-local "now" — Vercel is UTC
     const dayOfWeek = now.getDay();        // 0 = Sunday
     const sunday = new Date(now);
     sunday.setDate(now.getDate() - dayOfWeek);

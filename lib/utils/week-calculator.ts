@@ -3,6 +3,8 @@
  * Week starts on Sunday
  */
 
+import { nowInUserTz } from './user-time';
+
 /**
  * Get the Sunday that starts the week containing the given date
  * @param date - The date to find the Sunday for
@@ -26,7 +28,10 @@ export function getSundayOfWeek(date: Date): Date {
 export function calculateCurrentWeek(
   startDate: string | Date,
   durationWeeks: number,
-  referenceDate: Date = new Date()
+  // Default reference is "now" in the USER's timezone, not the server's —
+  // Vercel runs UTC, so a bare new Date() put Sunday 00:00-03:00 Israel
+  // into the previous training week.
+  referenceDate: Date = nowInUserTz()
 ): {
   currentWeek: number;
   isBeforeStart: boolean;
@@ -118,7 +123,7 @@ export function formatWeekDateRange(start: Date, end: Date): string {
  * @param date - Optional date (defaults to today)
  * @returns Day name like "Sunday", "Monday", etc.
  */
-export function getTodayDayName(date: Date = new Date()): string {
+export function getTodayDayName(date: Date = nowInUserTz()): string {
   return date.toLocaleDateString('en-US', { weekday: 'long' });
 }
 
@@ -128,7 +133,7 @@ export function getTodayDayName(date: Date = new Date()): string {
  * @param referenceDate - Optional date to compare against
  * @returns true if the workout day is today
  */
-export function isWorkoutToday(workoutDay: string, referenceDate: Date = new Date()): boolean {
+export function isWorkoutToday(workoutDay: string, referenceDate: Date = nowInUserTz()): boolean {
   const today = getTodayDayName(referenceDate);
   return workoutDay.toLowerCase() === today.toLowerCase();
 }

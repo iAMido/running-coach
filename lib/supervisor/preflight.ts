@@ -18,6 +18,7 @@ import type { EnhancedContext, QueryType } from '@/lib/rag/types';
 import type { TrainingPlan, Run } from '@/lib/db/types';
 import type { PreflightResult, PreflightWarning } from './types';
 import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
+import { nowInUserTz } from '@/lib/utils/user-time';
 
 export interface PreflightInput {
   context: EnhancedContext;
@@ -68,7 +69,7 @@ export function validateContext(input: PreflightInput): PreflightResult {
       // Planned workouts for the review week
       const planHasCurrentWeek = !!(
         plan?.plan_json?.weeks &&
-        planWeekForDate(plan, new Date())
+        planWeekForDate(plan, nowInUserTz())
       );
       if (!planHasCurrentWeek) {
         warnings.push({
@@ -112,7 +113,7 @@ export function validateContext(input: PreflightInput): PreflightResult {
     case 'ask_coach':
     case 'grocky': {
       // Soft check: does the AI know what was planned for today?
-      const todayPlan = plan ? plannedWorkoutForDate(plan, new Date()) : null;
+      const todayPlan = plan ? plannedWorkoutForDate(plan, nowInUserTz()) : null;
       if (!todayPlan) {
         warnings.push({
           code: 'no_planned_today',

@@ -3,6 +3,7 @@ import { getAthleteProfile } from '@/lib/db/profile';
 import { getActivePlan } from '@/lib/db/plans';
 import { getRecentFeedback, getWeeklySummary } from '@/lib/db/feedback';
 import { calculateCurrentWeek, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
+import { nowInUserTz } from '@/lib/utils/user-time';
 import type { Run, Lap, RunFeedback, WeeklySummary, AthleteProfile, TrainingPlan, Workout } from '@/lib/db/types';
 import type { FormattedUserContext } from './types';
 
@@ -490,8 +491,10 @@ function formatWeeklySummary(summary: WeeklySummary): string {
  * Get the latest weekly summary for a user
  */
 async function getLatestWeeklySummary(userId: string): Promise<WeeklySummary | null> {
-  // Get the start of the current week
-  const now = new Date();
+  // Start of the current week, evaluated in the user's timezone — the
+  // summary is keyed by week_start date and a UTC-evaluated Sunday could
+  // point at last week between 00:00-03:00 IL Sunday.
+  const now = nowInUserTz();
   const dayOfWeek = now.getDay();
   const weekStart = new Date(now);
   weekStart.setDate(now.getDate() - dayOfWeek);

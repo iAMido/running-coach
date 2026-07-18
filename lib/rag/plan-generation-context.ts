@@ -15,6 +15,7 @@
 
 import { supabase } from '@/lib/db/supabase';
 import { getActivePlan } from '@/lib/db/plans';
+import { dateInUserTz } from '@/lib/utils/user-time';
 import type { Run, TrainingPlan } from '@/lib/db/types';
 
 export interface PlanGenIntake {
@@ -59,7 +60,7 @@ export async function buildPlanGenerationContext(
   const since = new Date();
   since.setDate(since.getDate() - 90);
 
-  const [runsRes, pastPlansRes, active] = await Promise.all([
+  const [runsRes, allTimeRes, pastPlansRes, active] = await Promise.all([
     supabase
       .from('runs')
       .select('id, date, distance_km, duration_min, avg_pace_str, avg_pace_min_km, run_type, workout_name, avg_hr')
@@ -67,6 +68,19 @@ export async function buildPlanGenerationContext(
       .gte('date', since.toISOString())
       .order('date', { ascending: false })
       .limit(200),
+    // ALL-TIME race-distance efforts (no date filter). Only rows near a
+    // standard distance are candidates, so filter distance >= 4.75km
+    // server-side and keep the payload minimal. Needed because a
+    // returning-from-break athlete's 90-day "best" badly understates
+    // their true ceiling — the gap between all-time PR and recent best
+    // is itself a key signal for the plan model.
+    supabase
+      .from('runs')
+      .select('id, date, distance_km, avg_pace_str, avg_pace_min_km')
+      .eq('user_id', userId)
+      .gte('distance_km', 4.75)
+      .order('date', { ascending: false })
+      .limit(1000),
     supabase
       .from('training_plans')
       .select('id, plan_type, plan_json, duration_weeks, start_date, current_week_num, status, created_at')
@@ -78,6 +92,7 @@ export async function buildPlanGenerationContext(
   ]);
 
   const runs90d: RunRow[] = (runsRes.data || []) as RunRow[];
+  const allTimeRuns: RunRow[] = (allTimeRes.data || []) as RunRow[];
   const pastPlans: PastPlan[] = ((pastPlansRes.data || []) as PastPlan[]).filter(
     p => p.id !== active?.id,
   );
@@ -91,6 +106,7 @@ export async function buildPlanGenerationContext(
     ? round1(Math.max(...runs90d.map(r => r.distance_km || 0)))
     : null;
   const prs = computePRs(runs90d);
+  const allTimePrs = computePRs(allTimeRuns);
 
   // ── Format the intake block ──────────────────────────────────────────
   const lines: string[] = [];
@@ -124,12 +140,27 @@ export async function buildPlanGenerationContext(
   }
   lines.push('');
 
-  // PRs / fastest efforts
+  // PRs / fastest efforts — all-time vs recent. The gap between them is a
+  // key signal: a returning athlete with a 51:00 all-time 10K currently
+  // running 56:00 has real rebuild headroom, and pace zones should be set
+  // from where they ARE (recent) while progression targets acknowledge
+  // where they've BEEN (all-time).
+  if (allTimePrs.length > 0) {
+    lines.push('### All-time best efforts at standard distances');
+    for (const pr of allTimePrs) {
+      lines.push(`- ${pr.distance}: ${pr.paceStr} (${pr.run_date}, total ${round1(pr.distance_km)}km)`);
+    }
+    lines.push('');
+  }
   if (prs.length > 0) {
-    lines.push('### Lifetime-best efforts at standard distances (within last 90d window)');
+    lines.push('### Recent best efforts (last 90 days)');
     for (const pr of prs) {
       lines.push(`- ${pr.distance}: ${pr.paceStr} (${pr.run_date}, total ${round1(pr.distance_km)}km)`);
     }
+    lines.push('');
+  }
+  if (allTimePrs.length > 0 && prs.length > 0) {
+    lines.push('Calibrate current pace zones from the RECENT efforts; use the all-time bests only to gauge rebuild headroom and long-horizon potential.');
     lines.push('');
   }
 
@@ -220,7 +251,10 @@ function round1(n: number | null | undefined): number {
 function aggregateWeeklyKm(runs: RunRow[]): { weekStart: string; km: number }[] {
   const byWeek = new Map<string, number>();
   for (const r of runs) {
-    const d = new Date(r.date);
+    // Bucket by the run's calendar date in the user's timezone — a
+    // Sunday-00:30 IL run is Saturday-21:30 UTC and would otherwise land
+    // in the previous week's volume.
+    const d = dateInUserTz(new Date(r.date));
     const day = d.getDay();
     const sunday = new Date(d);
     sunday.setDate(d.getDate() - day);

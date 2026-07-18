@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { calculateCurrentWeek, getSundayOfWeek } from '@/lib/utils/week-calculator';
+import { nowInUserTz } from '@/lib/utils/user-time';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 
 export async function GET() {
@@ -12,46 +13,42 @@ export async function GET() {
   const userId = auth.userId;
 
   try {
-    // Get total runs count
-    const { count: totalRuns } = await supabase
-      .from('runs')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId);
-
-    // Get total distance
-    const { data: distanceData } = await supabase
-      .from('runs')
-      .select('distance_km')
-      .eq('user_id', userId);
-
-    const totalDistanceKm = (distanceData || []).reduce(
-      (sum, run) => sum + (run.distance_km || 0), 0
-    );
-
-    // Get this week's stats (Sunday to now - week starts on Sunday)
-    const now = new Date();
+    // Week boundary (Sunday, user timezone — server is UTC)
+    const now = nowInUserTz();
     const sunday = getSundayOfWeek(now);
 
-    const { data: weekData } = await supabase
-      .from('runs')
-      .select('distance_km')
-      .eq('user_id', userId)
-      .gte('date', sunday.toISOString());
+    // All three fetches are independent — run together. Lifetime totals
+    // come from a Postgres aggregate RPC (runcoach.run_totals): the route
+    // previously pulled EVERY runs row to sum distance in JS, a payload
+    // that grew forever with training history.
+    const [totalsRes, weekRes, planRes] = await Promise.all([
+      supabase.rpc('run_totals', { p_user_id: userId }),
+      supabase
+        .from('runs')
+        .select('distance_km')
+        .eq('user_id', userId)
+        .gte('date', sunday.toISOString()),
+      supabase
+        .from('training_plans')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single(),
+    ]);
 
+    const totalsRow = (totalsRes.data as { total_runs: number; total_km: number }[] | null)?.[0];
+    const totalRuns = Number(totalsRow?.total_runs ?? 0);
+    const totalDistanceKm = Number(totalsRow?.total_km ?? 0);
+
+    const weekData = weekRes.data;
     const thisWeekKm = (weekData || []).reduce(
       (sum, run) => sum + (run.distance_km || 0), 0
     );
     const thisWeekRuns = weekData?.length || 0;
 
-    // Get active plan with calculated current week
-    const { data: activePlan } = await supabase
-      .from('training_plans')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+    const activePlan = planRes.data;
 
     // Calculate current week for the active plan
     let planWithWeekInfo = activePlan;
