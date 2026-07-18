@@ -30,6 +30,7 @@
 
 export const runtime = 'nodejs';
 
+import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { calculateCurrentWeek, formatWeekDateRange } from '@/lib/utils/week-calculator';
@@ -40,9 +41,17 @@ export async function GET(request: NextRequest) {
   // --- auth ---
   // Use a TARS-dedicated secret. We deliberately do NOT fall back to
   // CRON_SECRET so that compromising one doesn't compromise the other.
-  const authHeader = request.headers.get('authorization');
+  // timingSafeEqual prevents timing side-channels on the comparison.
+  const authHeader = request.headers.get('authorization') ?? '';
   const expected = process.env.TARS_API_KEY;
-  if (!expected || authHeader !== `Bearer ${expected}`) {
+  const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  const expectedBuf = Buffer.from(expected ?? '', 'utf8');
+  const providedBuf = Buffer.from(provided, 'utf8');
+  const authOk =
+    !!expected &&
+    expectedBuf.length === providedBuf.length &&
+    timingSafeEqual(expectedBuf, providedBuf);
+  if (!authOk) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
