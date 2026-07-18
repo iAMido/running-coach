@@ -6,7 +6,10 @@ import { classifyRun } from '@/lib/utils/run-classifier';
 import { calculateTrimp } from '@/lib/utils/trimp';
 import { formatPace, calculatePace } from '@/lib/utils/pace';
 import { getAthleteProfile } from '@/lib/db/profile';
+import { getActivePlan } from '@/lib/db/plans';
 import { computeZonePercentsFromStream, parseZonesFromProfile } from '@/lib/utils/zones';
+import { generateRunReaction, plannedWorkoutForRunDate } from '@/lib/ai/run-reaction';
+import type { TrainingPlan } from '@/lib/db/types';
 
 interface StravaLap {
   lap_index: number;
@@ -49,6 +52,9 @@ export async function GET(request: NextRequest) {
       // Per-user classifier inputs: HR zones + workout-name aware run-typing.
       const profile = await getAthleteProfile(userId);
       const zoneBands = parseZonesFromProfile(profile);
+      // Lazily fetched on first imported run (undefined = not fetched yet);
+      // used for the morning-after coach note's planned-vs-actual judgement.
+      let activePlan: TrainingPlan | null | undefined = undefined;
 
       // Refresh if needed
       const expiresAt = new Date(tokenData.expires_at);
@@ -238,6 +244,32 @@ export async function GET(request: NextRequest) {
               }
             }
           } catch { /* best effort */ }
+
+          // Morning-after coach note: a two-sentence Haiku reaction in the
+          // coach's voice, judged against what the plan called for on the
+          // run's date. Stored in runs.coach_notes; the dashboard hero
+          // surfaces it. Strictly best-effort — never fails the sync.
+          try {
+            if (activePlan === undefined) {
+              activePlan = await getActivePlan(userId);
+            }
+            const { workout: plannedWorkout, phase } = plannedWorkoutForRunDate(activePlan, activity.start_date);
+            const note = await generateRunReaction({
+              distanceKm,
+              durationMin,
+              avgPaceStr: formatPace(avgPaceMinKm),
+              avgHr,
+              runType,
+              zonePercents: zonePercents
+                ? { z1: zonePercents.pct_z1, z2: zonePercents.pct_z2, z3: zonePercents.pct_z3, z4: zonePercents.pct_z4, z5: zonePercents.pct_z5, z6: zonePercents.pct_z6 }
+                : null,
+              plannedWorkout,
+              planPhase: phase,
+            });
+            if (note) {
+              await supabase.from('runs').update({ coach_notes: note }).eq('id', insertedRun.id);
+            }
+          } catch { /* note is a bonus, never a blocker */ }
         }
       }
 

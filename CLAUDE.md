@@ -205,6 +205,20 @@ All tables have RLS enabled with policies for authenticated users.
 
 **Supervisor UI:** The chat (`/coach/ask`) renders the supervisor envelope's warnings as a chip above each assistant bubble (`ShieldAlert` icon, warning codes inline). The dashboard (`/coach`) shows a `CoachHealthWidget` summarising the last 7 days from `/api/coach/health` — total calls, errors, avg critic score, preflight warning count, ceiling-hit count, top warning codes. Both gracefully hide when there's no data yet.
 
+**Prompt caching (post-restructure):** `COACH_STATIC_BLOCK` (persona + coaching rules, byte-stable, NO interpolation) travels as `cacheableSystemPrefix` in `callOpenRouter`/`streamOpenRouter` and carries the Anthropic `cache_control` breakpoint; `buildCoachDynamicBlock(context)` (RAG context + task line) is the uncached system message. Never interpolate anything per-request into the static block or the cache stops hitting. `buildEnhancedCoachSystemPrompt` still exists as static+dynamic concat for non-caching callers (grocky, plan-adjust).
+
+**Request-scoped preloads:** `buildContext(userId, query, queryType, { plan, profile })` and `formatUserContext(userId, maxTokens, { plan, profile })` accept already-fetched rows (`null` = checked-and-absent, `undefined` = fetch internally). Routes fetch the active plan / profile once and thread them down — previously the plan was queried up to 3× per request. The Haiku query classifier only runs for `ask_coach`/`grocky` (user-authored text); fixed-string query types skip it.
+
+**Post-response work:** telemetry (`logCoachCall`), the Haiku critic, and chat message persistence run inside `next/server after()` — off the critical path and platform-guaranteed (un-awaited promises are not). Response `supervisor.callId` is therefore always `null`; the callId lives on the persisted rows.
+
+**Timezone rule:** server-side day/week boundary math MUST use `lib/utils/user-time.ts` (`nowInUserTz` / `dateInUserTz` / `userDateStr`, Asia/Jerusalem) — Vercel runs UTC and bare `new Date()` puts Sunday 00:00-03:00 IL into the previous training week. Client components may use `new Date()` (browser is already in the user's tz).
+
+**Morning-after coach note:** both Strava sync paths (manual + cron) call `generateRunReaction` (`lib/ai/run-reaction.ts`, Haiku) after importing a run — a two-sentence coach reaction judged against the plan's workout for that date (`plannedWorkoutForRunDate`), stored in `runs.coach_notes`. Dashboard shows it for 36h. Always best-effort; never fails the sync.
+
+**Readiness verdict:** `/api/coach/stats` returns `readiness: { verdict: GO|EASY|REST, reasons, fatigueScore }` computed by `lib/utils/readiness.ts` (pure function — fatigue score + yesterday's zone distribution + today's planned workout). Dashboard hero renders it as a colored badge. No LLM involved; the chat coach reads the same signals so app and coach stay consistent.
+
+**Stats aggregates:** lifetime totals come from the `runcoach.run_totals(p_user_id)` RPC (count + sum in one call) — do not reintroduce the select-all-rows-and-reduce pattern.
+
 **Chat history persistence:** `/coach/ask` posts `sessionId` along with messages. `/api/coach/chat/ask` resolves or creates a `runcoach.coach_chat_sessions` row (title seeded from the first user message) and persists each user + assistant turn into `runcoach.coach_chat_messages` with the supervisor envelope snapshot. The page has a History dropdown listing past sessions; click loads a session via `GET /api/coach/chat/sessions/[id]`. Soft-archive via `DELETE` (sets `status='archived'`).
 
 **Streaming plan generation:** `/api/coach/plans/generate/stream` is an SSE variant of plan-gen. It emits `meta`, `token` (many), and `done` events. The page consumes the stream, shows a live preview window, and sets the final plan from the `done` payload. Final JSON parse + DB write + supervisor logging + Haiku critic all happen server-side after the stream completes.

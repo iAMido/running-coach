@@ -310,6 +310,12 @@ export interface DashboardStats {
   thisWeekKm: number;
   thisWeekRuns: number;
   activePlan: TrainingPlan | null;
+  /** Deterministic daily verdict computed server-side (lib/utils/readiness). */
+  readiness?: {
+    verdict: 'GO' | 'EASY' | 'REST';
+    reasons: string[];
+    fatigueScore: number;
+  };
 }
 
 // ============================================================

@@ -8,8 +8,10 @@ import { formatPace, calculatePace } from '@/lib/utils/pace';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { stravaSyncSchema, validateInput } from '@/lib/validation/schemas';
 import { getAthleteProfile } from '@/lib/db/profile';
+import { getActivePlan } from '@/lib/db/plans';
 import { computeZonePercentsFromStream, parseZonesFromProfile, type ZoneBands } from '@/lib/utils/zones';
-import type { AthleteProfile } from '@/lib/db/types';
+import { generateRunReaction, plannedWorkoutForRunDate } from '@/lib/ai/run-reaction';
+import type { AthleteProfile, TrainingPlan } from '@/lib/db/types';
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser();
@@ -129,6 +131,8 @@ export async function POST(request: NextRequest) {
     // actual HR zones rather than hardcoded defaults.
     const profile: AthleteProfile | null = await getAthleteProfile(userId);
     const zoneBands: ZoneBands = parseZonesFromProfile(profile);
+    // Lazily fetched on first imported run — used by the coach-note step.
+    let activePlan: TrainingPlan | null | undefined = undefined;
 
     let newRunsCount = 0;
     let lapsBackfilledCount = 0;
@@ -292,6 +296,29 @@ export async function POST(request: NextRequest) {
           } catch (lapErr) {
             console.log(`  Failed to fetch laps: ${lapErr}`);
           }
+
+          // Morning-after coach note — same as the cron path. Best-effort.
+          try {
+            if (activePlan === undefined) {
+              activePlan = await getActivePlan(userId);
+            }
+            const { workout: plannedWorkout, phase } = plannedWorkoutForRunDate(activePlan, activity.start_date);
+            const note = await generateRunReaction({
+              distanceKm,
+              durationMin,
+              avgPaceStr: formatPace(avgPaceMinKm),
+              avgHr,
+              runType,
+              zonePercents: zonePercents
+                ? { z1: zonePercents.pct_z1, z2: zonePercents.pct_z2, z3: zonePercents.pct_z3, z4: zonePercents.pct_z4, z5: zonePercents.pct_z5, z6: zonePercents.pct_z6 }
+                : null,
+              plannedWorkout,
+              planPhase: phase,
+            });
+            if (note) {
+              await supabase.from('runs').update({ coach_notes: note }).eq('id', insertedRun.id);
+            }
+          } catch { /* note is a bonus, never a blocker */ }
         }
       }
     }
