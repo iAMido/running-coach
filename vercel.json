@@ -1,11 +1,11 @@
 {
   "crons": [
     {
-      "path": "/api/cron/strava-sync",
+      "path": "/api/cron/intervals-sync",
       "schedule": "0 15 * * *"
     },
     {
-      "path": "/api/cron/strava-sync",
+      "path": "/api/cron/intervals-sync",
       "schedule": "40 21 * * *"
     },
     {

@@ -42,6 +42,22 @@ export function userDateStr(d: Date = new Date()): string {
 }
 
 /**
+ * YYYY-MM-DD for a calendar day N days before today, in the user's timezone.
+ *
+ * Proper calendar arithmetic: the fields are already in the user's zone, and
+ * `setDate` handles month and year rollover. Subtracting `n * 86400000` from an
+ * instant would drift by an hour across a DST boundary and can land on the
+ * wrong date.
+ */
+export function userDateStrDaysAgo(days: number): string {
+  const d = nowInUserTz();
+  d.setDate(d.getDate() - days);
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${month}-${day}`;
+}
+
+/**
  * What wall-clock time does `timeZone` read at this instant, expressed as the
  * epoch ms of those same calendar fields interpreted as UTC.
  *

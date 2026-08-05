@@ -145,6 +145,17 @@ export const stravaSyncSchema = z.object({
   daysBack: z.number().int().min(1).max(365).optional(),
 });
 
+// intervals.icu sync validation.
+//
+// daysBack is capped well below a full year on purpose: this endpoint is the
+// steady-state sync, not the migration. Historical catch-up belongs to
+// scripts/backfill-intervals.ts, which is dry-run-first and reports what it
+// would change. A 400-day pull through here would perform the same
+// reconciliation unattended, with no report.
+export const intervalsSyncSchema = z.object({
+  daysBack: z.number().int().min(1).max(30).optional(),
+});
+
 // Review analysis validation
 export const reviewAnalysisSchema = z.object({
   overallFeeling: rating.optional(),
