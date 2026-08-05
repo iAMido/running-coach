@@ -2,23 +2,11 @@ export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
-import { classifyRun } from '@/lib/utils/run-classifier';
-import { calculateTrimp } from '@/lib/utils/trimp';
-import { formatPace, calculatePace } from '@/lib/utils/pace';
 import { getAthleteProfile } from '@/lib/db/profile';
 import { getActivePlan } from '@/lib/db/plans';
-import { computeZonePercentsFromStream, parseZonesFromProfile } from '@/lib/utils/zones';
-import { generateRunReaction, plannedWorkoutForRunDate } from '@/lib/ai/run-reaction';
-import type { TrainingPlan } from '@/lib/db/types';
-
-interface StravaLap {
-  lap_index: number;
-  distance: number;
-  moving_time: number;
-  average_heartrate?: number;
-  max_heartrate?: number;
-  average_speed: number;
-}
+import { parseZonesFromProfile } from '@/lib/utils/zones';
+import { upsertRun, once } from '@/lib/ingest/upsert-run';
+import { filterRuns, toNormalizedRun } from '@/lib/ingest/strava';
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
@@ -52,9 +40,9 @@ export async function GET(request: NextRequest) {
       // Per-user classifier inputs: HR zones + workout-name aware run-typing.
       const profile = await getAthleteProfile(userId);
       const zoneBands = parseZonesFromProfile(profile);
-      // Lazily fetched on first imported run (undefined = not fetched yet);
-      // used for the morning-after coach note's planned-vs-actual judgement.
-      let activePlan: TrainingPlan | null | undefined = undefined;
+      // Fetched at most once per user, and only if a run is actually imported.
+      // Used for the morning-after coach note's planned-vs-actual judgement.
+      const activePlan = once(() => getActivePlan(userId));
 
       // Refresh if needed
       const expiresAt = new Date(tokenData.expires_at);
@@ -101,175 +89,23 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
-      const activities = await activitiesResponse.json();
-      const runs = activities.filter(
-        (a: { type: string }) => a.type === 'Run' || a.type === 'VirtualRun'
-      );
+      const runs = filterRuns(await activitiesResponse.json());
 
       let newCount = 0;
       let lapsBackfilled = 0;
 
       for (const activity of runs) {
-        const filename = `strava_${activity.id}`;
+        try {
+          const result = await upsertRun(userId, toNormalizedRun(activity, accessToken), {
+            profile,
+            zoneBands,
+            activePlan,
+          });
 
-        const { data: existing } = await supabase
-          .from('runs')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('filename', filename)
-          .single();
-
-        if (existing) {
-          // Backfill laps if missing
-          const { count } = await supabase
-            .from('laps')
-            .select('*', { count: 'exact', head: true })
-            .eq('run_id', existing.id);
-
-          if (!count) {
-            try {
-              const lapsResponse = await fetch(
-                `https://www.strava.com/api/v3/activities/${activity.id}/laps`,
-                { headers: { Authorization: `Bearer ${accessToken}` } }
-              );
-              if (lapsResponse.ok) {
-                const lapsData = await lapsResponse.json();
-                if (Array.isArray(lapsData) && lapsData.length > 0) {
-                  const lapsToInsert = lapsData.map((lap: StravaLap) => ({
-                    run_id: existing.id,
-                    lap_number: lap.lap_index,
-                    distance_km: Math.round((lap.distance / 1000) * 1000) / 1000,
-                    duration_sec: Math.round(lap.moving_time),
-                    avg_hr: lap.average_heartrate ? Math.round(lap.average_heartrate) : null,
-                    max_hr: lap.max_heartrate ? Math.round(lap.max_heartrate) : null,
-                    avg_pace_str: lap.average_speed > 0
-                      ? formatPace(1 / (lap.average_speed * 60 / 1000))
-                      : null,
-                  }));
-                  const { error } = await supabase.from('laps').insert(lapsToInsert);
-                  if (!error) lapsBackfilled++;
-                }
-              }
-            } catch { /* best effort */ }
-          }
-          continue;
-        }
-
-        // New run
-        const distanceKm = activity.distance / 1000;
-        const durationMin = activity.moving_time / 60;
-        const avgHr = activity.average_heartrate ? Math.round(activity.average_heartrate) : null;
-        const maxHr = activity.max_heartrate ? Math.round(activity.max_heartrate) : null;
-        const avgPaceMinKm = calculatePace(distanceKm, durationMin);
-
-        // HR + time streams → zone distribution. Best-effort.
-        let zonePercents: Awaited<ReturnType<typeof computeZonePercentsFromStream>> | null = null;
-        if (avgHr) {
-          try {
-            const streamResp = await fetch(
-              `https://www.strava.com/api/v3/activities/${activity.id}/streams?keys=heartrate,time&key_by_type=true`,
-              { headers: { Authorization: `Bearer ${accessToken}` } },
-            );
-            if (streamResp.ok) {
-              const streams = await streamResp.json();
-              const hr = streams?.heartrate?.data;
-              const time = streams?.time?.data || null;
-              if (Array.isArray(hr) && hr.length > 0) {
-                zonePercents = computeZonePercentsFromStream(hr, time, zoneBands);
-              }
-            }
-          } catch { /* enrichment only */ }
-        }
-
-        const runType = classifyRun({
-          distanceKm,
-          avgHr: avgHr ?? undefined,
-          maxHr: maxHr ?? undefined,
-          durationMin,
-          workoutName: activity.name,
-          profile,
-          zonePercents: zonePercents
-            ? { z1: zonePercents.pct_z1, z2: zonePercents.pct_z2, z3: zonePercents.pct_z3, z4: zonePercents.pct_z4, z5: zonePercents.pct_z5, z6: zonePercents.pct_z6 }
-            : undefined,
-        });
-
-        const trimp = avgHr ? calculateTrimp({ durationMin, avgHr }) : null;
-
-        const { error: insertError, data: insertedRun } = await supabase
-          .from('runs')
-          .insert({
-            user_id: userId,
-            filename,
-            date: activity.start_date,
-            distance_km: Math.round(distanceKm * 100) / 100,
-            duration_min: Math.round(durationMin * 100) / 100,
-            avg_hr: avgHr,
-            max_hr: maxHr,
-            avg_pace_min_km: avgPaceMinKm,
-            avg_pace_str: formatPace(avgPaceMinKm),
-            calories: activity.calories || null,
-            run_type: runType,
-            workout_name: activity.name,
-            trimp,
-            data_source: 'strava_sync',
-            ...(zonePercents || {}),
-          })
-          .select('id')
-          .single();
-
-        if (!insertError && insertedRun) {
-          newCount++;
-
-          // Fetch laps
-          try {
-            const lapsResponse = await fetch(
-              `https://www.strava.com/api/v3/activities/${activity.id}/laps`,
-              { headers: { Authorization: `Bearer ${accessToken}` } }
-            );
-            if (lapsResponse.ok) {
-              const lapsData = await lapsResponse.json();
-              if (Array.isArray(lapsData) && lapsData.length > 0) {
-                const lapsToInsert = lapsData.map((lap: StravaLap) => ({
-                  run_id: insertedRun.id,
-                  lap_number: lap.lap_index,
-                  distance_km: Math.round((lap.distance / 1000) * 1000) / 1000,
-                  duration_sec: Math.round(lap.moving_time),
-                  avg_hr: lap.average_heartrate ? Math.round(lap.average_heartrate) : null,
-                  max_hr: lap.max_heartrate ? Math.round(lap.max_heartrate) : null,
-                  avg_pace_str: lap.average_speed > 0
-                    ? formatPace(1 / (lap.average_speed * 60 / 1000))
-                    : null,
-                }));
-                await supabase.from('laps').insert(lapsToInsert);
-              }
-            }
-          } catch { /* best effort */ }
-
-          // Morning-after coach note: a two-sentence Haiku reaction in the
-          // coach's voice, judged against what the plan called for on the
-          // run's date. Stored in runs.coach_notes; the dashboard hero
-          // surfaces it. Strictly best-effort — never fails the sync.
-          try {
-            if (activePlan === undefined) {
-              activePlan = await getActivePlan(userId);
-            }
-            const { workout: plannedWorkout, phase } = plannedWorkoutForRunDate(activePlan, activity.start_date);
-            const note = await generateRunReaction({
-              distanceKm,
-              durationMin,
-              avgPaceStr: formatPace(avgPaceMinKm),
-              avgHr,
-              runType,
-              zonePercents: zonePercents
-                ? { z1: zonePercents.pct_z1, z2: zonePercents.pct_z2, z3: zonePercents.pct_z3, z4: zonePercents.pct_z4, z5: zonePercents.pct_z5, z6: zonePercents.pct_z6 }
-                : null,
-              plannedWorkout,
-              planPhase: phase,
-            });
-            if (note) {
-              await supabase.from('runs').update({ coach_notes: note }).eq('id', insertedRun.id);
-            }
-          } catch { /* note is a bonus, never a blocker */ }
+          if (result.created) newCount++;
+          else if (result.lapsWritten > 0) lapsBackfilled++;
+        } catch {
+          // One bad activity must not abort the rest of the user's sync.
         }
       }
 

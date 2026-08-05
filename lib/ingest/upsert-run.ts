@@ -1,0 +1,419 @@
+/**
+ * Provider-agnostic run ingestion.
+ *
+ * The per-activity mapping — zone bucketing, classification, TRIMP, pace, laps,
+ * the morning-after coach note — used to live twice, once in
+ * `app/api/strava/sync/route.ts` and once in `app/api/cron/strava-sync/route.ts`.
+ * intervals.icu would have made it three copies. This is the single owner.
+ *
+ * A provider's only job is to produce a `NormalizedRun`; everything downstream
+ * of that is identical no matter where the activity came from.
+ *
+ * ## Matching
+ *
+ * The rule that keeps a backfill from duplicating runs already in the table:
+ *
+ *   1. exact `filename = externalId`  -> update that row
+ *   2. else same user, |Δdate| <= 3h and |Δdistance| <= max(50 m, 2%)  -> update that row
+ *   3. else insert
+ *
+ * Rule 2 exists because intervals.icu and Strava assign unrelated ids to the
+ * same run, so `filename` alone would insert a second copy of all ~98 runs the
+ * database already holds — and orphan the `run_feedback` rows hanging off the
+ * originals.
+ *
+ * Updates are always **fill-null-only** and always preserve the row's `id`.
+ * `run_feedback.run_id` and `laps.run_id` are both ON DELETE CASCADE, so
+ * re-keying or replacing a row silently destroys feedback and laps. A non-null
+ * column is never overwritten, which also makes re-ingestion idempotent and
+ * means historical `run_type` is never reclassified under newer zone bands.
+ */
+
+import { supabase } from '@/lib/db/supabase';
+import { classifyRun } from '@/lib/utils/run-classifier';
+import { calculateTrimp } from '@/lib/utils/trimp';
+import { formatPace, calculatePace } from '@/lib/utils/pace';
+import { computeZonePercentsFromStream, type ZoneBands } from '@/lib/utils/zones';
+import { generateRunReaction, plannedWorkoutForRunDate } from '@/lib/ai/run-reaction';
+import type { AthleteProfile, TrainingPlan } from '@/lib/db/types';
+
+// ------------------------------------------------------------------ types
+
+/** A value, or a function producing it — resolved only if actually needed. */
+export type Lazy<T> = T | (() => T | Promise<T>);
+
+export interface NormalizedLap {
+  lapNumber: number;
+  distanceKm?: number;
+  durationSec?: number;
+  avgHr?: number | null;
+  maxHr?: number | null;
+  avgPaceStr?: string | null;
+}
+
+export interface HrStream {
+  hr: number[];
+  /** Seconds elapsed, parallel to `hr`. Null means assume 1 Hz sampling. */
+  time: number[] | null;
+}
+
+export type DataSource = 'strava_sync' | 'intervals_sync' | 'fit_upload' | 'garmin';
+
+export interface NormalizedRun {
+  /** Stored as `filename`, e.g. "strava_1234" or "icu_i172834288". */
+  externalId: string;
+  /** ISO instant, true UTC. Providers reporting local time must convert first. */
+  date: string;
+  distanceKm: number;
+  durationMin: number;
+  avgHr?: number | null;
+  maxHr?: number | null;
+  calories?: number | null;
+  workoutName?: string | null;
+  dataSource: DataSource;
+  /** Fetched only when zones are actually needed — see `resolveZones`. */
+  hrStream?: Lazy<HrStream | null> | null;
+  /** Fetched only when the target row has no laps. */
+  laps?: Lazy<NormalizedLap[] | null> | null;
+}
+
+export interface UpsertContext {
+  profile: AthleteProfile | null;
+  zoneBands: ZoneBands;
+  /**
+   * Used for the morning-after coach note. Pass a thunk (see `once`) to keep
+   * the plan unfetched until a run is actually imported.
+   */
+  activePlan?: Lazy<TrainingPlan | null> | null;
+  /** Set false to skip the coach note (backfills, where it is noise). */
+  generateCoachNote?: boolean;
+}
+
+export interface UpsertResult {
+  runId: string;
+  created: boolean;
+  lapsWritten: number;
+  /** True when an existing row was found and at least one null column filled. */
+  enriched: boolean;
+}
+
+type ZonePercents = ReturnType<typeof computeZonePercentsFromStream>;
+
+/** The columns this module reads when deciding what an existing row is missing. */
+interface ExistingRunRow {
+  id: string;
+  filename: string | null;
+  date: string;
+  distance_km: number | null;
+  duration_min: number | null;
+  avg_hr: number | null;
+  max_hr: number | null;
+  avg_pace_min_km: number | null;
+  avg_pace_str: string | null;
+  calories: number | null;
+  run_type: string | null;
+  workout_name: string | null;
+  coach_notes: string | null;
+  trimp: number | null;
+  data_source: string | null;
+  pct_z1: number | null;
+  pct_z2: number | null;
+  pct_z3: number | null;
+  pct_z4: number | null;
+  pct_z5: number | null;
+  pct_z6: number | null;
+}
+
+const EXISTING_COLUMNS =
+  'id,filename,date,distance_km,duration_min,avg_hr,max_hr,avg_pace_min_km,avg_pace_str,' +
+  'calories,run_type,workout_name,coach_notes,trimp,data_source,pct_z1,pct_z2,pct_z3,pct_z4,pct_z5,pct_z6';
+
+// -------------------------------------------------------------- lazy utils
+
+async function resolve<T>(v: Lazy<T> | null | undefined): Promise<T | null> {
+  if (v == null) return null;
+  if (typeof v === 'function') return (await (v as () => T | Promise<T>)()) ?? null;
+  return v;
+}
+
+/**
+ * Memoize an async thunk so a loop over many activities fetches at most once.
+ * Callers use this for the active training plan.
+ */
+export function once<T>(fn: () => Promise<T>): () => Promise<T> {
+  let pending: Promise<T> | undefined;
+  return () => (pending ??= fn());
+}
+
+// ------------------------------------------------------------------ match
+
+/** Distance tolerance: the larger of 50 m and 2% of the longer of the two. */
+const ABS_DISTANCE_TOLERANCE_KM = 0.05;
+const REL_DISTANCE_TOLERANCE = 0.02;
+const MATCH_WINDOW_HOURS = 3;
+
+function distancesMatch(a: number, b: number): boolean {
+  const tolerance = Math.max(ABS_DISTANCE_TOLERANCE_KM, REL_DISTANCE_TOLERANCE * Math.max(a, b));
+  return Math.abs(a - b) <= tolerance;
+}
+
+/**
+ * `new Date` here is absolute-instant arithmetic (window bounds around a
+ * timestamp), not calendar math — it is timezone-independent, so the
+ * `lib/utils/user-time.ts` rule does not apply. Day/week questions in this
+ * module go through `plannedWorkoutForRunDate`, which handles the timezone.
+ */
+async function findExistingRun(userId: string, run: NormalizedRun): Promise<ExistingRunRow | null> {
+  const { data: exact } = await supabase
+    .from('runs')
+    .select(EXISTING_COLUMNS)
+    .eq('user_id', userId)
+    .eq('filename', run.externalId)
+    .maybeSingle();
+
+  if (exact) return exact as unknown as ExistingRunRow;
+
+  const centre = new Date(run.date).getTime();
+  if (!Number.isFinite(centre)) return null;
+  const windowMs = MATCH_WINDOW_HOURS * 3_600_000;
+
+  const { data: nearby } = await supabase
+    .from('runs')
+    .select(EXISTING_COLUMNS)
+    .eq('user_id', userId)
+    .gte('date', new Date(centre - windowMs).toISOString())
+    .lte('date', new Date(centre + windowMs).toISOString());
+
+  const candidates = ((nearby ?? []) as unknown as ExistingRunRow[]).filter(
+    (r) => r.distance_km != null && distancesMatch(r.distance_km, run.distanceKm),
+  );
+  if (candidates.length === 0) return null;
+
+  // Closest in time wins; distance breaks ties.
+  return candidates.reduce((best, r) => {
+    const d = (x: ExistingRunRow) => Math.abs(new Date(x.date).getTime() - centre);
+    if (d(r) !== d(best)) return d(r) < d(best) ? r : best;
+    const dist = (x: ExistingRunRow) => Math.abs((x.distance_km ?? 0) - run.distanceKm);
+    return dist(r) < dist(best) ? r : best;
+  });
+}
+
+// ------------------------------------------------------------------ zones
+
+async function resolveZones(run: NormalizedRun, zoneBands: ZoneBands): Promise<ZonePercents | null> {
+  if (!run.avgHr) return null;
+  try {
+    const stream = await resolve(run.hrStream);
+    if (!stream || !Array.isArray(stream.hr) || stream.hr.length === 0) return null;
+    return computeZonePercentsFromStream(stream.hr, stream.time, zoneBands);
+  } catch {
+    // Zone data is an enrichment; a provider outage must not fail the import.
+    return null;
+  }
+}
+
+function zonesForClassifier(z: ZonePercents | null) {
+  return z
+    ? { z1: z.pct_z1, z2: z.pct_z2, z3: z.pct_z3, z4: z.pct_z4, z5: z.pct_z5, z6: z.pct_z6 }
+    : undefined;
+}
+
+// ------------------------------------------------------------------- laps
+
+async function countLaps(runId: string): Promise<number> {
+  const { count } = await supabase.from('laps').select('*', { count: 'exact', head: true }).eq('run_id', runId);
+  return count ?? 0;
+}
+
+/** Insert laps for a run. Returns how many rows landed; best-effort throughout. */
+async function writeLaps(runId: string, run: NormalizedRun): Promise<number> {
+  try {
+    const laps = await resolve(run.laps);
+    if (!laps || laps.length === 0) return 0;
+
+    const rows = laps.map((lap) => ({
+      run_id: runId,
+      lap_number: lap.lapNumber,
+      distance_km: lap.distanceKm != null ? Math.round(lap.distanceKm * 1000) / 1000 : null,
+      duration_sec: lap.durationSec != null ? Math.round(lap.durationSec) : null,
+      avg_hr: lap.avgHr != null ? Math.round(lap.avgHr) : null,
+      max_hr: lap.maxHr != null ? Math.round(lap.maxHr) : null,
+      avg_pace_str: lap.avgPaceStr ?? null,
+    }));
+
+    const { error } = await supabase.from('laps').insert(rows);
+    return error ? 0 : rows.length;
+  } catch {
+    return 0;
+  }
+}
+
+// ------------------------------------------------------------- coach note
+
+async function attachCoachNote(
+  runId: string,
+  run: NormalizedRun,
+  runType: string,
+  zones: ZonePercents | null,
+  avgPaceMinKm: number,
+  ctx: UpsertContext,
+): Promise<void> {
+  try {
+    const plan = await resolve(ctx.activePlan);
+    const { workout, phase } = plannedWorkoutForRunDate(plan, run.date);
+    const note = await generateRunReaction({
+      distanceKm: run.distanceKm,
+      durationMin: run.durationMin,
+      avgPaceStr: formatPace(avgPaceMinKm),
+      avgHr: run.avgHr ?? null,
+      runType,
+      zonePercents: zonesForClassifier(zones) ?? null,
+      plannedWorkout: workout,
+      planPhase: phase,
+    });
+    if (note) {
+      await supabase.from('runs').update({ coach_notes: note }).eq('id', runId);
+    }
+  } catch {
+    // The note is a bonus, never a blocker.
+  }
+}
+
+// ----------------------------------------------------------------- upsert
+
+/**
+ * Insert a run, or enrich the row that already represents it.
+ *
+ * Never deletes, never re-keys, never overwrites a populated column.
+ */
+export async function upsertRun(
+  userId: string,
+  run: NormalizedRun,
+  ctx: UpsertContext,
+): Promise<UpsertResult> {
+  const existing = await findExistingRun(userId, run);
+  return existing ? enrichExisting(existing, run, ctx) : insertNew(userId, run, ctx);
+}
+
+async function insertNew(userId: string, run: NormalizedRun, ctx: UpsertContext): Promise<UpsertResult> {
+  const avgHr = run.avgHr != null ? Math.round(run.avgHr) : null;
+  const maxHr = run.maxHr != null ? Math.round(run.maxHr) : null;
+  const avgPaceMinKm = calculatePace(run.distanceKm, run.durationMin);
+
+  const zones = await resolveZones(run, ctx.zoneBands);
+
+  const runType = classifyRun({
+    distanceKm: run.distanceKm,
+    avgHr: avgHr ?? undefined,
+    maxHr: maxHr ?? undefined,
+    durationMin: run.durationMin,
+    workoutName: run.workoutName,
+    profile: ctx.profile,
+    zonePercents: zonesForClassifier(zones),
+  });
+
+  const trimp = avgHr ? calculateTrimp({ durationMin: run.durationMin, avgHr }) : null;
+
+  const { data: inserted, error } = await supabase
+    .from('runs')
+    .insert({
+      user_id: userId,
+      filename: run.externalId,
+      date: run.date,
+      distance_km: Math.round(run.distanceKm * 100) / 100,
+      duration_min: Math.round(run.durationMin * 100) / 100,
+      avg_hr: avgHr,
+      max_hr: maxHr,
+      avg_pace_min_km: avgPaceMinKm,
+      avg_pace_str: formatPace(avgPaceMinKm),
+      calories: run.calories || null,
+      run_type: runType,
+      workout_name: run.workoutName ?? null,
+      trimp,
+      data_source: run.dataSource,
+      ...(zones || {}),
+    })
+    .select('id')
+    .single();
+
+  if (error || !inserted) {
+    throw new Error(`Failed to insert run ${run.externalId}: ${error?.message ?? 'no row returned'}`);
+  }
+
+  const runId = (inserted as { id: string }).id;
+  const lapsWritten = await writeLaps(runId, run);
+
+  if (ctx.generateCoachNote !== false) {
+    await attachCoachNote(runId, run, runType, zones, avgPaceMinKm, ctx);
+  }
+
+  return { runId, created: true, lapsWritten, enriched: false };
+}
+
+async function enrichExisting(
+  existing: ExistingRunRow,
+  run: NormalizedRun,
+  ctx: UpsertContext,
+): Promise<UpsertResult> {
+  const patch: Record<string, unknown> = {};
+  const fill = (column: keyof ExistingRunRow, value: unknown) => {
+    if (existing[column] == null && value != null) patch[column] = value;
+  };
+
+  fill('filename', run.externalId);
+  fill('avg_hr', run.avgHr != null ? Math.round(run.avgHr) : null);
+  fill('max_hr', run.maxHr != null ? Math.round(run.maxHr) : null);
+  fill('calories', run.calories || null);
+  fill('workout_name', run.workoutName ?? null);
+  fill('data_source', run.dataSource);
+
+  if (existing.avg_pace_min_km == null || existing.avg_pace_str == null) {
+    const pace = calculatePace(run.distanceKm, run.durationMin);
+    fill('avg_pace_min_km', pace);
+    fill('avg_pace_str', formatPace(pace));
+  }
+
+  const effectiveAvgHr = existing.avg_hr ?? (run.avgHr != null ? Math.round(run.avgHr) : null);
+  if (existing.trimp == null && effectiveAvgHr) {
+    fill('trimp', calculateTrimp({ durationMin: existing.duration_min ?? run.durationMin, avgHr: effectiveAvgHr }));
+  }
+
+  // Only pay for the HR stream when the row is actually missing its zones.
+  // A complete row costs zero extra provider calls.
+  let zones: ZonePercents | null = null;
+  if (existing.pct_z1 == null) {
+    zones = await resolveZones(run, ctx.zoneBands);
+    if (zones) Object.assign(patch, zones);
+  }
+
+  // Classify only if the row was never classified — never restate history under
+  // newer zone bands.
+  if (existing.run_type == null) {
+    patch.run_type = classifyRun({
+      distanceKm: existing.distance_km ?? run.distanceKm,
+      avgHr: effectiveAvgHr ?? undefined,
+      maxHr: (existing.max_hr ?? run.maxHr) ?? undefined,
+      durationMin: existing.duration_min ?? run.durationMin,
+      workoutName: existing.workout_name ?? run.workoutName,
+      profile: ctx.profile,
+      zonePercents: zonesForClassifier(zones),
+    });
+  }
+
+  if (Object.keys(patch).length > 0) {
+    await supabase.from('runs').update(patch).eq('id', existing.id);
+  }
+
+  // Backfill laps only when the row has none — never duplicate an existing set.
+  let lapsWritten = 0;
+  if ((await countLaps(existing.id)) === 0) {
+    lapsWritten = await writeLaps(existing.id, run);
+  }
+
+  return {
+    runId: existing.id,
+    created: false,
+    lapsWritten,
+    enriched: Object.keys(patch).length > 0,
+  };
+}

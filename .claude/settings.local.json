@@ -40,7 +40,22 @@
       "mcp__vercel__web_fetch_vercel_url",
       "mcp__vercel__get_project",
       "mcp__vercel__get_deployment",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Read(//c/Users/ido/running-coach/docs/**)",
+      "Read(//c/Users/ido/running-coach/.claude/worktrees/**)",
+      "Bash(cd \"C:/Users/ido/running-coach/.claude/worktrees/strava-intervals-icu-migration-d15324\" && ls scripts/ 2>/dev/null || echo \"NO scripts dir\"; echo \"--- pkg ---\"; cat package.json; echo \"--- supabase dir ---\"; ls -R supabase 2>/dev/null | head -40; echo \"--- env files present in main checkout ---\"; ls -a \"C:/Users/ido/running-coach/\" | grep -i env)",
+      "Bash(bun install *)",
+      "Bash(bun run *)",
+      "Bash(cp \"C:/Users/ido/running-coach/docs/intervals-icu-implementation-spec.md\" docs/)",
+      "Bash(cp \"C:/Users/ido/running-coach/docs/intervals-icu-probe-findings.md\" docs/)",
+      "Bash(bunx tsc *)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(bunx tsx *)",
+      "Bash(echo \"---exit=$?\")",
+      "Bash(git add *)",
+      "Bash(git commit -q -m '@ *)",
+      "Bash(git push *)",
+      "Bash(bunx eslint *)"
     ]
   },
   "enableAllProjectMcpServers": true,
