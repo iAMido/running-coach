@@ -30,6 +30,11 @@
  * Expected: 6 pairs on 2025-12-15, 12-18, 12-20, 12-22, 12-26, 12-29.
  * Expected end state: 666 -> 660 runs.
  *
+ * APPLIED 2026-08-05. All 6 pairs merged: 666 -> 660 runs, laps unchanged at
+ * 483, run_feedback unchanged at 27, orphaned feedback still 1 (the known
+ * pre-existing one — nothing cascaded). Re-running now reports zero pairs,
+ * which is what idempotency looks like here.
+ *
  * The 10 ambiguous 2022 pairs are deliberately out of scope: different
  * filenames, both copies carry zones, neither carries laps.
  */
