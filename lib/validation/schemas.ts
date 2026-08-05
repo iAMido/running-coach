@@ -156,6 +156,18 @@ export const intervalsSyncSchema = z.object({
   daysBack: z.number().int().min(1).max(30).optional(),
 });
 
+// intervals.icu connection. Bounded tightly because these land in a token row:
+// the key is an opaque ~24-char string and the athlete id looks like "i665723".
+export const intervalsConnectSchema = z.object({
+  apiKey: z.string().trim().min(8).max(256),
+  athleteId: z
+    .string()
+    .trim()
+    .min(1)
+    .max(32)
+    .regex(/^i?\d+$/, 'Athlete ID looks like "i665723" or "665723"'),
+});
+
 // Review analysis validation
 export const reviewAnalysisSchema = z.object({
   overallFeeling: rating.optional(),

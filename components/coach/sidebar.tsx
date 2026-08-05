@@ -17,11 +17,12 @@ import {
   LogOut,
   UtensilsCrossed,
   BookOpen,
+  Activity,
 } from 'lucide-react';
 import { signOut } from 'next-auth/react';
 
 // Primary nav, in the order the athlete asked for: Home → Log → Training
-// Plan → Review → Coach → Grocky → Sync Strava → Settings.
+// Plan → Review → Coach → Grocky → Sync → Settings.
 const navItems = [
   { href: '/coach', label: 'Home', icon: LayoutDashboard },
   { href: '/coach/log', label: 'Log', icon: ClipboardList },
@@ -29,15 +30,20 @@ const navItems = [
   { href: '/coach/review', label: 'Review', icon: Calendar },
   { href: '/coach/ask', label: 'Coach', icon: MessageSquare },
   { href: '/coach/grocky', label: 'Grocky', icon: Dumbbell },
-  { href: '/coach/strava', label: 'Sync Strava', icon: RefreshCw },
+  { href: '/coach/intervals', label: 'Sync', icon: RefreshCw },
   { href: '/coach/settings', label: 'Settings', icon: Settings },
 ];
 
 // Secondary nav: things we built that aren't in the user's primary order
 // but still need a reachable link. Rendered below a visual divider.
+//
+// Strava sits here rather than in the primary nav: intervals.icu has taken
+// over as the training-data provider and its crons are disabled, but the page
+// stays reachable until the cutover is confirmed.
 const secondaryNavItems = [
   { href: '/coach/resources', label: 'Coach Library', icon: BookOpen },
   { href: '/coach/reports', label: 'Coach Reports', icon: FileText },
+  { href: '/coach/strava', label: 'Sync Strava (legacy)', icon: Activity },
 ];
 
 export function CoachSidebar() {

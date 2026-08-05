@@ -64,7 +64,8 @@
       "Bash(node -e \"console.log\\('length:', require\\('crypto'\\).randomBytes\\(32\\).toString\\('base64'\\).length\\)\")",
       "Read(//c/Program Files/Git/usr/bin/**)",
       "Bash(node -e ' *)",
-      "Bash(sed 's/=.*/=<set>/' .env.local)"
+      "Bash(sed 's/=.*/=<set>/' .env.local)",
+      "Bash(echo \"typecheck exit=$?\")"
     ]
   },
   "enableAllProjectMcpServers": true,
