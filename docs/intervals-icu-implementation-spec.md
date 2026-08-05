@@ -114,9 +114,24 @@ Behaviour, lifted verbatim from the existing Strava routes:
 **Matching rule (this is the important part):**
 
 1. Exact match on `filename = externalId` → UPDATE in place.
-2. Else fuzzy match: same `user_id`, `|Δdate| <= 3h`, `|Δdistance_km| <= max(0.05, 2%)`
+2. Else fuzzy match: same `user_id`, `|Δdate| <= 4h`, `|Δdistance_km| <= max(0.05, 2%)`
    → UPDATE that row in place, **preserving its `id`**, and enrich: fill null
    columns, add laps if it has none, never overwrite a non-null `coach_notes`.
+
+> **Two amendments made during implementation.**
+>
+> **Window widened 3h → 4h.** A row storing Israel local time sits exactly
+> 3.0000h from truth in summer — dead on a `<= 3h` boundary, where a second of
+> drift turns a correction into a silent duplicate insert. Verified safe against
+> all 660 runs: widening admits one new pair (2025-03-22, 2.76 km vs 26.27 km)
+> which the distance test rejects by 23.5 km.
+>
+> **`date` and `filename` are overwritten on a fuzzy match** when the provider
+> is marked authoritative, because fill-null-only can never repair a wrong
+> timestamp (`date` is never null). 11 rows from a bulk import on 2026-01-14
+> hold local time; the 39 live-sync rows were always correct. Gated so only
+> intervals.icu does this — otherwise the two providers rewrite each other's
+> identity on alternating syncs.
 3. Else INSERT.
 
 Rule 2 is what prevents the backfill from duplicating the 98 runs already present

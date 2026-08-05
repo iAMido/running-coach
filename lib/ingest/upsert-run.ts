@@ -14,7 +14,7 @@
  * The rule that keeps a backfill from duplicating runs already in the table:
  *
  *   1. exact `filename = externalId`  -> update that row
- *   2. else same user, |Δdate| <= 3h and |Δdistance| <= max(50 m, 2%)  -> update that row
+ *   2. else same user, |Δdate| <= 4h and |Δdistance| <= max(50 m, 2%)  -> update that row
  *   3. else insert
  *
  * Rule 2 exists because intervals.icu and Strava assign unrelated ids to the
@@ -166,7 +166,27 @@ export function once<T>(fn: () => Promise<T>): () => Promise<T> {
 /** Distance tolerance: the larger of 50 m and 2% of the longer of the two. */
 const ABS_DISTANCE_TOLERANCE_KM = 0.05;
 const REL_DISTANCE_TOLERANCE = 0.02;
-const MATCH_WINDOW_HOURS = 3;
+
+/**
+ * Must exceed 3h, and that is the whole point.
+ *
+ * The corruption this window exists to catch is a row storing Israel local time
+ * in a timestamptz column. Israel is UTC+3 in summer, so such a row sits exactly
+ * 3.0000h from the truth — dead on a `<= 3` boundary, where one second of clock
+ * drift between providers flips a correction into a silent duplicate insert. The
+ * 11 known bad rows are winter (+2h) and would survive a 3h window by luck, not
+ * by design.
+ *
+ * 4h buys an hour of margin. Verified safe against all 660 runs: widening from
+ * 3h admits exactly one new pair (2025-03-22, 2.76km vs 26.27km) which the
+ * distance test rejects by 23.5km. Distance +-2% is doing the real
+ * discrimination; time only has to be loose enough to span a timezone error.
+ *
+ * The assumption to revisit if training changes: no two runs of near-identical
+ * distance start within 4h of each other. True across the whole history — there
+ * are no same-distance doubles.
+ */
+const MATCH_WINDOW_HOURS = 4;
 
 function distancesMatch(a: number, b: number): boolean {
   const tolerance = Math.max(ABS_DISTANCE_TOLERANCE_KM, REL_DISTANCE_TOLERANCE * Math.max(a, b));
