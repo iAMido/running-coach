@@ -364,3 +364,51 @@ export interface WeeklyStrength {
     equipment: string;
   }[];
 }
+
+/**
+ * intervals.icu credentials. `api_key` is an AES-256-GCM blob, never plaintext —
+ * decrypt with `lib/intervals/crypto.ts`. The OAuth columns are unused today and
+ * exist so adding a second athlete is not another migration.
+ */
+export interface IntervalsToken {
+  id: string;
+  user_id: string;
+  api_key: string;
+  athlete_id: string;
+  access_token?: string | null;
+  refresh_token?: string | null;
+  expires_at?: string | null;
+  last_sync_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/**
+ * One day of recovery data. Null means "not measured" and must never be
+ * treated as zero — HRV is absent roughly 12% of the year, and a missing
+ * reading is not a bad reading.
+ *
+ * Form is deliberately not stored: it is ctl - atl, derived at read time so it
+ * cannot drift out of agreement with its inputs.
+ */
+export interface DailyWellness {
+  id: string;
+  user_id: string;
+  /** YYYY-MM-DD. */
+  day: string;
+  /** Fitness. */
+  ctl?: number | null;
+  /** Fatigue. */
+  atl?: number | null;
+  resting_hr?: number | null;
+  hrv?: number | null;
+  sleep_secs?: number | null;
+  sleep_score?: number | null;
+  sleep_quality?: number | null;
+  weight_kg?: number | null;
+  steps?: number | null;
+  vo2max?: number | null;
+  raw?: unknown;
+  created_at?: string;
+  updated_at?: string;
+}

@@ -62,7 +62,9 @@
       "mcp__f9ae2d57-63c3-4f57-bf5d-19063bf5dc7e__execute_sql",
       "mcp__f9ae2d57-63c3-4f57-bf5d-19063bf5dc7e__apply_migration",
       "Bash(node -e \"console.log\\('length:', require\\('crypto'\\).randomBytes\\(32\\).toString\\('base64'\\).length\\)\")",
-      "Read(//c/Program Files/Git/usr/bin/**)"
+      "Read(//c/Program Files/Git/usr/bin/**)",
+      "Bash(node -e ' *)",
+      "Bash(sed 's/=.*/=<set>/' .env.local)"
     ]
   },
   "enableAllProjectMcpServers": true,
