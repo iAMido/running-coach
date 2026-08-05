@@ -37,7 +37,8 @@ function loadKey(): Buffer {
   const raw = process.env[KEY_ENV];
   if (!raw) {
     throw new Error(
-      `${KEY_ENV} is not set. Generate one with:  openssl rand -base64 32\n` +
+      `${KEY_ENV} is not set. Generate one with:\n` +
+        `  node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"\n` +
         `Refusing to handle the intervals.icu API key without it.`,
     );
   }
@@ -52,7 +53,8 @@ function loadKey(): Buffer {
   if (!key) {
     throw new Error(
       `${KEY_ENV} must decode to ${KEY_BYTES} bytes (got a value that does not). ` +
-        `Generate one with:  openssl rand -base64 32`,
+        `Generate one with:\n` +
+        `  node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`,
     );
   }
   return key;

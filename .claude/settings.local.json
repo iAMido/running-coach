@@ -60,7 +60,9 @@
       "Read(//c/Users/reutn/**)",
       "Bash(awk '{print $5}')",
       "mcp__f9ae2d57-63c3-4f57-bf5d-19063bf5dc7e__execute_sql",
-      "mcp__f9ae2d57-63c3-4f57-bf5d-19063bf5dc7e__apply_migration"
+      "mcp__f9ae2d57-63c3-4f57-bf5d-19063bf5dc7e__apply_migration",
+      "Bash(node -e \"console.log\\('length:', require\\('crypto'\\).randomBytes\\(32\\).toString\\('base64'\\).length\\)\")",
+      "Read(//c/Program Files/Git/usr/bin/**)"
     ]
   },
   "enableAllProjectMcpServers": true,
