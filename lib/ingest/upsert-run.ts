@@ -87,20 +87,36 @@ export interface UpsertContext {
   activePlan?: Lazy<TrainingPlan | null> | null;
   /** Set false to skip the coach note (backfills, where it is noise). */
   generateCoachNote?: boolean;
+  /**
+   * Whether this provider's `date` and `externalId` outrank whatever is already
+   * stored, **on a fuzzy match only**. See `reconcileIdentity` below.
+   *
+   * Set this for intervals.icu (timestamps come from the Garmin FIT file).
+   * Leave it off for Strava, so the two providers cannot fight over the same
+   * row's identity on alternating syncs.
+   */
+  identityIsAuthoritative?: boolean;
 }
+
+/** How an existing row was recognised as this run. */
+export type MatchKind = 'filename' | 'fuzzy';
 
 export interface UpsertResult {
   runId: string;
   created: boolean;
   lapsWritten: number;
-  /** True when an existing row was found and at least one null column filled. */
+  /** True when an existing row was found and at least one column written. */
   enriched: boolean;
+  /** Null on insert; how the existing row was found otherwise. */
+  matchedBy: MatchKind | null;
+  /** True when a wrong stored timestamp was corrected. */
+  dateCorrected: boolean;
 }
 
 type ZonePercents = ReturnType<typeof computeZonePercentsFromStream>;
 
 /** The columns this module reads when deciding what an existing row is missing. */
-interface ExistingRunRow {
+export interface ExistingRunRow {
   id: string;
   filename: string | null;
   date: string;
@@ -163,7 +179,10 @@ function distancesMatch(a: number, b: number): boolean {
  * `lib/utils/user-time.ts` rule does not apply. Day/week questions in this
  * module go through `plannedWorkoutForRunDate`, which handles the timezone.
  */
-async function findExistingRun(userId: string, run: NormalizedRun): Promise<ExistingRunRow | null> {
+async function findExistingRun(
+  userId: string,
+  run: NormalizedRun,
+): Promise<{ row: ExistingRunRow; matchedBy: MatchKind } | null> {
   const { data: exact } = await supabase
     .from('runs')
     .select(EXISTING_COLUMNS)
@@ -171,7 +190,7 @@ async function findExistingRun(userId: string, run: NormalizedRun): Promise<Exis
     .eq('filename', run.externalId)
     .maybeSingle();
 
-  if (exact) return exact as unknown as ExistingRunRow;
+  if (exact) return { row: exact as unknown as ExistingRunRow, matchedBy: 'filename' };
 
   const centre = new Date(run.date).getTime();
   if (!Number.isFinite(centre)) return null;
@@ -190,12 +209,14 @@ async function findExistingRun(userId: string, run: NormalizedRun): Promise<Exis
   if (candidates.length === 0) return null;
 
   // Closest in time wins; distance breaks ties.
-  return candidates.reduce((best, r) => {
+  const row = candidates.reduce((best, r) => {
     const d = (x: ExistingRunRow) => Math.abs(new Date(x.date).getTime() - centre);
     if (d(r) !== d(best)) return d(r) < d(best) ? r : best;
     const dist = (x: ExistingRunRow) => Math.abs((x.distance_km ?? 0) - run.distanceKm);
     return dist(r) < dist(best) ? r : best;
   });
+
+  return { row, matchedBy: 'fuzzy' };
 }
 
 // ------------------------------------------------------------------ zones
@@ -292,7 +313,9 @@ export async function upsertRun(
   ctx: UpsertContext,
 ): Promise<UpsertResult> {
   const existing = await findExistingRun(userId, run);
-  return existing ? enrichExisting(existing, run, ctx) : insertNew(userId, run, ctx);
+  return existing
+    ? enrichExisting(existing.row, existing.matchedBy, run, ctx)
+    : insertNew(userId, run, ctx);
 }
 
 async function insertNew(userId: string, run: NormalizedRun, ctx: UpsertContext): Promise<UpsertResult> {
@@ -347,14 +370,46 @@ async function insertNew(userId: string, run: NormalizedRun, ctx: UpsertContext)
     await attachCoachNote(runId, run, runType, zones, avgPaceMinKm, ctx);
   }
 
-  return { runId, created: true, lapsWritten, enriched: false };
+  return { runId, created: true, lapsWritten, enriched: false, matchedBy: null, dateCorrected: false };
 }
 
-async function enrichExisting(
+/**
+ * Decide what to write onto an existing row. Pure, so the rules below are
+ * testable without a database.
+ *
+ * Default is fill-null-only: a populated column is never overwritten, which
+ * makes re-ingestion idempotent and stops historical `run_type` being restated
+ * under newer zone bands.
+ *
+ * ## The identity exception
+ *
+ * A *fuzzy* match is positive evidence that the stored row disagrees with the
+ * incoming one — that is what made it fuzzy rather than exact. For a provider
+ * whose timestamps are authoritative, two columns therefore get overwritten:
+ *
+ * - `date`, because ~50 `strava_sync` rows hold Israel local time in a
+ *   timestamptz column. Fill-null-only can never repair that: `date` is never
+ *   null, so the wrong value would survive forever. Stored is 2-3h late, so a
+ *   22:30 run reads as 01:30 the next day once `user-time.ts` resolves it into
+ *   a training day — wrong day, wrong week bucket, wrong weekly volume.
+ * - `filename`, because otherwise the row keeps its `strava_...` id, never
+ *   converges to the `icu_...` one, and is re-fuzzy-matched on every future
+ *   sync forever.
+ *
+ * Gated on `identityIsAuthoritative` so only intervals.icu does this. If Strava
+ * did it too, the two providers would rewrite each other's identity on
+ * alternating syncs and never converge.
+ */
+export function buildEnrichPatch(
   existing: ExistingRunRow,
   run: NormalizedRun,
-  ctx: UpsertContext,
-): Promise<UpsertResult> {
+  opts: {
+    matchedBy: MatchKind;
+    identityIsAuthoritative?: boolean;
+    zones: ZonePercents | null;
+    profile: AthleteProfile | null;
+  },
+): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
   const fill = (column: keyof ExistingRunRow, value: unknown) => {
     if (existing[column] == null && value != null) patch[column] = value;
@@ -378,16 +433,9 @@ async function enrichExisting(
     fill('trimp', calculateTrimp({ durationMin: existing.duration_min ?? run.durationMin, avgHr: effectiveAvgHr }));
   }
 
-  // Only pay for the HR stream when the row is actually missing its zones.
-  // A complete row costs zero extra provider calls.
-  let zones: ZonePercents | null = null;
-  if (existing.pct_z1 == null) {
-    zones = await resolveZones(run, ctx.zoneBands);
-    if (zones) Object.assign(patch, zones);
-  }
+  if (opts.zones) Object.assign(patch, opts.zones);
 
-  // Classify only if the row was never classified — never restate history under
-  // newer zone bands.
+  // Classify only if the row was never classified.
   if (existing.run_type == null) {
     patch.run_type = classifyRun({
       distanceKm: existing.distance_km ?? run.distanceKm,
@@ -395,10 +443,41 @@ async function enrichExisting(
       maxHr: (existing.max_hr ?? run.maxHr) ?? undefined,
       durationMin: existing.duration_min ?? run.durationMin,
       workoutName: existing.workout_name ?? run.workoutName,
-      profile: ctx.profile,
-      zonePercents: zonesForClassifier(zones),
+      profile: opts.profile,
+      zonePercents: zonesForClassifier(opts.zones),
     });
   }
+
+  if (opts.matchedBy === 'fuzzy' && opts.identityIsAuthoritative) {
+    const storedMs = new Date(existing.date).getTime();
+    const incomingMs = new Date(run.date).getTime();
+    if (Number.isFinite(incomingMs) && storedMs !== incomingMs) {
+      patch.date = run.date;
+    }
+    if (existing.filename !== run.externalId) {
+      patch.filename = run.externalId;
+    }
+  }
+
+  return patch;
+}
+
+async function enrichExisting(
+  existing: ExistingRunRow,
+  matchedBy: MatchKind,
+  run: NormalizedRun,
+  ctx: UpsertContext,
+): Promise<UpsertResult> {
+  // Only pay for the HR stream when the row is actually missing its zones.
+  // A complete row costs zero extra provider calls.
+  const zones = existing.pct_z1 == null ? await resolveZones(run, ctx.zoneBands) : null;
+
+  const patch = buildEnrichPatch(existing, run, {
+    matchedBy,
+    identityIsAuthoritative: ctx.identityIsAuthoritative,
+    zones,
+    profile: ctx.profile,
+  });
 
   if (Object.keys(patch).length > 0) {
     await supabase.from('runs').update(patch).eq('id', existing.id);
@@ -415,5 +494,7 @@ async function enrichExisting(
     created: false,
     lapsWritten,
     enriched: Object.keys(patch).length > 0,
+    matchedBy,
+    dateCorrected: patch.date != null,
   };
 }
