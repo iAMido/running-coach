@@ -55,7 +55,12 @@
       "Bash(git add *)",
       "Bash(git commit -q -m '@ *)",
       "Bash(git push *)",
-      "Bash(bunx eslint *)"
+      "Bash(bunx eslint *)",
+      "mcp__supabase__get_project_url",
+      "Read(//c/Users/reutn/**)",
+      "Bash(awk '{print $5}')",
+      "mcp__f9ae2d57-63c3-4f57-bf5d-19063bf5dc7e__execute_sql",
+      "mcp__f9ae2d57-63c3-4f57-bf5d-19063bf5dc7e__apply_migration"
     ]
   },
   "enableAllProjectMcpServers": true,

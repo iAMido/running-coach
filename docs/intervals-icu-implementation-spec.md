@@ -164,11 +164,16 @@ create index on runcoach.daily_wellness (user_id, day desc);
 
 ### Phase 2b — update `athlete_profile` to the new HR anchors
 
-Max HR was corrected to **191** and threshold HR to **173** on 2026-08-05. These
-are already live on Garmin and in intervals.icu. `runcoach.athlete_profile` is
-still on the old values and **must be updated or every newly synced run will be
-classified against stale bands** — `parseZonesFromProfile` reads this row, not
-Garmin.
+Max HR was corrected to **191** on 2026-08-05, already live on Garmin and in
+intervals.icu. `runcoach.athlete_profile` is still on the old value and **must be
+updated or every newly synced run will be classified against stale bands** —
+`parseZonesFromProfile` reads this row, not Garmin.
+
+> **Threshold HR stays at 165 — do NOT raise it to 173.** An earlier draft of
+> this document said 173 (intervals.icu's value); that was premature. 173 is a
+> peak-fitness threshold inferred from a 2023 half marathon, but current CTL is
+> 17.7 and the hardest recent session peaked at 166 — below what 173 assumes.
+> The real threshold is unknown until tested; 165 is the closer placeholder.
 
 Current row: `max_hr 185`, `lactate_threshold_hr 165`, `resting_hr 51`, bands
 `0-120 / 120-138 / 138-150 / 150-162 / 162-175 / 175-185`.
@@ -185,9 +190,28 @@ preserving the same shape:
 | Z5 | 162–175 | 168–181 |
 | Z6 | 175–185 | 181–191 |
 
-Set `max_hr = 191`, `lactate_threshold_hr = 173`, and the six bands above. Confirm
-the exact bands with Ido before writing — the rescale preserves his existing model
-but he may prefer to anchor on threshold instead.
+**CONFIRMED and APPLIED 2026-08-05.** `max_hr = 191` and the six bands above.
+`lactate_threshold_hr` left at 165; `resting_hr` untouched at 51.
+
+### Why %-of-max and not threshold-anchored zones
+
+Decided against measured data, not preference. Z4+ time on the last 10 runs
+under each candidate model:
+
+| Run | OLD (max 185) | chosen: %max→191 | LTHR-anchored 173 | icu native |
+|---|---|---|---|---|
+| 2026-08-03 Threshold Intervals | 26.0% | 15.4% | 2.7% | 3.9% |
+| 2026-08-01 Long Run | 59.2% | 46.0% | 21.6% | 24.5% |
+| 2026-07-25 Long Run | 29.7% | 21.8% | 13.0% | 13.7% |
+| runs tripping readiness rule 3 (Z4+ > 40%) | 1/10 | 1/10 | 0/10 | 0/10 |
+
+A threshold-anchored model silently disables rule 3 in `readiness.ts` — nothing
+in six weeks would register as hard, including a long run that plainly was. Max
+HR is a stable anchor; threshold moves with fitness and his has dropped a long
+way. The rescale also minimises discontinuity against ~660 runs of %max-based
+history.
+
+**Do not revisit this without re-running the same comparison.**
 
 **Do NOT recompute historical `pct_z1..pct_z6`.** Decided: new zones apply going
 forward only. The ~660 existing runs keep their old-zone percentages. Record the
@@ -423,10 +447,24 @@ Surface as a "Push to watch" action on `/coach/plan` mapping a `PlanWeek` →
 events. Note intervals.icu only uploads ~7 days ahead, so a workout 3 weeks out
 will not reach the watch yet.
 
-**Prerequisite (resolved):** max HR 191 / LTHR 173 agreed across Garmin,
-intervals.icu and — once Phase 2b lands — `athlete_profile`. Verify Phase 2b is
-committed before pushing any workout, or `Z4 HR` on the watch will not mean what
-the coach prescribed.
+**Prerequisite — max HR agrees, threshold does NOT.** Phase 2b landed
+2026-08-05: max HR is 191 across Garmin, intervals.icu and `athlete_profile`.
+But `athlete_profile.lactate_threshold_hr` is **165** while intervals.icu holds
+**173**, and intervals.icu's zone boundaries are threshold-anchored.
+
+So `Z4 HR` in a pushed workout resolves against *intervals.icu's* Z4
+(163–172), not the app's Z4 (155–168). The coach prescribing "Z4" and the watch
+displaying "Z4" are not the same band — they overlap but the watch's is ~8 bpm
+higher at the bottom.
+
+Do not ship write-back until this is resolved, by one of:
+1. an actual threshold test, then align all three systems on the measured value;
+2. emitting absolute BPM ranges in the description instead of zone names, which
+   sidesteps whose zones win entirely (safest, and probably correct anyway);
+3. rewriting app zone numbers into intervals.icu zone numbers in the mapper.
+
+Option 2 is recommended — a workout that says `- 3m 155-168 HR` cannot be
+misinterpreted by either system.
 
 ---
 

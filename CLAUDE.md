@@ -219,6 +219,14 @@ All tables have RLS enabled with policies for authenticated users.
 
 **Stats aggregates:** lifetime totals come from the `runcoach.run_totals(p_user_id)` RPC (count + sum in one call) — do not reintroduce the select-all-rows-and-reduce pattern.
 
+**⚠️ HR-zone cutover — 2026-08-05 (documented discontinuity, do NOT "fix"):** `athlete_profile` moved from max HR 185 to **191**, bands rescaled `0-124 / 124-143 / 143-155 / 155-168 / 168-181 / 181-191`. The ~660 runs recorded before this date keep their **old-zone** `pct_z1..pct_z6`; runs synced after it use the new bands. This is deliberate — a historical recompute was explicitly rejected. Any analysis comparing zone distribution across 2026-08-05 is comparing two different definitions of "Z4", so treat the series as having a documented break there rather than backfilling it.
+
+`lactate_threshold_hr` stays **165** while intervals.icu holds **173**. The app's zones are %-of-max anchored so threshold does not feed them, but the divergence matters for intervals.icu write-back, where `Z4 HR` resolves against *their* threshold-anchored bands. The choice of %-of-max over threshold-anchoring was made against measured Z4+ distributions (a threshold model silently disabled `readiness.ts` rule 3) — see `docs/intervals-icu-implementation-spec.md` Phase 2b before revisiting.
+
+**Ingestion (`lib/ingest/`):** `upsertRun` is the single owner of per-activity mapping for every provider — zones, classification, TRIMP, pace, laps, coach note. Providers only produce a `NormalizedRun`; `lib/ingest/strava.ts` is the Strava mapper. Matching is exact `filename`, else same user within 3h and 2% distance, else insert. Updates are **fill-null-only** and always preserve the row `id` (`run_feedback.run_id` and `laps.run_id` are both ON DELETE CASCADE). Laps, HR streams and the active plan are passed as thunks so they are fetched only on the paths that need them.
+
+**intervals.icu credentials:** `runcoach.intervals_tokens.api_key` holds an AES-256-GCM blob, never plaintext — the key grants *write* access to the athlete's calendar and the service role bypasses RLS, so RLS is not what protects it. Encrypt/decrypt via `lib/intervals/crypto.ts`; the secret lives in `INTERVALS_TOKEN_KEY` (32 bytes, base64 or hex), outside the database.
+
 **Chat history persistence:** `/coach/ask` posts `sessionId` along with messages. `/api/coach/chat/ask` resolves or creates a `runcoach.coach_chat_sessions` row (title seeded from the first user message) and persists each user + assistant turn into `runcoach.coach_chat_messages` with the supervisor envelope snapshot. The page has a History dropdown listing past sessions; click loads a session via `GET /api/coach/chat/sessions/[id]`. Soft-archive via `DELETE` (sets `status='archived'`).
 
 **Streaming plan generation:** `/api/coach/plans/generate/stream` is an SSE variant of plan-gen. It emits `meta`, `token` (many), and `done` events. The page consumes the stream, shows a live preview window, and sets the final plan from the `done` payload. Final JSON parse + DB write + supervisor logging + Haiku critic all happen server-side after the stream completes.
@@ -265,6 +273,12 @@ OPENAI_API_KEY=<for-embeddings>
 # Strava
 STRAVA_CLIENT_ID=<strava-app-id>
 STRAVA_CLIENT_SECRET=<strava-app-secret>
+
+# intervals.icu (https://intervals.icu/settings -> Developer Settings)
+INTERVALS_API_KEY=<intervals-api-key>
+INTERVALS_ATHLETE_ID=<i-prefixed-athlete-id>
+# Encrypts intervals_tokens.api_key at rest. 32 bytes: openssl rand -base64 32
+INTERVALS_TOKEN_KEY=<32-byte-base64-or-hex-key>
 
 # Cron
 CRON_SECRET=<random-secret-for-vercel-cron>

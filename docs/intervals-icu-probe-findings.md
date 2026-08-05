@@ -96,10 +96,16 @@ extra API call per new run, which is irrelevant against a 5,000/day limit.
 The 7-vs-6 zone count question dissolves: it never arises if `icu_hr_zone_times`
 is not used.
 
-> **RESOLVED 2026-08-05.** Max HR is **191**, threshold HR **173**, already updated
-> on Garmin and therefore live in intervals.icu. `runcoach.athlete_profile` is still
-> on the old `185`/`165` and must be updated to match — see Phase 2b of the
-> implementation spec.
+> **RESOLVED 2026-08-05, and APPLIED.** Max HR is **191** on Garmin,
+> intervals.icu and now `runcoach.athlete_profile` (phase 2b landed the same day;
+> bands rescaled to `0-124 / 124-143 / 143-155 / 155-168 / 168-181 / 181-191`).
+>
+> Threshold HR **deliberately diverges**: intervals.icu holds 173, the app keeps
+> **165**. 173 is a peak-fitness figure inferred from a 2023 half marathon, but
+> current CTL is 17.7 and the hardest recent session peaked at 166. The app's
+> zones are %-of-max anchored, so threshold does not feed them — but this
+> divergence does matter for phase 9 write-back, where intervals.icu resolves
+> `Z4 HR` against its own threshold-anchored bands. See phase 9 in the spec.
 >
 > Decision: **no historical recompute.** The ~660 existing runs keep their
 > old-zone `pct_z1..pct_z6`. New zones apply going forward only. This is a
