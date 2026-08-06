@@ -62,6 +62,15 @@ export function resolveRunDate(activity: IntervalsActivity): string {
     const parsed = Date.parse(activity.start_date);
     if (Number.isFinite(parsed)) return new Date(parsed).toISOString();
   }
+
+  // ANOMALY, not a routine path: start_date was populated on 117/117 runs.
+  // Reaching here silently reintroduces the New York bug for any run recorded
+  // abroad, and no test would catch it — every fixture is in Israel.
+  console.warn(
+    `[intervals] activity ${activity.id} ("${activity.name}") has no start_date; ` +
+      `falling back to converting start_date_local as Asia/Jerusalem. ` +
+      `This is WRONG if the run was recorded in another timezone — verify before trusting its date.`,
+  );
   return utcFromUserLocal(activity.start_date_local);
 }
 
