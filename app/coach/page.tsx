@@ -340,11 +340,16 @@ export default function CoachDashboard() {
             };
           })(),
 
-          // 2. FITNESS — CTL and its 28-day direction.
+          // 2. FITNESS — CTL and its direction against a named anchor.
+          //    The anchor is stated because CTL moves ~0.7 in three days, more
+          //    than the gap between plausible anchor choices — without naming
+          //    it the delta shifts for reasons that are not training. The prior
+          //    value is shown so the subtraction is reproducible.
           (() => {
             const f = stats?.fitness;
             const delta = f?.delta;
             const dir = delta == null ? null : delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
+            const prior = f?.ctlPrior != null ? ` (was ${f.ctlPrior.toFixed(1)})` : '';
             return {
               title: 'Fitness',
               value: f?.ctl != null ? f.ctl.toFixed(1) : '--',
@@ -353,10 +358,10 @@ export default function CoachDashboard() {
                 f?.ctl == null
                   ? 'no recovery data'
                   : dir === null
-                    ? 'no 28-day comparison yet'
+                    ? 'no 4-week comparison yet'
                     : dir === 'flat'
-                      ? 'unchanged in 28 days'
-                      : `${dir} ${Math.abs(delta as number).toFixed(1)} in 28 days`,
+                      ? `unchanged vs 4 weeks ago${prior}`
+                      : `${dir} ${Math.abs(delta as number).toFixed(1)} vs 4 weeks ago${prior}`,
               icon: TrendingUp,
               accent: 'var(--rc-blue)',
               iconBg: 'oklch(0.96 0.04 240)',
@@ -381,19 +386,50 @@ export default function CoachDashboard() {
               };
             }
 
+            // The DELTA is the headline, not the raw HRV. 67 carries no
+            // information on its own — nobody knows whether it is good without
+            // the baseline — so putting it at 28px bold sends the eye to the
+            // meaningless half. Same principle as decoupling: the comparison is
+            // the signal, the raw figure is provenance.
             const hasHrv = r.hrv != null && r.hrvDelta != null;
             const sign = (r.hrvDelta ?? 0) >= 0 ? '+' : '';
+
+            if (hasHrv) {
+              const provenance = [
+                `HRV ${Math.round(r.hrv as number)}`,
+                r.hrvBaseline != null ? `baseline ${r.hrvBaseline.toFixed(1)}` : null,
+                sleep,
+              ].filter(Boolean).join(' · ');
+              return {
+                title: 'Recovery', value: `${sign}${r.hrvDelta}`, unit: 'vs baseline',
+                desc: provenance,
+                icon: HeartPulse, accent: 'oklch(0.78 0.15 75)',
+                iconBg: 'oklch(0.96 0.05 75)', iconColor: 'oklch(0.50 0.13 75)',
+                valueColor: undefined as string | undefined,
+              };
+            }
+
+            // HRV present but no baseline yet: show it, and say it cannot be
+            // placed rather than implying the bare number means something.
+            if (r.hrv != null) {
+              return {
+                title: 'Recovery', value: `HRV ${Math.round(r.hrv)}`, unit: '',
+                desc: ['no baseline yet', sleep].filter(Boolean).join(' · '),
+                icon: HeartPulse, accent: 'oklch(0.78 0.15 75)',
+                iconBg: 'oklch(0.96 0.05 75)', iconColor: 'oklch(0.50 0.13 75)',
+                valueColor: undefined as string | undefined,
+              };
+            }
+
+            // No HRV (~12% of nights). Sleep carries the tile; the absence is
+            // stated so it never reads as a bad reading.
             return {
               title: 'Recovery',
-              value: hasHrv ? `HRV ${Math.round(r.hrv as number)}` : sleep ? `${(r.sleepHours as number).toFixed(1)} h` : '--',
-              unit: '',
-              desc: hasHrv
-                ? [`${sign}${r.hrvDelta} vs baseline`, sleep].filter(Boolean).join(' · ')
-                : ['no HRV last night', sleep].filter(Boolean).join(' · '),
-              icon: HeartPulse,
-              accent: 'oklch(0.78 0.15 75)',
-              iconBg: 'oklch(0.96 0.05 75)',
-              iconColor: 'oklch(0.50 0.13 75)',
+              value: r.sleepHours != null ? `${r.sleepHours.toFixed(1)}` : '--',
+              unit: r.sleepHours != null ? 'h slept' : '',
+              desc: r.sleepHours != null ? 'no HRV last night' : 'no recovery data',
+              icon: HeartPulse, accent: 'oklch(0.78 0.15 75)',
+              iconBg: 'oklch(0.96 0.05 75)', iconColor: 'oklch(0.50 0.13 75)',
               valueColor: undefined as string | undefined,
             };
           })(),
