@@ -219,7 +219,19 @@ All tables have RLS enabled with policies for authenticated users.
 
 **Stats aggregates:** lifetime totals come from the `runcoach.run_totals(p_user_id)` RPC (count + sum in one call) — do not reintroduce the select-all-rows-and-reduce pattern.
 
-**⚠️ HR-zone cutover — 2026-08-05 (documented discontinuity, do NOT "fix"):** `athlete_profile` moved from max HR 185 to **191**, bands rescaled `0-124 / 124-143 / 143-155 / 155-168 / 168-181 / 181-191`. The ~660 runs recorded before this date keep their **old-zone** `pct_z1..pct_z6`; runs synced after it use the new bands. This is deliberate — a historical recompute was explicitly rejected. Any analysis comparing zone distribution across 2026-08-05 is comparing two different definitions of "Z4", so treat the series as having a documented break there rather than backfilling it.
+**⚠️ HR zones: only 116 runs have them, and that is correct — do NOT "restore" the rest (2026-08-06).**
+
+An earlier version of this note described the 2026-08-05 max-HR change (185 → 191, bands rescaled to `0-124 / 124-143 / 143-155 / 155-168 / 168-181 / 181-191`) as a *documented discontinuity between two valid band definitions*. That framing was wrong and dangerously reassuring. There was a **third population that was simply incorrect**.
+
+The imported legacy rows (`garmin`, `garmin+tp`) carried corrupt zone data: 204 runs recorded time in **Z6 while their maximum heart rate never reached the Z6 floor** — tested against the *old* 175 floor precisely so the rescale could not explain it. In aggregate they claimed **83.5% of time above Z4 at an average HR of 149**, when Z4 begins at 150. The 2025 New York Marathon read Z6 44.3% on a run whose max was 182. The two populations this codebase computed itself (`strava_sync` 28% Z4+, `intervals_sync` 8.3%) were always sane.
+
+Repaired 2026-08-06:
+- **116 runs recomputed from their actual HR streams** against current bands, using the same `computeZonePercentsFromStream` the live sync uses. Impossible-Z6 count went 204 → **0**; average Z4+ 84% → **20%** at avg HR 143. This also removes the 2026-08-05 band split for these runs — one definition across the whole window the coach reads.
+- **560 runs nulled.** No stream source exists for them anywhere, so they can never be repaired. Storing a number known to be wrong is worse than storing nothing: absent zones render as absent, wrong zones render as insight.
+
+Snapshot of the pre-repair state: `runcoach._bak_20260806_run_zones`. `run_type`, `trimp` and `decoupling_pct` were untouched — `classifyRun` and TRIMP ran at ingest and are not recomputed here.
+
+Consequence for anything reading history: **zone analysis is only valid for runs where `pct_z1 IS NOT NULL`** (116, roughly the last year). Weekly review and any intent-vs-actual zone comparison must scope to those and say so, rather than treating a null as zero.
 
 `lactate_threshold_hr` stays **165** while intervals.icu holds **173**. The app's zones are %-of-max anchored so threshold does not feed them, but the divergence matters for intervals.icu write-back, where `Z4 HR` resolves against *their* threshold-anchored bands. The choice of %-of-max over threshold-anchoring was made against measured Z4+ distributions (a threshold model silently disabled `readiness.ts` rule 3) — see `docs/intervals-icu-implementation-spec.md` Phase 2b before revisiting.
 
