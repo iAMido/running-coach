@@ -174,7 +174,19 @@ export function formatZoneDiscipline(input: ZoneDisciplineInput): string {
   const aboveCeiling = band.ceiling < 6 ? sumZones(zones, band.ceiling + 1, 6) : 0;
   const belowFloor = band.floor > 1 ? sumZones(zones, 1, band.floor - 1) : 0;
 
-  const parts = [`${round(inBand)}% ${band.label}`];
+  // A wide quality band hides whether the work actually happened. "Z2-Z4"
+  // spans 124-168 bpm, so a session that warmed up in Z2 and never reached Z4
+  // still reads as ~100% in band. 2026-08-03 "Threshold Intervals" showed 96%
+  // in Z2-Z4 with only 15% at Z4 — a threshold session that never sustained
+  // threshold, rendering as flawless.
+  //
+  // The share at the top of the band is stated rather than flagged: any cutoff
+  // for "enough work" would be invented here, and the coach can read 15% and
+  // draw the conclusion.
+  const showsWorkZone = isQuality && band.ceiling > band.floor && band.ceiling >= 3;
+  const workZoneNote = showsWorkZone ? ` (${round(zoneAt(zones, band.ceiling))}% at Z${band.ceiling})` : '';
+
+  const parts = [`${round(inBand)}% ${band.label}${workZoneNote}`];
 
   const next = band.ceiling + 1;
   if (next <= 6) {
