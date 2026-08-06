@@ -96,6 +96,23 @@ extra API call per new run, which is irrelevant against a 5,000/day limit.
 The 7-vs-6 zone count question dissolves: it never arises if `icu_hr_zone_times`
 is not used.
 
+> **CORRECTION 2026-08-06 — `start_date` exists and this document missed it.**
+>
+> The field mapping below records only `start_date_local` and prescribes
+> converting it through the athlete's home timezone. The activity payload also
+> carries **`start_date`, already true UTC** (`"2025-11-02T15:22:43Z"`), present
+> on all 117 runs in the account. Always prefer it.
+>
+> Converting `start_date_local` assumes Asia/Jerusalem, but that field is local
+> to *where the run happened*. The 2025 New York trip (2 runs on 11-02, 1 on
+> 10-31) lands 6-7h out under that assumption — far enough that the fuzzy
+> matcher misses the existing row and **inserts a duplicate instead of
+> enriching it**. Caught by the Phase 7 dry run: 22 inserts / 95 updates instead
+> of the expected 19 / 98.
+>
+> `utcFromUserLocal` survives only as a fallback for an activity with no
+> `start_date`, where a home-timezone guess beats nothing.
+
 > **RESOLVED 2026-08-05, and APPLIED.** Max HR is **191** on Garmin,
 > intervals.icu and now `runcoach.athlete_profile` (phase 2b landed the same day;
 > bands rescaled to `0-124 / 124-143 / 143-155 / 155-168 / 168-181 / 181-191`).

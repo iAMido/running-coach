@@ -44,12 +44,31 @@ export function toNormalizedLaps(intervals: IntervalsInterval[]): NormalizedLap[
   }));
 }
 
+/**
+ * The run's true UTC instant.
+ *
+ * `start_date` is authoritative and is used whenever present — it carries no
+ * timezone assumption at all.
+ *
+ * `start_date_local` is local to WHERE THE RUN HAPPENED, not to the athlete's
+ * home timezone. Converting it via `utcFromUserLocal` assumes Asia/Jerusalem,
+ * which silently breaks for travel: the 2025 New York trip lands 6-7h out,
+ * far enough that the fuzzy matcher misses the existing row and inserts a
+ * duplicate instead of enriching it. It survives only as a fallback for an
+ * activity with no `start_date`, where a home-timezone guess beats nothing.
+ */
+export function resolveRunDate(activity: IntervalsActivity): string {
+  if (activity.start_date) {
+    const parsed = Date.parse(activity.start_date);
+    if (Number.isFinite(parsed)) return new Date(parsed).toISOString();
+  }
+  return utcFromUserLocal(activity.start_date_local);
+}
+
 export function toNormalizedRun(activity: IntervalsActivity, client: IntervalsClient): NormalizedRun {
   return {
     externalId: `icu_${activity.id}`,
-    // start_date_local is naive LOCAL time. Storing it raw into a timestamptz
-    // column is what created the six 2-hour-offset duplicates Phase 0 merged.
-    date: utcFromUserLocal(activity.start_date_local),
+    date: resolveRunDate(activity),
     distanceKm: activity.distance / 1000,
     durationMin: activity.moving_time / 60,
     avgHr: activity.average_heartrate ?? null,

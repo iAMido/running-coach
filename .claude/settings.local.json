@@ -66,7 +66,8 @@
       "Bash(node -e ' *)",
       "Bash(sed 's/=.*/=<set>/' .env.local)",
       "Bash(echo \"typecheck exit=$?\")",
-      "Bash(bunx vercel *)"
+      "Bash(bunx vercel *)",
+      "Bash(python -)"
     ]
   },
   "enableAllProjectMcpServers": true,

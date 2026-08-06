@@ -17,8 +17,18 @@ export interface IntervalsActivity {
   type: string;
   name: string;
   /**
+   * TRUE UTC — "2025-11-02T15:22:43Z". Authoritative; always prefer this.
+   *
+   * Undocumented in the probe findings (which only recorded
+   * `start_date_local`), but present on all 117 activities in the account.
+   */
+  start_date?: string | null;
+  /**
    * LOCAL wall-clock time, no offset — e.g. "2026-08-03T06:12:34".
-   * Must go through `utcFromUserLocal` before it touches the database.
+   *
+   * Local to WHERE THE RUN HAPPENED, not to the athlete's home timezone. Only
+   * a fallback: converting it assumes Asia/Jerusalem, which is wrong for any
+   * run recorded while travelling.
    */
   start_date_local: string;
   /** Metres. */

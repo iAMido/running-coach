@@ -53,7 +53,18 @@ const EXPECTED = {
   runsBefore: 660,
   runsAfter: 679,
   correctionWindow: { from: '2025-12-15', to: '2026-01-11' },
-  preExistingOrphans: 1,
+  /**
+   * Feedback rows pointing at a run id that no longer exists. This is the real
+   * safety property — laps and feedback both cascade on delete, so any rise
+   * here means a row was destroyed rather than updated in place.
+   *
+   * Distinct from the one legacy row with `run_id IS NULL`, which was never
+   * linked to a run and cannot dangle. An earlier SQL check conflated the two
+   * via a LEFT JOIN and reported "1 orphan"; the dangling count is and always
+   * has been 0.
+   */
+  danglingFeedback: 0,
+  unlinkedFeedback: 1,
 };
 
 async function main() {
@@ -73,8 +84,8 @@ async function main() {
   console.log(`user: ${userId}`);
 
   const runsBefore = await countRuns(supabase, userId);
-  const orphansBefore = await countOrphanFeedback(supabase);
-  console.log(`runs before: ${runsBefore}   orphaned feedback: ${orphansBefore}\n`);
+  const fbBefore = await countFeedbackIntegrity(supabase);
+  console.log(`runs before: ${runsBefore}   dangling feedback: ${fbBefore.dangling}   unlinked: ${fbBefore.unlinked}\n`);
 
   if (COMMIT) {
     if (!SNAPSHOT) {
@@ -106,6 +117,7 @@ async function main() {
   let exactMatches = 0;
   let lapsBackfilled = 0;
   const corrections: { externalId: string; stored: string; corrected: string }[] = [];
+  const insertList: { date: string; km: number; name: string }[] = [];
   const errors: string[] = [];
 
   for (const activity of runs) {
@@ -138,6 +150,7 @@ async function main() {
         const existing = await findExistingRun(userId, run);
         if (!existing) {
           inserts++;
+          insertList.push({ date: run.date, km: run.distanceKm, name: run.workoutName ?? '' });
         } else {
           updates++;
           if (existing.matchedBy === 'filename') exactMatches++;
@@ -166,6 +179,13 @@ async function main() {
   if (COMMIT) console.log(`laps written:   ${lapsBackfilled}`);
   console.log(`dateCorrected:  ${corrections.length}`);
 
+  if (insertList.length > 0) {
+    console.log('\nwould INSERT:');
+    for (const i of insertList.sort((a, b) => a.date.localeCompare(b.date))) {
+      console.log(`  ${i.date.slice(0, 16).replace('T', ' ')}  ${i.km.toFixed(2).padStart(6)} km  ${i.name}`);
+    }
+  }
+
   if (corrections.length > 0) {
     console.log('\ntimestamp corrections:');
     for (const c of corrections.sort((a, b) => a.corrected.localeCompare(b.corrected))) {
@@ -188,10 +208,10 @@ async function main() {
   }
 
   const runsAfter = await countRuns(supabase, userId);
-  const orphansAfter = await countOrphanFeedback(supabase);
-  console.log(`\nruns after: ${runsAfter}   orphaned feedback: ${orphansAfter}`);
+  const fbAfter = await countFeedbackIntegrity(supabase);
+  console.log(`\nruns after: ${runsAfter}   dangling feedback: ${fbAfter.dangling}   unlinked: ${fbAfter.unlinked}`);
 
-  if (VERIFY) verifyAcceptanceCriteria({ inserts, updates, corrections, runsBefore, runsAfter, orphansAfter });
+  if (VERIFY) verifyAcceptanceCriteria({ inserts, updates, corrections, runsBefore, runsAfter, fbAfter });
 }
 
 function verifyAcceptanceCriteria(actual: {
@@ -200,7 +220,7 @@ function verifyAcceptanceCriteria(actual: {
   corrections: { corrected: string }[];
   runsBefore: number;
   runsAfter: number;
-  orphansAfter: number;
+  fbAfter: { dangling: number; unlinked: number };
 }) {
   console.log('\n--- acceptance criteria ---');
   const checks: [string, boolean, string][] = [];
@@ -223,9 +243,14 @@ function verifyAcceptanceCriteria(actual: {
   ]);
 
   checks.push([
-    `no new feedback orphans (stays ${EXPECTED.preExistingOrphans})`,
-    actual.orphansAfter === EXPECTED.preExistingOrphans,
-    `got ${actual.orphansAfter}`,
+    'no feedback row points at a missing run',
+    actual.fbAfter.dangling === EXPECTED.danglingFeedback,
+    `got ${actual.fbAfter.dangling}`,
+  ]);
+  checks.push([
+    `unlinked feedback unchanged (${EXPECTED.unlinkedFeedback})`,
+    actual.fbAfter.unlinked === EXPECTED.unlinkedFeedback,
+    `got ${actual.fbAfter.unlinked}`,
   ]);
 
   if (COMMIT) {
@@ -270,22 +295,30 @@ async function countRuns(
 }
 
 /**
- * run_feedback rows whose run_id no longer resolves. Must never grow: laps and
- * feedback both cascade on delete, so a rise here means a row was destroyed
- * rather than updated in place.
+ * Two distinct integrity numbers, deliberately not conflated:
+ *
+ * - `dangling`: feedback pointing at a run id that no longer exists. This is
+ *   the real safety property. laps and run_feedback both cascade on delete, so
+ *   any rise here means a row was destroyed rather than updated in place.
+ * - `unlinked`: feedback with run_id IS NULL. One legacy row, never attached to
+ *   a run, which cannot dangle. A LEFT JOIN counts it as an orphan and hides
+ *   the number that actually matters.
  */
-async function countOrphanFeedback(supabase: {
-  from: (t: string) => { select: (c: string) => Promise<{ data: { run_id: string | null }[] | null }> };
-}): Promise<number> {
+async function countFeedbackIntegrity(supabase: {
+  from: (t: string) => {
+    select: (c: string) => Promise<{ data: { run_id: string | null }[] | null }>;
+  } & { select: (c: string) => { in: (k: string, v: string[]) => Promise<{ data: { id: string }[] | null }> } };
+}): Promise<{ dangling: number; unlinked: number }> {
   const { data: feedback } = await supabase.from('run_feedback').select('run_id');
-  if (!feedback) return 0;
+  if (!feedback) return { dangling: 0, unlinked: 0 };
 
+  const unlinked = feedback.filter((f) => !f.run_id).length;
   const ids = feedback.map((f) => f.run_id).filter((id): id is string => Boolean(id));
-  if (ids.length === 0) return 0;
+  if (ids.length === 0) return { dangling: 0, unlinked };
 
   const { data: runs } = await supabase.from('runs').select('id').in('id', ids);
   const alive = new Set((runs ?? []).map((r: { id: string }) => r.id));
-  return ids.filter((id) => !alive.has(id)).length;
+  return { dangling: ids.filter((id) => !alive.has(id)).length, unlinked };
 }
 
 main().catch((err) => {
