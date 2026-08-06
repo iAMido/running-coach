@@ -42,8 +42,40 @@ export interface PlannedZoneBand {
   ceiling: number;
 }
 
-/** Above this share of time beyond the planned ceiling, flag it. */
-export const ABOVE_TARGET_FLAG_PCT = 30;
+/** Above this share of time beyond the planned band, flag it. Applied
+ *  symmetrically to overshoot and undershoot rather than inventing a second
+ *  number. */
+export const OFF_TARGET_FLAG_PCT = 30;
+
+/**
+ * Which sessions are judged against the 80/20 easy band rather than the
+ * literal `target_hr` label.
+ *
+ * The plan's own labels are not trustworthy: it writes `"Z1 (115-135)"` for
+ * easy runs, but under current bands Z1 is 0-124 and Z2 is 124-143, so that
+ * bpm range spans two zones — the label and its own numbers disagreed when it
+ * was generated. Six of eleven planned days prescribe bare Z1, which for a
+ * 45-minute run asks for near-walking.
+ *
+ * The session TYPE is reliable in a way the label is not: the plan generator
+ * wrote it independently of any actual run, so unlike `runs.run_type` it is not
+ * derived from the zone distribution and comparing against it is not circular.
+ *
+ * Judging easy days against Z1+Z2 is not an invented threshold — 80/20 is
+ * declared non-negotiable in COACH_STATIC_BLOCK and Z1+Z2 is this app's own
+ * easy band. It applies a principle the system already holds.
+ */
+const EASY_SESSION = /easy|recovery|long run|base|aerobic|jog|shakeout|steady/i;
+
+/**
+ * Quality sessions, where hitting the intensity is the point. These get the
+ * undershoot flag; an easy run cannot meaningfully undershoot, since running
+ * easier than prescribed is not a training error.
+ */
+const QUALITY_SESSION = /tempo|threshold|interval|vo2|speed|fartlek|pyramid|race|hill|surge/i;
+
+/** The 80/20 easy band. */
+const EASY_BAND: PlannedZoneBand = { label: 'Z1-Z2', floor: 1, ceiling: 2 };
 
 /**
  * Read the zone band from a plan's `target_hr`.
@@ -103,27 +135,44 @@ export interface ZoneDisciplineInput {
  *   out entirely, an unplanned run looks like a compliant one.
  */
 export function formatZoneDiscipline(input: ZoneDisciplineInput): string {
-  const band = parsePlannedZoneBand(input.targetHr);
+  const type = input.plannedType ?? '';
+  const isEasy = EASY_SESSION.test(type);
+  const isQuality = !isEasy && QUALITY_SESSION.test(type);
+
+  // Easy sessions are judged against the 80/20 band. Everything else falls
+  // back to the plan's own label, which is all there is to go on.
+  const band = isEasy ? EASY_BAND : parsePlannedZoneBand(input.targetHr);
   const zonesKnown = hasZoneData(input.zones);
   const zones = input.zones ?? {};
 
+  // How the intent is described: type when there is one, since it is the
+  // reliable field, with the band appended for quality work where the specific
+  // zones are the point.
+  const intent = type
+    ? isEasy
+      ? `${type} (easy: Z1-Z2)`
+      : band
+        ? `${type} ${band.label}`
+        : type
+    : band?.label ?? '';
+
   if (!band) {
-    // Planned, but the plan gave no HR target to compare against.
-    if (input.plannedType) {
+    if (type) {
       return zonesKnown
-        ? `[planned ${input.plannedType} · no HR zone target in plan]`
-        : `[planned ${input.plannedType} · no HR zone target, no zone data]`;
+        ? `[planned ${type} · no HR zone target in plan]`
+        : `[planned ${type} · no HR zone target, no zone data]`;
     }
     return zonesKnown ? '[unplanned run]' : '[unplanned run · no zone data]';
   }
 
   if (!zonesKnown) {
-    return `[planned ${band.label} · no zone data for this run — cannot judge intensity]`;
+    return `[planned ${intent} · no zone data for this run — cannot judge intensity]`;
   }
 
   const round = (n: number) => Math.round(n);
   const inBand = sumZones(zones, band.floor, band.ceiling);
   const aboveCeiling = band.ceiling < 6 ? sumZones(zones, band.ceiling + 1, 6) : 0;
+  const belowFloor = band.floor > 1 ? sumZones(zones, 1, band.floor - 1) : 0;
 
   const parts = [`${round(inBand)}% ${band.label}`];
 
@@ -137,6 +186,14 @@ export function formatZoneDiscipline(input: ZoneDisciplineInput): string {
     }
   }
 
-  const flag = aboveCeiling > ABOVE_TARGET_FLAG_PCT ? ' — ran above target' : '';
-  return `[planned ${band.label} · actual ${parts.join(', ')}${flag}]`;
+  let flag = '';
+  if (aboveCeiling > OFF_TARGET_FLAG_PCT) {
+    flag = ' — ran above target';
+  } else if (isQuality && belowFloor > OFF_TARGET_FLAG_PCT) {
+    // Only quality sessions can fail by being too easy — hitting the intensity
+    // is the entire point of them.
+    flag = ` — ${round(belowFloor)}% below target intensity`;
+  }
+
+  return `[planned ${intent} · actual ${parts.join(', ')}${flag}]`;
 }
