@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Activity, Timer, TrendingUp, Calendar, Target, Zap, Play, ChevronRight } from 'lucide-react';
+import { Activity, Timer, TrendingUp, Calendar, Target, Zap, Play, ChevronRight, HeartPulse, Gauge } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { DashboardStats, Run, TrainingPlan, PlanWeek, Workout } from '@/lib/db/types';
@@ -320,46 +320,109 @@ export default function CoachDashboard() {
       {/* Stat Cards */}
       <div className="grid gap-3.5 grid-cols-2 lg:grid-cols-4">
         {[
-          {
-            title: 'Total runs',
-            value: stats?.totalRuns ?? 0,
-            unit: '',
-            desc: 'all time',
-            icon: Activity,
-            accent: 'var(--rc-blue)',
-            iconBg: 'oklch(0.96 0.04 240)',
-            iconColor: 'var(--rc-blue-deep)',
-          },
-          {
-            title: 'Total distance',
-            value: `${((stats?.totalDistanceKm ?? 0)).toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
-            unit: 'km',
-            desc: 'all time',
-            icon: TrendingUp,
-            accent: 'oklch(0.78 0.15 75)',
-            iconBg: 'oklch(0.96 0.05 75)',
-            iconColor: 'oklch(0.50 0.13 75)',
-          },
-          {
-            title: 'This week',
-            value: `${(stats?.thisWeekKm ?? 0).toFixed(1)}`,
-            unit: 'km',
-            desc: `${stats?.thisWeekRuns ?? 0} run${(stats?.thisWeekRuns ?? 0) !== 1 ? 's' : ''} logged`,
-            icon: Timer,
-            accent: 'var(--rc-good)',
-            iconBg: 'oklch(0.96 0.04 150)',
-            iconColor: 'oklch(0.42 0.10 150)',
-          },
-          {
-            title: 'Active plan',
-            value: stats?.activePlan?.plan_type ?? 'None',
-            unit: '',
-            desc: stats?.activePlan ? `Week ${stats.activePlan.current_week_num}` : 'No active plan',
-            icon: Calendar,
-            accent: 'oklch(0.55 0.18 305)',
-            iconBg: 'oklch(0.96 0.04 305)',
-            iconColor: 'oklch(0.42 0.18 305)',
-          },
+          // 1. THIS WEEK — actual against planned. Falls back to the old
+          //    actual-only display when there is no plan to compare against.
+          (() => {
+            const done = stats?.thisWeekKm ?? 0;
+            const planned = stats?.plannedWeek;
+            return {
+              title: 'This week',
+              value: planned?.km ? `${done.toFixed(1)} / ${planned.km.toFixed(0)}` : done.toFixed(1),
+              unit: 'km',
+              desc: planned
+                ? `${stats?.thisWeekRuns ?? 0} of ${planned.sessions} sessions`
+                : `${stats?.thisWeekRuns ?? 0} run${(stats?.thisWeekRuns ?? 0) !== 1 ? 's' : ''} logged`,
+              icon: Timer,
+              accent: 'var(--rc-good)',
+              iconBg: 'oklch(0.96 0.04 150)',
+              iconColor: 'oklch(0.42 0.10 150)',
+              valueColor: undefined as string | undefined,
+            };
+          })(),
+
+          // 2. FITNESS — CTL and its 28-day direction.
+          (() => {
+            const f = stats?.fitness;
+            const delta = f?.delta;
+            const dir = delta == null ? null : delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
+            return {
+              title: 'Fitness',
+              value: f?.ctl != null ? f.ctl.toFixed(1) : '--',
+              unit: '',
+              desc:
+                f?.ctl == null
+                  ? 'no recovery data'
+                  : dir === null
+                    ? 'no 28-day comparison yet'
+                    : dir === 'flat'
+                      ? 'unchanged in 28 days'
+                      : `${dir} ${Math.abs(delta as number).toFixed(1)} in 28 days`,
+              icon: TrendingUp,
+              accent: 'var(--rc-blue)',
+              iconBg: 'oklch(0.96 0.04 240)',
+              iconColor: 'var(--rc-blue-deep)',
+              valueColor: undefined as string | undefined,
+            };
+          })(),
+
+          // 3. RECOVERY — HRV is never shown bare; it is meaningless without
+          //    the baseline. HRV is null ~12% of nights, and a missing reading
+          //    must not read as a bad one, so sleep carries the tile instead.
+          (() => {
+            const r = stats?.recoveryTile;
+            const sleep = r?.sleepHours != null ? `slept ${r.sleepHours.toFixed(1)} h` : null;
+
+            if (!r) {
+              return {
+                title: 'Recovery', value: '--', unit: '', desc: 'no recovery data',
+                icon: HeartPulse, accent: 'oklch(0.78 0.15 75)',
+                iconBg: 'oklch(0.96 0.05 75)', iconColor: 'oklch(0.50 0.13 75)',
+                valueColor: undefined as string | undefined,
+              };
+            }
+
+            const hasHrv = r.hrv != null && r.hrvDelta != null;
+            const sign = (r.hrvDelta ?? 0) >= 0 ? '+' : '';
+            return {
+              title: 'Recovery',
+              value: hasHrv ? `HRV ${Math.round(r.hrv as number)}` : sleep ? `${(r.sleepHours as number).toFixed(1)} h` : '--',
+              unit: '',
+              desc: hasHrv
+                ? [`${sign}${r.hrvDelta} vs baseline`, sleep].filter(Boolean).join(' · ')
+                : ['no HRV last night', sleep].filter(Boolean).join(' · '),
+              icon: HeartPulse,
+              accent: 'oklch(0.78 0.15 75)',
+              iconBg: 'oklch(0.96 0.05 75)',
+              iconColor: 'oklch(0.50 0.13 75)',
+              valueColor: undefined as string | undefined,
+            };
+          })(),
+
+          // 4. LOAD RAMP — how fast load is climbing. Coloured, because the
+          //    number only matters relative to a safe rate of increase.
+          (() => {
+            const l = stats?.loadRamp;
+            const pct = l?.pctChange;
+            const colour =
+              pct == null ? undefined
+                : pct > 30 ? 'var(--rc-bad, oklch(0.55 0.20 25))'
+                  : pct > 10 ? 'oklch(0.60 0.15 75)'
+                    : 'oklch(0.45 0.12 150)';
+            return {
+              title: 'Load ramp',
+              value: pct == null ? '--' : `${pct > 0 ? '+' : ''}${pct}%`,
+              unit: '',
+              desc:
+                pct == null
+                  ? 'needs 3 weeks of history'
+                  : `${l?.last7} vs ${l?.weeklyAvg28} weekly avg`,
+              icon: Gauge,
+              accent: 'oklch(0.55 0.18 305)',
+              iconBg: 'oklch(0.96 0.04 305)',
+              iconColor: 'oklch(0.42 0.18 305)',
+              valueColor: colour,
+            };
+          })(),
         ].map((card) => {
           const Icon = card.icon;
           return (
@@ -379,7 +442,7 @@ export default function CoachDashboard() {
               </div>
               <div
                 className="text-[28px] font-bold"
-                style={{ letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', color: 'var(--rc-ink)' }}
+                style={{ letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', color: card.valueColor ?? 'var(--rc-ink)' }}
               >
                 {card.value}
                 {card.unit && <span className="text-[12px] font-medium ml-1" style={{ color: 'var(--rc-ink-3)' }}>{card.unit}</span>}

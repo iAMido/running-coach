@@ -333,6 +333,42 @@ export interface DashboardStats {
     reasons: string[];
     fatigueScore: number;
   };
+
+  /**
+   * Planned side of the This Week tile. Null when no active plan covers the
+   * current week — the tile then shows actuals alone rather than "x / 0".
+   */
+  plannedWeek?: {
+    /** Null when the plan prescribes sessions without distances. */
+    km: number | null;
+    sessions: number;
+  } | null;
+
+  /** CTL now vs 28 days ago. Nulls when wellness data is absent. */
+  fitness?: {
+    ctl: number | null;
+    ctlPrior: number | null;
+    delta: number | null;
+  };
+
+  /**
+   * Latest HRV against its baseline, plus sleep. HRV is null on roughly 12% of
+   * nights; a null must render as "no HRV last night", never as 0.
+   */
+  recoveryTile?: {
+    hrv: number | null;
+    hrvBaseline: number | null;
+    hrvDelta: number | null;
+    sleepHours: number | null;
+    sleepScore: number | null;
+  } | null;
+
+  /** 7-day TRIMP against the trailing 28-day weekly average. */
+  loadRamp?: {
+    last7: number | null;
+    weeklyAvg28: number | null;
+    pctChange: number | null;
+  };
 }
 
 // ============================================================
