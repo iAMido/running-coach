@@ -472,14 +472,44 @@ So `Z4 HR` in a pushed workout resolves against *intervals.icu's* Z4
 displaying "Z4" are not the same band — they overlap but the watch's is ~8 bpm
 higher at the bottom.
 
-Do not ship write-back until this is resolved, by one of:
-1. an actual threshold test, then align all three systems on the measured value;
-2. emitting absolute BPM ranges in the description instead of zone names, which
-   sidesteps whose zones win entirely (safest, and probably correct anyway);
-3. rewriting app zone numbers into intervals.icu zone numbers in the mapper.
+**Absolute BPM is NOT a way out — an earlier draft of this section said it was.**
+intervals.icu's workout parser does not accept raw bpm. Per the platform's own
+developer: HR must be given as a *percentage*, deliberately, so workouts stay
+portable between athletes. A user asking for exactly `low bpm = 126, high bpm =
+130` was told it is unavailable and built the session in Garmin Connect instead.
 
-Option 2 is recommended — a workout that says `- 3m 155-168 HR` cannot be
-misinterpreted by either system.
+**The actual unblock: percentages of MAX HR, not threshold.** The same syntax
+(`- 10m 74-76% HR`) resolves against whichever basis the *account* is configured
+for. Max HR is the one value that already agrees everywhere — **191** on Garmin,
+in intervals.icu, and in `athlete_profile` since Phase 2b. Threshold is the only
+divergent number, and it does not feed the app's zones at all, since those are
+%-of-max anchored.
+
+So emit `% HR` computed against 191 and the 165-vs-173 disagreement never enters
+the calculation:
+
+| App zone | BPM (max 191) | Emit as |
+|---|---|---|
+| Z1 | 0–124 | `0-65% HR` |
+| Z2 | 124–143 | `65-75% HR` |
+| Z3 | 143–155 | `75-81% HR` |
+| Z4 | 155–168 | `81-88% HR` |
+| Z5 | 168–181 | `88-95% HR` |
+| Z6 | 181–191 | `95-100% HR` |
+
+**Non-code prerequisite — verify before writing the mapper.** Whether `% HR`
+resolves against max or threshold is an *account setting* at
+`intervals.icu/settings`, not part of the workout string. If that account is
+configured threshold-anchored, every pushed workout resolves against 173
+regardless of what the app intends, and the mapper is silently wrong.
+
+This also explains the zone-table mismatch recorded in the probe findings:
+intervals.icu's Z4 at 163–172 against the app's 155–168 is exactly what a
+threshold-anchored model produces. That is evidence the account is currently on
+threshold, so expect to change it.
+
+Remaining option if the setting cannot be changed: run an actual threshold test
+and align all three systems on the measured value.
 
 ---
 
