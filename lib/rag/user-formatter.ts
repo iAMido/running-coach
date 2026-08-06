@@ -7,6 +7,8 @@ import { calculateCurrentWeek, sortWorkoutsByDay } from '@/lib/utils/week-calcul
 import { nowInUserTz } from '@/lib/utils/user-time';
 import { formatPace } from '@/lib/utils/pace';
 import { percentileOf, medianOf } from '@/lib/utils/decoupling';
+import { formatZoneDiscipline } from '@/lib/utils/zone-discipline';
+import { plannedWorkoutForRunDate } from '@/lib/ai/run-reaction';
 import { supabase } from '@/lib/db/supabase';
 import type { Run, Lap, RunFeedback, WeeklySummary, AthleteProfile, TrainingPlan, Workout, DailyWellness } from '@/lib/db/types';
 import type { FormattedUserContext } from './types';
@@ -102,6 +104,7 @@ export async function formatUserContext(
     feedback as FeedbackWithRun[],
     maxChars - totalChars - 800, // Reserve ~800 chars for plan
     decouplingHistory,
+    plan ?? null,
   );
   sections.push(runsText.text);
   totalChars += runsText.text.length;
@@ -280,6 +283,7 @@ function formatRecentRuns(
   feedback: FeedbackWithRun[],
   maxChars: number,
   decouplingHistory: number[] = [],
+  plan: TrainingPlan | null = null,
 ): { text: string; count: number } {
   if (runs.length === 0) {
     return { text: '## Recent Runs\nNo recent runs recorded.', count: 0 };
@@ -298,7 +302,7 @@ function formatRecentRuns(
 
   for (const run of runs) {
     const fb = byRunId.get(run.id) || byDate.get((run.date || '').slice(0, 10));
-    const runBlock = formatRunBlock(run, fb, decouplingHistory);
+    const runBlock = formatRunBlock(run, fb, decouplingHistory, plan);
 
     // Check if adding this run would exceed limit
     if (charCount + runBlock.length > maxChars && count > 0) {
@@ -324,8 +328,21 @@ function formatRunBlock(
   run: RunWithLaps,
   fb: FeedbackWithRun | undefined,
   decouplingHistory: number[] = [],
+  plan: TrainingPlan | null = null,
 ): string {
   const lines: string[] = [formatSingleRun(run, decouplingHistory)];
+
+  // Intent vs actual. Intent comes from the PLAN — never from run_type, which
+  // classifyRun derives from these same zones.
+  const { workout } = plannedWorkoutForRunDate(plan, run.date);
+  lines.push(
+    '  ' +
+      formatZoneDiscipline({
+        targetHr: workout?.target_hr ?? null,
+        plannedType: workout?.type ?? null,
+        zones: run,
+      }),
+  );
 
   const lapText = formatRunLaps(run.laps);
   if (lapText) lines.push(lapText);
