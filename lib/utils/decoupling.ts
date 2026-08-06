@@ -41,6 +41,31 @@
 export const MIN_DECOUPLING_LAPS = 6;
 
 /**
+ * Plausible running pace, grade-adjusted min/km. Outside this band the athlete
+ * was not running.
+ *
+ * This is not a tidiness rule — it was the difference between a metric and an
+ * artifact. Without it, laps at 88.9, 36 and 29 min/km (standing still, stairs,
+ * walking) were being averaged in as "slow running". Six of 68 runs contained
+ * such laps and they averaged 21.0% decoupling against 6.0% for everything
+ * else, occupying the entire top of the distribution — including a stair
+ * workout that ranked as the athlete's worst aerobic session.
+ *
+ * Duration weighting does not save you here: a 59-second lap at 88.9 min/km
+ * contributes real time and almost no distance, which is exactly what collapses
+ * the second half's efficiency factor.
+ */
+export const MIN_PLAUSIBLE_PACE_MIN_KM = 3;
+export const MAX_PLAUSIBLE_PACE_MIN_KM = 12;
+
+/**
+ * How much of a session may be discarded before the remainder stops
+ * representing it. Beyond this, a decoupling figure computed on what is left is
+ * worse than no figure — the stair session would reduce to a fragment.
+ */
+export const MAX_EXCLUDED_DURATION_FRACTION = 0.1;
+
+/**
  * Halves must land near even. A lap boundary can put the split at 58/42, which
  * moves the result by more than the bands separate. Measured on this athlete's
  * history, 40–60% rejects 3 runs of 79 — cheap, rarely fires, catches the
@@ -113,13 +138,30 @@ export function computeDecoupling(laps: DecouplingLap[], runType?: string | null
     return { decouplingPct: null, method: null, skippedReason: `not meaningful for ${runType}` };
   }
 
-  const usable: UsableLap[] = (laps ?? []).flatMap((l) =>
+  const measurable: UsableLap[] = (laps ?? []).flatMap((l) =>
     typeof l.durationSec === 'number' && l.durationSec > 0 &&
     typeof l.avgHr === 'number' && l.avgHr > 0 &&
     typeof l.gapPaceMinKm === 'number' && l.gapPaceMinKm > 0
       ? [{ durationSec: l.durationSec, avgHr: l.avgHr, gapPaceMinKm: l.gapPaceMinKm }]
       : [],
   );
+
+  // Drop stops, stairs and walking breaks — see MIN_PLAUSIBLE_PACE_MIN_KM.
+  const usable = measurable.filter(
+    (l) => l.gapPaceMinKm >= MIN_PLAUSIBLE_PACE_MIN_KM && l.gapPaceMinKm <= MAX_PLAUSIBLE_PACE_MIN_KM,
+  );
+
+  const measurableSec = measurable.reduce((s, l) => s + l.durationSec, 0);
+  const usableSec = usable.reduce((s, l) => s + l.durationSec, 0);
+  const excludedFraction = measurableSec > 0 ? (measurableSec - usableSec) / measurableSec : 0;
+
+  if (excludedFraction > MAX_EXCLUDED_DURATION_FRACTION) {
+    return {
+      decouplingPct: null,
+      method: null,
+      skippedReason: `${Math.round(excludedFraction * 100)}% of the session was not running pace (stops/walking) — too much to compute on the remainder`,
+    };
+  }
 
   if (usable.length < MIN_DECOUPLING_LAPS) {
     return {
