@@ -511,6 +511,11 @@ IMPORTANT:
 - Include the "source" field to cite where each workout came from (previous coach or book)
 - Keep workout descriptions concise (under 80 chars each) to fit within token limits
 
+### WRITING target_hr — THE ZONE LABEL AND THE BPM MUST AGREE
+- Sustained easy running lives in **Z1-Z2**. Prescribe easy runs and long runs that way. Reserve a bare **Z1** for genuine recovery jogs and walk-backs only: Z1 tops out around 124 bpm for this athlete, so asking for Z1 across a 45-minute run is asking for near-walking, and the session will be missed every time it is prescribed.
+- The bpm range you write MUST sit inside the zone label you write — check it against the HR ZONES block above before emitting. "Z1 (115-135)" is wrong, because 135 is in Z2. Write "Z1-Z2 (115-135)", or "Z1 (110-124)" if you genuinely mean recovery.
+- The label is later compared against what the athlete actually ran. A label that disagrees with its own numbers produces a false verdict on a session they executed correctly.
+
 ### TRAINING DAY ANCHORS (Use these as defaults):
 - **Monday**: Quality work (thresholds, VO2max intervals, tempo runs)
 - **Wednesday**: Regular scheduled run (easy or moderate)

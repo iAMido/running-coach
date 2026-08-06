@@ -79,7 +79,9 @@
       "Bash(awk '/COACH_STATIC_BLOCK/,/^`;/' lib/ai/coach-prompts.ts)",
       "Bash(grep -nE \"^\\(export \\)?const [A-Z_]+ = \\\\`|^export function build\" lib/ai/coach-prompts.ts)",
       "Bash(git diff *)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(awk 'NR<=496 && /^export function build/{fn=$0; ln=NR} END{}' lib/ai/coach-prompts.ts)",
+      "Bash(awk -F: '$1<496')"
     ]
   },
   "enableAllProjectMcpServers": true,
