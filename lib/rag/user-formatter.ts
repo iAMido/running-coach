@@ -431,7 +431,13 @@ export function formatRunLaps(laps: Lap[] | undefined): string {
   });
 
   const trailing = meaningful.length > MAX_LAPS ? `\n    … +${meaningful.length - MAX_LAPS} more laps` : '';
-  return `  Laps:\n${lapLines.join('\n')}${trailing}`;
+
+  // Absence stated once on the header rather than on every lap line. Without
+  // it, a lap with no GAP is indistinguishable from a flat one — and 220 laps
+  // sit on runs whose splits could not be aligned to intervals.icu intervals.
+  const anyGap = slice.some((l) => l.gap_pace_min_km != null);
+  const header = anyGap ? '  Laps:' : '  Laps (GAP n/a for this run):';
+  return `${header}\n${lapLines.join('\n')}${trailing}`;
 }
 
 function formatSeconds(sec: number): string {
