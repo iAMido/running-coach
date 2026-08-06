@@ -46,7 +46,31 @@ const VERIFY = !hasFlag('--no-verify');
  * documentation — a mismatch means the matcher changed behaviour, which is
  * exactly what a dry run exists to catch.
  */
-const EXPECTED = {
+const RERUN = hasFlag('--rerun');
+
+/**
+ * Second-pass expectations, for re-running after new columns are added
+ * (Tier 1's gap_pace_min_km / cadence_spm).
+ *
+ * `dateCorrected: 0` is the important one. The 11 timestamp corrections landed
+ * on 2026-08-06; a second pass finding any more means either the identity
+ * reconciliation is firing on rows it should not touch, or something rewrote
+ * timestamps in between. It is the cheapest available regression check on the
+ * enrich path and costs nothing to assert.
+ */
+const EXPECTED_RERUN = {
+  inserts: 0,
+  /** Not asserted exactly — it grows with every new run. See verifyAcceptanceCriteria. */
+  updates: 0,
+  dateCorrected: 0,
+  runsBefore: 680,
+  runsAfter: 680,
+  correctionWindow: { from: '2025-12-15', to: '2026-01-11' },
+  danglingFeedback: 0,
+  unlinkedFeedback: 1,
+};
+
+const EXPECTED_FIRST_PASS = {
   inserts: 19,
   updates: 98,
   dateCorrected: 11,
@@ -66,6 +90,8 @@ const EXPECTED = {
   danglingFeedback: 0,
   unlinkedFeedback: 1,
 };
+
+const EXPECTED = RERUN ? EXPECTED_RERUN : EXPECTED_FIRST_PASS;
 
 async function main() {
   const { supabase } = await import('../lib/db/supabase');
@@ -225,13 +251,23 @@ function verifyAcceptanceCriteria(actual: {
   console.log('\n--- acceptance criteria ---');
   const checks: [string, boolean, string][] = [];
 
-  checks.push(['inserts = 19', actual.inserts === EXPECTED.inserts, `got ${actual.inserts}`]);
-  checks.push(['updates = 98', actual.updates === EXPECTED.updates, `got ${actual.updates}`]);
+  // Labels are derived from EXPECTED rather than hardcoded — a label that
+  // disagrees with the assertion it describes is worse than no label.
+  checks.push([`inserts = ${EXPECTED.inserts}`, actual.inserts === EXPECTED.inserts, `got ${actual.inserts}`]);
   checks.push([
-    'dateCorrected = 11',
+    `dateCorrected = ${EXPECTED.dateCorrected}`,
     actual.corrections.length === EXPECTED.dateCorrected,
     `got ${actual.corrections.length}`,
   ]);
+
+  if (RERUN) {
+    // An exact `updates` count would be brittle — it grows with every new run.
+    // The invariant that matters is that nothing was left unmatched, and
+    // `inserts === 0` above already asserts exactly that.
+    checks.push(['every activity matched an existing row', actual.inserts === 0 && actual.updates > 0, `${actual.updates} updated`]);
+  } else {
+    checks.push([`updates = ${EXPECTED.updates}`, actual.updates === EXPECTED.updates, `got ${actual.updates}`]);
+  }
 
   const outOfWindow = actual.corrections.filter(
     (c) => c.corrected < EXPECTED.correctionWindow.from || c.corrected > `${EXPECTED.correctionWindow.to}T23:59:59Z`,

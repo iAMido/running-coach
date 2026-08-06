@@ -372,6 +372,14 @@ function formatSingleRun(run: Run): string {
  *
  * The sign is stated explicitly rather than left to inference, because "GAP is
  * slower than raw" is the counter-intuitive direction and the one that matters.
+ *
+ * ## Absence is rendered, not implied
+ *
+ * intervals.icu history starts 2025-08-05, so 564 of 681 runs will never have a
+ * GAP value. Without an explicit marker, a blank would mean either "this run was
+ * flat" or "we have no idea" — different facts the coach cannot tell apart, and
+ * the ambiguity bites in weekly review and any long-horizon comparison. `GAP
+ * n/a` costs a few tokens and makes absence mean absence.
  */
 const GAP_NOISE_FLOOR_SEC = 8;
 
@@ -379,7 +387,9 @@ export function formatGapAgainst(
   rawPaceMinKm: number | null | undefined,
   gapPaceMinKm: number | null | undefined,
 ): string {
-  if (typeof rawPaceMinKm !== 'number' || typeof gapPaceMinKm !== 'number') return '';
+  // No stored value: say so, rather than looking identical to a flat run.
+  if (typeof gapPaceMinKm !== 'number') return '[GAP n/a]';
+  if (typeof rawPaceMinKm !== 'number') return '';
 
   const deltaSec = (gapPaceMinKm - rawPaceMinKm) * 60;
   if (Math.abs(deltaSec) < GAP_NOISE_FLOOR_SEC) return '';
