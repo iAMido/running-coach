@@ -6,6 +6,8 @@ import { getRecentWellness, getWellnessBaselines, type WellnessBaselines } from 
 import { calculateCurrentWeek, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
 import { nowInUserTz } from '@/lib/utils/user-time';
 import { formatPace } from '@/lib/utils/pace';
+import { percentileOf, medianOf } from '@/lib/utils/decoupling';
+import { supabase } from '@/lib/db/supabase';
 import type { Run, Lap, RunFeedback, WeeklySummary, AthleteProfile, TrainingPlan, Workout, DailyWellness } from '@/lib/db/types';
 import type { FormattedUserContext } from './types';
 
@@ -85,11 +87,21 @@ export async function formatUserContext(
     console.error('user-formatter: recovery block unavailable:', err);
   }
 
+  // The athlete's own decoupling history, so each run can be placed against it
+  // rather than judged by inherited bands. Best-effort.
+  let decouplingHistory: number[] = [];
+  try {
+    decouplingHistory = await getDecouplingHistory(userId);
+  } catch {
+    decouplingHistory = [];
+  }
+
   // 3. Recent runs (fit as many as possible) — feedback joined inline by run_id or date
   const runsText = formatRecentRuns(
     runsWithLaps,
     feedback as FeedbackWithRun[],
     maxChars - totalChars - 800, // Reserve ~800 chars for plan
+    decouplingHistory,
   );
   sections.push(runsText.text);
   totalChars += runsText.text.length;
@@ -267,6 +279,7 @@ function formatRecentRuns(
   runs: RunWithLaps[],
   feedback: FeedbackWithRun[],
   maxChars: number,
+  decouplingHistory: number[] = [],
 ): { text: string; count: number } {
   if (runs.length === 0) {
     return { text: '## Recent Runs\nNo recent runs recorded.', count: 0 };
@@ -285,7 +298,7 @@ function formatRecentRuns(
 
   for (const run of runs) {
     const fb = byRunId.get(run.id) || byDate.get((run.date || '').slice(0, 10));
-    const runBlock = formatRunBlock(run, fb);
+    const runBlock = formatRunBlock(run, fb, decouplingHistory);
 
     // Check if adding this run would exceed limit
     if (charCount + runBlock.length > maxChars && count > 0) {
@@ -307,8 +320,12 @@ function formatRecentRuns(
 /**
  * One run, possibly multi-line: summary + lap detail + my feedback.
  */
-function formatRunBlock(run: RunWithLaps, fb: FeedbackWithRun | undefined): string {
-  const lines: string[] = [formatSingleRun(run)];
+function formatRunBlock(
+  run: RunWithLaps,
+  fb: FeedbackWithRun | undefined,
+  decouplingHistory: number[] = [],
+): string {
+  const lines: string[] = [formatSingleRun(run, decouplingHistory)];
 
   const lapText = formatRunLaps(run.laps);
   if (lapText) lines.push(lapText);
@@ -322,7 +339,7 @@ function formatRunBlock(run: RunWithLaps, fb: FeedbackWithRun | undefined): stri
 /**
  * Format a single run summary line
  */
-function formatSingleRun(run: Run): string {
+function formatSingleRun(run: Run, decouplingHistory: number[] = []): string {
   const date = new Date(run.date).toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
@@ -353,6 +370,10 @@ function formatSingleRun(run: Run): string {
     parts.push(`${run.cadence_spm}spm`);
   }
 
+  if (typeof run.decoupling_pct === 'number') {
+    parts.push(formatDecoupling(run.decoupling_pct, decouplingHistory));
+  }
+
   // Add zone distribution if significant hard effort
   if (run.pct_z4 && run.pct_z4 > 10) {
     parts.push(`(${run.pct_z4.toFixed(0)}% Z4+)`);
@@ -381,6 +402,32 @@ function formatSingleRun(run: Run): string {
  * the ambiguity bites in weekly review and any long-horizon comparison. `GAP
  * n/a` costs a few tokens and makes absence mean absence.
  */
+/**
+ * Aerobic decoupling, placed against the athlete's own distribution.
+ *
+ * Friel's <5 / 5-8 / >8 bands are defined on RAW Pa:HR and calibrated on other
+ * athletes. This figure is grade-adjusted, and applied unchanged those bands
+ * would label a third of this athlete's easy and long running as "went too
+ * hard" (his median is 6.9%). That might be true — rebuilding at CTL 17.7
+ * through an Israeli August, thermal drift on easy runs raises Pa:HR exactly
+ * this way — or the threshold may simply not be his. There is not yet enough
+ * history to tell.
+ *
+ * So the percentile leads, since it is the part that is certainly true, and the
+ * convention follows as context rather than verdict.
+ */
+export function formatDecoupling(pct: number, history: number[]): string {
+  const percentile = percentileOf(pct, history);
+  const median = medianOf(history);
+
+  const own =
+    percentile !== null && median !== null
+      ? `p${percentile} of your own history, median ${median}%`
+      : 'not enough history to place it yet';
+
+  return `[decoupling ${pct}% grade-adj — ${own}]`;
+}
+
 const GAP_NOISE_FLOOR_SEC = 8;
 
 export function formatGapAgainst(
@@ -657,4 +704,21 @@ async function getLatestWeeklySummary(userId: string): Promise<WeeklySummary | n
   const dateStr = weekStart.toISOString().split('T')[0];
 
   return getWeeklySummary(userId, dateStr);
+}
+
+/**
+ * Every decoupling value this athlete has, for percentile placement.
+ *
+ * Whole history rather than a trailing window: the point of comparison is "is
+ * this normal for me", and with ~76 values a shorter window would leave the
+ * percentile too coarse to mean anything.
+ */
+async function getDecouplingHistory(userId: string): Promise<number[]> {
+  const { data } = await supabase
+    .from('runs')
+    .select('decoupling_pct')
+    .eq('user_id', userId)
+    .not('decoupling_pct', 'is', null);
+
+  return ((data ?? []) as { decoupling_pct: number }[]).map((r) => r.decoupling_pct);
 }

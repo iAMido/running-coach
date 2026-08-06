@@ -20,6 +20,12 @@ export interface Run {
   gap_pace_min_km?: number | null;
   /** STEPS per minute (both feet). Already doubled at ingest — do not double again. */
   cadence_spm?: number | null;
+  /**
+   * Aerobic decoupling (Pa:HR), percent. GRADE-ADJUSTED, so not directly
+   * comparable to a raw Pa:HR from TrainingPeaks or Friel. See decoupling_method.
+   */
+  decoupling_pct?: number | null;
+  decoupling_method?: string | null;
   calories?: number;
   run_type?: string;
   workout_name?: string;

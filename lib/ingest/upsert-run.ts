@@ -34,6 +34,7 @@ import { classifyRun } from '@/lib/utils/run-classifier';
 import { calculateTrimp } from '@/lib/utils/trimp';
 import { formatPace, calculatePace } from '@/lib/utils/pace';
 import { computeZonePercentsFromStream, type ZoneBands } from '@/lib/utils/zones';
+import { computeDecoupling } from '@/lib/utils/decoupling';
 import { generateRunReaction, plannedWorkoutForRunDate } from '@/lib/ai/run-reaction';
 import type { AthleteProfile, TrainingPlan } from '@/lib/db/types';
 
@@ -139,6 +140,7 @@ export interface ExistingRunRow {
   avg_pace_str: string | null;
   gap_pace_min_km: number | null;
   cadence_spm: number | null;
+  decoupling_pct: number | null;
   calories: number | null;
   run_type: string | null;
   workout_name: string | null;
@@ -155,7 +157,7 @@ export interface ExistingRunRow {
 
 const EXISTING_COLUMNS =
   'id,filename,date,distance_km,duration_min,avg_hr,max_hr,avg_pace_min_km,avg_pace_str,' +
-  'gap_pace_min_km,cadence_spm,' +
+  'gap_pace_min_km,cadence_spm,decoupling_pct,' +
   'calories,run_type,workout_name,coach_notes,trimp,data_source,pct_z1,pct_z2,pct_z3,pct_z4,pct_z5,pct_z6';
 
 // -------------------------------------------------------------- lazy utils
@@ -286,6 +288,42 @@ async function countLaps(runId: string): Promise<number> {
 }
 
 /** Insert laps for a run. Returns how many rows landed; best-effort throughout. */
+/**
+ * Compute and store aerobic decoupling from the laps now present on the row.
+ *
+ * Runs after laps are written, and reads them back from the database rather
+ * than from the incoming payload, so the insert path and the enrich path (where
+ * laps may already have existed) produce the number the same way.
+ *
+ * Fill-null-only and best-effort: decoupling is derived, so failing to compute
+ * it must never cost the import.
+ */
+async function applyDecoupling(runId: string, runType: string | null): Promise<void> {
+  try {
+    const { data } = await supabase
+      .from('laps')
+      .select('duration_sec,avg_hr,gap_pace_min_km')
+      .eq('run_id', runId)
+      .order('lap_number', { ascending: true });
+
+    const laps = (data ?? []) as { duration_sec: number | null; avg_hr: number | null; gap_pace_min_km: number | null }[];
+    if (laps.length === 0) return;
+
+    const result = computeDecoupling(
+      laps.map((l) => ({ durationSec: l.duration_sec, avgHr: l.avg_hr, gapPaceMinKm: l.gap_pace_min_km })),
+      runType,
+    );
+    if (result.decouplingPct === null) return;
+
+    await supabase
+      .from('runs')
+      .update({ decoupling_pct: result.decouplingPct, decoupling_method: result.method })
+      .eq('id', runId);
+  } catch {
+    // Derived metric — never fail an import over it.
+  }
+}
+
 async function writeLaps(runId: string, run: NormalizedRun): Promise<number> {
   try {
     const laps = await resolve(run.laps);
@@ -408,6 +446,7 @@ async function insertNew(userId: string, run: NormalizedRun, ctx: UpsertContext)
 
   const runId = (inserted as { id: string }).id;
   const lapsWritten = await writeLaps(runId, run);
+  await applyDecoupling(runId, runType);
 
   if (ctx.generateCoachNote !== false) {
     await attachCoachNote(runId, run, runType, zones, avgPaceMinKm, ctx);
@@ -532,6 +571,10 @@ async function enrichExisting(
   let lapsWritten = 0;
   if ((await countLaps(existing.id)) === 0) {
     lapsWritten = await writeLaps(existing.id, run);
+  }
+
+  if (existing.decoupling_pct == null) {
+    await applyDecoupling(existing.id, (patch.run_type as string) ?? existing.run_type);
   }
 
   return {
