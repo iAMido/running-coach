@@ -67,7 +67,8 @@
       "Bash(sed 's/=.*/=<set>/' .env.local)",
       "Bash(echo \"typecheck exit=$?\")",
       "Bash(bunx vercel *)",
-      "Bash(python -)"
+      "Bash(python -)",
+      "Bash(rm -f \"C:/Users/reutn/AppData/Local/Temp/claude/C--Users-ido-running-coach--claude-worktrees-strava-intervals-icu-migration-d15324/0c8db122-35a1-441e-933f-8ee420f286a3/scratchpad/vercel-check.env\")"
     ]
   },
   "enableAllProjectMcpServers": true,

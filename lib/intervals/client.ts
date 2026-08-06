@@ -162,9 +162,16 @@ function describeError(status: number, body: string): string {
   const snippet = body.slice(0, 200);
   switch (status) {
     case 401:
-      return 'intervals.icu rejected the API key (401). It may have been regenerated at intervals.icu/settings -> Developer Settings.';
+      return `intervals.icu rejected the API key (401 "Auth failed"). Most often whitespace or quotes picked up while copying it; otherwise regenerate at intervals.icu/settings -> Developer Settings. ${snippet}`;
     case 403:
-      return `intervals.icu returned 403. This is usually the User-Agent being blocked by Cloudflare rather than an invalid key — the client must send a custom one. ${snippet}`;
+      // Two very different failures share this status, and blaming the
+      // User-Agent for both sends people hunting a Cloudflare problem that
+      // usually isn't there. Cloudflare serves an HTML challenge page; the
+      // application serves clean JSON `{"status":403,"error":"Access denied"}`,
+      // which means the athlete id is wrong (typically a missing "i" prefix).
+      return /cloudflare/i.test(body)
+        ? `intervals.icu returned 403 with a Cloudflare block page — the User-Agent is being rejected, not the key. ${snippet}`
+        : `intervals.icu returned 403 "Access denied", which is an athlete-id problem rather than authentication — a wrong key gives 401. The id needs its "i" prefix (e.g. i665723), or leave it blank to use "0" (the authenticated athlete). ${snippet}`;
     case 404:
       return `intervals.icu returned 404 — check the athlete or activity id. ${snippet}`;
     case 429:

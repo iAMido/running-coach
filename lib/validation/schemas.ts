@@ -158,14 +158,21 @@ export const intervalsSyncSchema = z.object({
 
 // intervals.icu connection. Bounded tightly because these land in a token row:
 // the key is an opaque ~24-char string and the athlete id looks like "i665723".
+//
+// The athlete id NORMALISES rather than merely validating. A bare "665723"
+// passes any regex that allows it, then fails at the API with a 403 that reads
+// as an auth problem — so accepting the form means having to fix it, not just
+// permit it. Blank is allowed too: "0" resolves server-side to whoever the key
+// belongs to, which makes the one genuinely error-prone field skippable.
 export const intervalsConnectSchema = z.object({
   apiKey: z.string().trim().min(8).max(256),
   athleteId: z
     .string()
     .trim()
-    .min(1)
     .max(32)
-    .regex(/^i?\d+$/, 'Athlete ID looks like "i665723" or "665723"'),
+    .regex(/^(i?\d+)?$/, 'Athlete ID looks like "i665723" — or leave it blank to use the key\'s own athlete')
+    .transform((v) => (v === '' ? '0' : v.startsWith('i') ? v : `i${v}`))
+    .optional(),
 });
 
 // Review analysis validation

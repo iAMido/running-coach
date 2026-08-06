@@ -209,7 +209,8 @@ export default function IntervalsSyncPage() {
     }
   };
 
-  const canConnect = apiKeyInput.trim().length >= 8 && athleteIdInput.trim().length > 0 && !connecting;
+  // The athlete id is optional — blank resolves to the key's own athlete.
+  const canConnect = apiKeyInput.trim().length >= 8 && !connecting;
 
   return (
     <div className="space-y-8">
@@ -296,14 +297,20 @@ export default function IntervalsSyncPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-medium" htmlFor="icu-athlete">Athlete ID</label>
+                      <label className="text-sm font-medium" htmlFor="icu-athlete">
+                        Athlete ID <span className="font-normal text-muted-foreground">(optional)</span>
+                      </label>
                       <Input
                         id="icu-athlete"
                         autoComplete="off"
-                        placeholder="i123456"
+                        placeholder="i665723 — or leave blank"
                         value={athleteIdInput}
                         onChange={(e) => setAthleteIdInput(e.target.value)}
                       />
+                      <p className="text-xs text-muted-foreground">
+                        Leave blank and the key&apos;s own athlete is used. A missing
+                        &quot;i&quot; prefix is the usual cause of a 403.
+                      </p>
                     </div>
 
                     <a

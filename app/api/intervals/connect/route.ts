@@ -60,7 +60,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: validation.error }, { status: 400 });
   }
 
-  const { apiKey, athleteId } = validation.data;
+  const apiKey = validation.data.apiKey;
+  // Absent field and blank field both mean "the athlete this key belongs to".
+  const athleteId = validation.data.athleteId ?? '0';
 
   // Verify the credentials actually work before persisting them. Storing an
   // unusable key would surface later as a confusing cron failure instead of
