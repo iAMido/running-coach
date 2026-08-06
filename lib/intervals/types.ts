@@ -38,6 +38,17 @@ export interface IntervalsActivity {
   average_heartrate?: number | null;
   max_heartrate?: number | null;
   calories?: number | null;
+  /**
+   * Grade-adjusted pace as a SPEED in m/s (not a pace). Populated 18/18 in
+   * probing. Converted to min/km at ingest so it can sit beside
+   * `avg_pace_min_km` in the same unit.
+   */
+  gap?: number | null;
+  /**
+   * ONE-LEG cadence (rpm), not steps per minute — measured 56.2-83.6 across
+   * this athlete's runs. Doubled at ingest into `cadence_spm`.
+   */
+  average_cadence?: number | null;
   /** intervals.icu's own precomputed load. The app keeps its own TRIMP as
    *  authoritative; this is stored alongside only as a cross-check. */
   icu_training_load?: number | null;
@@ -54,11 +65,14 @@ export interface IntervalsInterval {
   /** Metres per second. */
   average_speed?: number | null;
 
-  // Richer than Strava ever provided. Not in the `laps` schema yet — adding
-  // `intensity` and `gap` would sharpen the weekly-review per-rep commentary.
-  min_heartrate?: number | null;
-  /** Grade-adjusted pace. */
+  /** Grade-adjusted SPEED in m/s, same as on the activity. */
   gap?: number | null;
+  /** ONE-LEG cadence (rpm). Doubled at ingest — see IntervalsActivity. */
+  average_cadence?: number | null;
+
+  // Richer than Strava ever provided, still unmapped. `intensity` would sharpen
+  // the weekly-review per-rep commentary.
+  min_heartrate?: number | null;
   /** Percent of threshold. */
   intensity?: number | null;
   type?: 'WORK' | 'RECOVERY' | string | null;

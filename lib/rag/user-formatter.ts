@@ -5,6 +5,7 @@ import { getRecentFeedback, getWeeklySummary } from '@/lib/db/feedback';
 import { getRecentWellness, getWellnessBaselines, type WellnessBaselines } from '@/lib/db/wellness';
 import { calculateCurrentWeek, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
 import { nowInUserTz } from '@/lib/utils/user-time';
+import { formatPace } from '@/lib/utils/pace';
 import type { Run, Lap, RunFeedback, WeeklySummary, AthleteProfile, TrainingPlan, Workout, DailyWellness } from '@/lib/db/types';
 import type { FormattedUserContext } from './types';
 
@@ -340,10 +341,16 @@ function formatSingleRun(run: Run): string {
 
   if (run.avg_pace_str) {
     parts.push(`@ ${run.avg_pace_str}/km`);
+    const gap = formatGapAgainst(run.avg_pace_min_km, run.gap_pace_min_km);
+    if (gap) parts.push(gap);
   }
 
   if (run.avg_hr) {
     parts.push(`HR: ${run.avg_hr}`);
+  }
+
+  if (run.cadence_spm) {
+    parts.push(`${run.cadence_spm}spm`);
   }
 
   // Add zone distribution if significant hard effort
@@ -352,6 +359,33 @@ function formatSingleRun(run: Run): string {
   }
 
   return parts.join(' ');
+}
+
+/**
+ * Grade-adjusted pace, rendered only when it materially disagrees with raw pace.
+ *
+ * On flat ground GAP and raw pace differ by 2-3 s/km, which is noise — printing
+ * it on every run would cost tokens and train the reader to skip it. On net
+ * descending terrain the gap reaches 36-48 s/km, and that is precisely where
+ * raw pace misleads: a 6:17/km "threshold" session whose true equivalent effort
+ * is 7:04/km is an easy run wearing a hard run's numbers.
+ *
+ * The sign is stated explicitly rather than left to inference, because "GAP is
+ * slower than raw" is the counter-intuitive direction and the one that matters.
+ */
+const GAP_NOISE_FLOOR_SEC = 8;
+
+export function formatGapAgainst(
+  rawPaceMinKm: number | null | undefined,
+  gapPaceMinKm: number | null | undefined,
+): string {
+  if (typeof rawPaceMinKm !== 'number' || typeof gapPaceMinKm !== 'number') return '';
+
+  const deltaSec = (gapPaceMinKm - rawPaceMinKm) * 60;
+  if (Math.abs(deltaSec) < GAP_NOISE_FLOOR_SEC) return '';
+
+  const harder = deltaSec > 0 ? 'downhill-aided' : 'uphill-penalised';
+  return `[GAP ${formatPace(gapPaceMinKm)}/km, ${deltaSec > 0 ? '+' : ''}${Math.round(deltaSec)}s — ${harder}]`;
 }
 
 /**
@@ -375,9 +409,15 @@ export function formatRunLaps(laps: Lap[] | undefined): string {
     const dist = l.distance_km?.toFixed(2) ?? '?';
     const dur = l.duration_sec != null ? formatSeconds(l.duration_sec) : '?';
     const pace = l.avg_pace_str ? `${l.avg_pace_str}/km` : '';
+    // Per-rep GAP is where grade adjustment matters most — it separates "that
+    // rep was genuinely faster" from "that rep was downhill".
+    const gap = l.gap_pace_min_km != null && l.duration_sec && l.distance_km
+      ? formatGapAgainst(l.duration_sec / 60 / l.distance_km, l.gap_pace_min_km)
+      : '';
     const hr = l.avg_hr ? `HR ${l.avg_hr}` : '';
+    const cad = l.cadence_spm ? ` ${l.cadence_spm}spm` : '';
     const drift = firstHr && l.avg_hr ? ` (${formatDrift(l.avg_hr - firstHr)})` : '';
-    return `    L${l.lap_number}: ${dist}km / ${dur} ${pace} ${hr}${drift}`.trim().replace(/ +/g, ' ');
+    return `    L${l.lap_number}: ${dist}km / ${dur} ${pace} ${gap} ${hr}${cad}${drift}`.trim().replace(/ +/g, ' ');
   });
 
   const trailing = meaningful.length > MAX_LAPS ? `\n    … +${meaningful.length - MAX_LAPS} more laps` : '';

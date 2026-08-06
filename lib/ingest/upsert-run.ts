@@ -49,6 +49,10 @@ export interface NormalizedLap {
   avgHr?: number | null;
   maxHr?: number | null;
   avgPaceStr?: string | null;
+  /** Grade-adjusted pace, min/km — same unit as avgPaceStr's source. */
+  gapPaceMinKm?: number | null;
+  /** STEPS per minute, already doubled from the provider's one-leg rpm. */
+  cadenceSpm?: number | null;
 }
 
 export interface HrStream {
@@ -71,6 +75,13 @@ export interface NormalizedRun {
   calories?: number | null;
   workoutName?: string | null;
   dataSource: DataSource;
+  /**
+   * Grade-adjusted pace, min/km — directly comparable to the computed
+   * `avg_pace_min_km` rather than needing a unit conversion first.
+   */
+  gapPaceMinKm?: number | null;
+  /** STEPS per minute, already doubled from the provider's one-leg rpm. */
+  cadenceSpm?: number | null;
   /** Fetched only when zones are actually needed — see `resolveZones`. */
   hrStream?: Lazy<HrStream | null> | null;
   /** Fetched only when the target row has no laps. */
@@ -126,6 +137,8 @@ export interface ExistingRunRow {
   max_hr: number | null;
   avg_pace_min_km: number | null;
   avg_pace_str: string | null;
+  gap_pace_min_km: number | null;
+  cadence_spm: number | null;
   calories: number | null;
   run_type: string | null;
   workout_name: string | null;
@@ -142,6 +155,7 @@ export interface ExistingRunRow {
 
 const EXISTING_COLUMNS =
   'id,filename,date,distance_km,duration_min,avg_hr,max_hr,avg_pace_min_km,avg_pace_str,' +
+  'gap_pace_min_km,cadence_spm,' +
   'calories,run_type,workout_name,coach_notes,trimp,data_source,pct_z1,pct_z2,pct_z3,pct_z4,pct_z5,pct_z6';
 
 // -------------------------------------------------------------- lazy utils
@@ -285,6 +299,8 @@ async function writeLaps(runId: string, run: NormalizedRun): Promise<number> {
       avg_hr: lap.avgHr != null ? Math.round(lap.avgHr) : null,
       max_hr: lap.maxHr != null ? Math.round(lap.maxHr) : null,
       avg_pace_str: lap.avgPaceStr ?? null,
+      gap_pace_min_km: lap.gapPaceMinKm ?? null,
+      cadence_spm: lap.cadenceSpm ?? null,
     }));
 
     const { error } = await supabase.from('laps').insert(rows);
@@ -374,6 +390,8 @@ async function insertNew(userId: string, run: NormalizedRun, ctx: UpsertContext)
       max_hr: maxHr,
       avg_pace_min_km: avgPaceMinKm,
       avg_pace_str: formatPace(avgPaceMinKm),
+      gap_pace_min_km: run.gapPaceMinKm ?? null,
+      cadence_spm: run.cadenceSpm ?? null,
       calories: run.calories || null,
       run_type: runType,
       workout_name: run.workoutName ?? null,
@@ -446,6 +464,8 @@ export function buildEnrichPatch(
   fill('calories', run.calories || null);
   fill('workout_name', run.workoutName ?? null);
   fill('data_source', run.dataSource);
+  fill('gap_pace_min_km', run.gapPaceMinKm ?? null);
+  fill('cadence_spm', run.cadenceSpm ?? null);
 
   if (existing.avg_pace_min_km == null || existing.avg_pace_str == null) {
     const pace = calculatePace(run.distanceKm, run.durationMin);

@@ -13,6 +13,13 @@ export interface Run {
   max_hr?: number;
   avg_pace_min_km?: number;
   avg_pace_str?: string;
+  /**
+   * Grade-adjusted pace, min/km — same unit as `avg_pace_min_km`, so the two
+   * subtract directly. Null on every run recorded before 2026-08-06.
+   */
+  gap_pace_min_km?: number | null;
+  /** STEPS per minute (both feet). Already doubled at ingest — do not double again. */
+  cadence_spm?: number | null;
   calories?: number;
   run_type?: string;
   workout_name?: string;
@@ -37,6 +44,10 @@ export interface Lap {
   avg_hr?: number;
   max_hr?: number;
   avg_pace_str?: string;
+  /** Grade-adjusted pace, min/km. Directly comparable to avg_pace_str's value. */
+  gap_pace_min_km?: number | null;
+  /** STEPS per minute (both feet). Already doubled at ingest — do not double again. */
+  cadence_spm?: number | null;
   created_at?: string;
 }
 

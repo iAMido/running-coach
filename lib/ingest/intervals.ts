@@ -28,20 +28,44 @@ export function filterRuns(activities: IntervalsActivity[]): IntervalsActivity[]
   return (activities ?? []).filter(isRunActivity);
 }
 
+/** m/s -> min/km. The unit every pace column in this schema uses. */
+export function speedToPaceMinKm(metresPerSecond: number | null | undefined): number | null {
+  if (typeof metresPerSecond !== 'number' || metresPerSecond <= 0) return null;
+  return 1000 / (metresPerSecond * 60);
+}
+
+/**
+ * intervals.icu reports `average_cadence` as ONE-LEG rpm — measured 56.2-83.6
+ * across this athlete's 117 runs, which doubles to 112-167 steps/min, exactly
+ * where running cadence belongs.
+ *
+ * The doubling is guarded rather than unconditional: a source that ever starts
+ * reporting true steps/min would otherwise be silently doubled into nonsense.
+ * The threshold sits 36 above the highest value ever observed here, so no real
+ * reading is near the boundary.
+ */
+const ONE_LEG_CADENCE_CEILING = 120;
+
+export function toCadenceSpm(averageCadence: number | null | undefined): number | null {
+  if (typeof averageCadence !== 'number' || averageCadence <= 0) return null;
+  return Math.round(averageCadence < ONE_LEG_CADENCE_CEILING ? averageCadence * 2 : averageCadence);
+}
+
 /** `icu_intervals[]` -> laps. Index order gives the lap number. */
 export function toNormalizedLaps(intervals: IntervalsInterval[]): NormalizedLap[] {
-  return (intervals ?? []).map((lap, index) => ({
-    lapNumber: index + 1,
-    distanceKm: typeof lap.distance === 'number' ? lap.distance / 1000 : undefined,
-    durationSec: typeof lap.moving_time === 'number' ? lap.moving_time : undefined,
-    avgHr: lap.average_heartrate ?? null,
-    maxHr: lap.max_heartrate ?? null,
-    // average_speed is m/s; its reciprocal in min/km is what formatPace wants.
-    avgPaceStr:
-      typeof lap.average_speed === 'number' && lap.average_speed > 0
-        ? formatPace(1 / ((lap.average_speed * 60) / 1000))
-        : null,
-  }));
+  return (intervals ?? []).map((lap, index) => {
+    const pace = speedToPaceMinKm(lap.average_speed);
+    return {
+      lapNumber: index + 1,
+      distanceKm: typeof lap.distance === 'number' ? lap.distance / 1000 : undefined,
+      durationSec: typeof lap.moving_time === 'number' ? lap.moving_time : undefined,
+      avgHr: lap.average_heartrate ?? null,
+      maxHr: lap.max_heartrate ?? null,
+      avgPaceStr: pace !== null ? formatPace(pace) : null,
+      gapPaceMinKm: speedToPaceMinKm(lap.gap),
+      cadenceSpm: toCadenceSpm(lap.average_cadence),
+    };
+  });
 }
 
 /**
@@ -85,6 +109,11 @@ export function toNormalizedRun(activity: IntervalsActivity, client: IntervalsCl
     calories: activity.calories ?? null,
     workoutName: activity.name,
     dataSource: 'intervals_sync',
+    // Grade-adjusted pace. On net-descending terrain this diverges from raw
+    // pace by 36-48 s/km, which is the difference between reading a session as
+    // threshold work and reading it as an easy run.
+    gapPaceMinKm: speedToPaceMinKm(activity.gap),
+    cadenceSpm: toCadenceSpm(activity.average_cadence),
     // Zones are ALWAYS derived from the stream against the athlete's own bands.
     // `icu_hr_zone_times` is on the summary and tempting, but intervals.icu
     // disagrees with athlete_profile about where the zones are — using it would
