@@ -65,7 +65,8 @@
       "Read(//c/Program Files/Git/usr/bin/**)",
       "Bash(node -e ' *)",
       "Bash(sed 's/=.*/=<set>/' .env.local)",
-      "Bash(echo \"typecheck exit=$?\")"
+      "Bash(echo \"typecheck exit=$?\")",
+      "Bash(bunx vercel *)"
     ]
   },
   "enableAllProjectMcpServers": true,

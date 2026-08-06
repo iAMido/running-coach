@@ -199,7 +199,12 @@ function distancesMatch(a: number, b: number): boolean {
  * `lib/utils/user-time.ts` rule does not apply. Day/week questions in this
  * module go through `plannedWorkoutForRunDate`, which handles the timezone.
  */
-async function findExistingRun(
+/**
+ * Exported so the backfill's dry run can report what it *would* do using the
+ * exact matcher production uses. A separate re-implementation would make the
+ * dry run a test of code that never ships.
+ */
+export async function findExistingRun(
   userId: string,
   run: NormalizedRun,
 ): Promise<{ row: ExistingRunRow; matchedBy: MatchKind } | null> {
