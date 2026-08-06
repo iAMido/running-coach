@@ -2,9 +2,10 @@ import { getRecentRunsWithLaps } from '@/lib/db/runs';
 import { getAthleteProfile } from '@/lib/db/profile';
 import { getActivePlan } from '@/lib/db/plans';
 import { getRecentFeedback, getWeeklySummary } from '@/lib/db/feedback';
+import { getRecentWellness, getWellnessBaselines, type WellnessBaselines } from '@/lib/db/wellness';
 import { calculateCurrentWeek, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
 import { nowInUserTz } from '@/lib/utils/user-time';
-import type { Run, Lap, RunFeedback, WeeklySummary, AthleteProfile, TrainingPlan, Workout } from '@/lib/db/types';
+import type { Run, Lap, RunFeedback, WeeklySummary, AthleteProfile, TrainingPlan, Workout, DailyWellness } from '@/lib/db/types';
 import type { FormattedUserContext } from './types';
 
 type RunWithLaps = Run & { laps?: Lap[] };
@@ -65,6 +66,23 @@ export async function formatUserContext(
   const statusText = formatTrainingStatus(runsWithLaps, fatigueScore, currentPhase);
   sections.push(statusText);
   totalChars += statusText.length;
+
+  // 2b. Recovery. Placed high: it is small, and it changes how the coach should
+  // read everything below it. Best-effort — an outage must not cost the rest of
+  // the context.
+  try {
+    const [recentWellness, baselines] = await Promise.all([
+      getRecentWellness(userId, 7),
+      getWellnessBaselines(userId),
+    ]);
+    const recoveryText = formatRecovery(recentWellness, baselines);
+    if (recoveryText) {
+      sections.push(recoveryText);
+      totalChars += recoveryText.length;
+    }
+  } catch (err) {
+    console.error('user-formatter: recovery block unavailable:', err);
+  }
 
   // 3. Recent runs (fit as many as possible) — feedback joined inline by run_id or date
   const runsText = formatRecentRuns(
@@ -465,6 +483,86 @@ export function formatPlannedWeek(plan: TrainingPlan | null, weekNumber: number)
 /**
  * Format weekly summary
  */
+/**
+ * Recovery block for the coach prompt.
+ *
+ * The jargon is translated rather than passed through: the model sees Fitness /
+ * Fatigue / Form, not ctl / atl / ctl-atl. Those abbreviations are ambiguous
+ * outside cycling-adjacent training software, and an LLM guessing at them is a
+ * confabulation risk on data the athlete will act on.
+ *
+ * HRV is always stated relative to baseline, never as a bare number — 48ms is
+ * meaningless without knowing the athlete's normal.
+ *
+ * Missing readings are reported as missing. Silence would let the model infer
+ * whatever suits its sentence.
+ */
+function formatRecovery(days: DailyWellness[], baselines: WellnessBaselines): string {
+  if (days.length === 0) return '';
+
+  const lines: string[] = ['## Recovery (last 7 days)'];
+  const latest = days[0];
+
+  const hrvVals = days.map((d) => d.hrv).filter((v): v is number => typeof v === 'number');
+  if (typeof latest.hrv === 'number' && baselines.hrvMean !== null && baselines.hrvSd) {
+    const sdBelow = (baselines.hrvMean - latest.hrv) / baselines.hrvSd;
+    const descriptor =
+      sdBelow > 1 ? 'suppressed — body still absorbing load'
+      : sdBelow > 0.5 ? 'slightly below normal'
+      : sdBelow < -1 ? 'well above normal — well recovered'
+      : 'within normal range';
+    lines.push(
+      `- HRV today: ${latest.hrv.toFixed(0)}ms vs ${baselines.hrvMean.toFixed(0)}ms baseline ` +
+        `(${baselines.windowDays}-day mean) — ${sdBelow >= 0 ? '' : '+'}${(-sdBelow).toFixed(1)} SD, ${descriptor}.`,
+    );
+  } else if (typeof latest.hrv === 'number') {
+    lines.push(`- HRV today: ${latest.hrv.toFixed(0)}ms (not enough history yet for a baseline — do not call this high or low).`);
+  } else {
+    lines.push('- HRV today: no reading (watch not worn overnight). Do not treat this as poor recovery.');
+  }
+
+  if (hrvVals.length > 1) {
+    const trend = hrvVals.slice(0, 7).reverse().map((v) => v.toFixed(0)).join(' → ');
+    lines.push(`- HRV trend (oldest to newest): ${trend}`);
+  }
+
+  if (typeof latest.sleep_secs === 'number') {
+    const hours = latest.sleep_secs / 3600;
+    const score = typeof latest.sleep_score === 'number' ? `, sleep score ${latest.sleep_score}/100` : '';
+    lines.push(`- Sleep last night: ${hours.toFixed(1)}h${score}.`);
+  } else {
+    lines.push('- Sleep last night: no data.');
+  }
+
+  if (typeof latest.resting_hr === 'number') {
+    const vs =
+      baselines.restingHrMean !== null
+        ? ` vs ${baselines.restingHrMean.toFixed(0)} baseline (${latest.resting_hr - baselines.restingHrMean >= 0 ? '+' : ''}${(latest.resting_hr - baselines.restingHrMean).toFixed(0)} bpm)`
+        : '';
+    lines.push(`- Resting HR: ${latest.resting_hr}${vs}.`);
+  }
+
+  // Fitness / Fatigue / Form, named in plain language.
+  if (typeof latest.ctl === 'number' && typeof latest.atl === 'number') {
+    const form = latest.ctl - latest.atl;
+    const formNote =
+      form > 5 ? 'fresh, possibly detrained'
+      : form >= -10 ? 'normal training range'
+      : 'carrying real fatigue';
+    lines.push(
+      `- Fitness ${latest.ctl.toFixed(1)} · Fatigue ${latest.atl.toFixed(1)} · Form ${form >= 0 ? '+' : ''}${form.toFixed(1)} (${formNote}).`,
+    );
+    lines.push('  Fitness is chronic training load, Fatigue is acute load, Form is Fitness minus Fatigue.');
+  }
+
+  if (typeof latest.weight_kg === 'number') lines.push(`- Weight: ${latest.weight_kg.toFixed(1)}kg.`);
+
+  const missing = 7 - days.length;
+  if (missing > 0) lines.push(`- Note: only ${days.length} of the last 7 days have recovery data.`);
+
+  return lines.join('\n');
+}
+
 function formatWeeklySummary(summary: WeeklySummary): string {
   const lines: string[] = ['## This Week Summary'];
 

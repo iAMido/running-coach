@@ -5,7 +5,8 @@ import { nowInUserTz } from '@/lib/utils/user-time';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { getRecentFeedback, getWeeklySummary, getCurrentWeekStart } from '@/lib/db/feedback';
 import { calculateFatigueScore } from '@/lib/rag/user-formatter';
-import { computeReadiness } from '@/lib/utils/readiness';
+import { computeReadiness, type RecoverySignals } from '@/lib/utils/readiness';
+import { getRecentWellness, getWellnessBaselines } from '@/lib/db/wellness';
 import { plannedWorkoutForRunDate } from '@/lib/ai/run-reaction';
 
 export async function GET() {
@@ -82,10 +83,38 @@ export async function GET() {
     // planned workout. Zero LLM cost, always consistent with the data.
     const fatigueScore = calculateFatigueScore(feedback, weeklySummary);
     const { workout: todaysWorkout } = plannedWorkoutForRunDate(planWithWeekInfo || null, new Date());
+
+    // Recovery layer. Best-effort: a wellness outage must degrade the verdict
+    // to the training-load rules, never break the dashboard.
+    let recovery: RecoverySignals | null = null;
+    try {
+      const [recent, baselines] = await Promise.all([
+        getRecentWellness(userId, 2),
+        getWellnessBaselines(userId),
+      ]);
+      const today = recent[0] ?? null;
+      const yesterday = recent[1] ?? null;
+      if (today) {
+        recovery = {
+          hrv: today.hrv ?? null,
+          hrvPrevious: yesterday?.hrv ?? null,
+          restingHr: today.resting_hr ?? null,
+          sleepSecs: today.sleep_secs ?? null,
+          sleepScore: today.sleep_score ?? null,
+          hrvBaseline: baselines.hrvMean,
+          hrvSd: baselines.hrvSd,
+          restingHrBaseline: baselines.restingHrMean,
+        };
+      }
+    } catch (err) {
+      console.error('Readiness: wellness lookup failed, falling back to load only:', err);
+    }
+
     const readiness = computeReadiness({
       fatigueScore,
       yesterdayRun: lastRunRes.data?.[0] ?? null,
       todaysWorkout,
+      recovery,
     });
 
     return NextResponse.json({

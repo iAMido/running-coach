@@ -68,7 +68,11 @@
       "Bash(echo \"typecheck exit=$?\")",
       "Bash(bunx vercel *)",
       "Bash(python -)",
-      "Bash(rm -f \"C:/Users/reutn/AppData/Local/Temp/claude/C--Users-ido-running-coach--claude-worktrees-strava-intervals-icu-migration-d15324/0c8db122-35a1-441e-933f-8ee420f286a3/scratchpad/vercel-check.env\")"
+      "Bash(rm -f \"C:/Users/reutn/AppData/Local/Temp/claude/C--Users-ido-running-coach--claude-worktrees-strava-intervals-icu-migration-d15324/0c8db122-35a1-441e-933f-8ee420f286a3/scratchpad/vercel-check.env\")",
+      "Bash(awk '{print $5\" bytes\"}')",
+      "Bash(node -e \"const d=require\\('C:/Users/ido/running-coach/.claude/worktrees/strava-intervals-icu-migration-d15324/node_modules/dotenv'\\);process.stdout.write\\(d.parse\\(require\\('fs'\\).readFileSync\\('.env.local'\\)\\).CRON_SECRET||''\\)\")",
+      "Bash(curl -s -o /dev/null -w \"  HTTP %{http_code}\\\\n\" https://running-coach-six.vercel.app/api/cron/intervals-sync)",
+      "Bash(curl -s -m 120 -H 'Authorization: Bearer __TRACKED_VAR__' https://running-coach-six.vercel.app/api/cron/intervals-sync)"
     ]
   },
   "enableAllProjectMcpServers": true,

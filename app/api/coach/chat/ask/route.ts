@@ -18,6 +18,7 @@ import {
 } from '@/lib/supervisor';
 import { TOKEN_BUDGETS_PER_QUERY } from '@/lib/rag/types';
 import { MODEL_FOR } from '@/lib/ai/model-registry';
+import { getLatestWellness } from '@/lib/db/wellness';
 
 // Detect if user wants to modify their training plan
 function detectPlanModificationIntent(query: string): boolean {
@@ -182,11 +183,22 @@ export async function POST(request: NextRequest) {
     // gaps (no planned-today workout, no recent runs, etc.), and may inject
     // a short "SUPERVISOR NOTES" block at the end of the system prompt so
     // the model acknowledges gaps instead of confabulating around them.
+    // Recovery-feed freshness. Best-effort: if this lookup fails we pass
+    // `undefined`, which means "not checked" and raises no warning — better
+    // than a false "stale" claim from a transient database error.
+    let latestWellnessDay: string | null | undefined;
+    try {
+      latestWellnessDay = (await getLatestWellness(userId))?.day ?? null;
+    } catch {
+      latestWellnessDay = undefined;
+    }
+
     const preflight = supervisorValidate({
       context,
       queryType,
       plan: activePlan,
       hasActivePlan: !!activePlan,
+      latestWellnessDay,
     });
     if (preflight.augmentedSystemSuffix) {
       systemPrompt = systemPrompt + preflight.augmentedSystemSuffix;

@@ -18,7 +18,7 @@ import type { EnhancedContext, QueryType } from '@/lib/rag/types';
 import type { TrainingPlan, Run } from '@/lib/db/types';
 import type { PreflightResult, PreflightWarning } from './types';
 import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
-import { nowInUserTz } from '@/lib/utils/user-time';
+import { nowInUserTz, userDateStr } from '@/lib/utils/user-time';
 
 export interface PreflightInput {
   context: EnhancedContext;
@@ -29,7 +29,16 @@ export interface PreflightInput {
   weekRuns?: Run[];
   /** For plan_modification: must be truthy. */
   hasActivePlan?: boolean;
+  /**
+   * `day` (YYYY-MM-DD) of the newest daily_wellness row, or null when there is
+   * none. Undefined means the caller did not check, and no warning is raised —
+   * "not looked at" and "confirmed stale" are different states.
+   */
+  latestWellnessDay?: string | null;
 }
+
+/** Beyond this, the recovery picture is too old to reason from. */
+const WELLNESS_STALE_DAYS = 2;
 
 const HARD_BLOCKERS = new Set<string>([
   'no_active_plan_for_modification',
@@ -39,7 +48,7 @@ export function validateContext(input: PreflightInput): PreflightResult {
   const warnings: PreflightWarning[] = [];
   const augmentations: string[] = [];
 
-  const { context, queryType, plan, weekRuns, hasActivePlan } = input;
+  const { context, queryType, plan, weekRuns, hasActivePlan, latestWellnessDay } = input;
   const user = context.userContext;
   const coach = context.coachContext;
   const book = context.bookContext;
@@ -52,6 +61,36 @@ export function validateContext(input: PreflightInput): PreflightResult {
       severity: 'warn',
     });
   }
+  // Recovery feed freshness. `undefined` means the caller did not look; only a
+  // checked-and-stale feed warrants a warning, otherwise every route that does
+  // not care about wellness would emit a false positive.
+  if (latestWellnessDay !== undefined) {
+    if (latestWellnessDay === null) {
+      warnings.push({
+        code: 'no_wellness_data',
+        message: 'No recovery data (HRV, sleep, resting HR) has ever been synced.',
+        severity: 'warn',
+      });
+      augmentations.push(
+        'There is no HRV, sleep or resting-HR data available. Do not comment on the athlete\'s recovery state or infer it from training load — say it is unavailable if it is relevant.',
+      );
+    } else {
+      const ageDays = Math.floor(
+        (Date.parse(`${userDateStr()}T00:00:00Z`) - Date.parse(`${latestWellnessDay}T00:00:00Z`)) / 86_400_000,
+      );
+      if (ageDays > WELLNESS_STALE_DAYS) {
+        warnings.push({
+          code: 'stale_wellness_data',
+          message: `Newest recovery data is ${ageDays} days old (${latestWellnessDay}).`,
+          severity: 'warn',
+        });
+        augmentations.push(
+          `The most recent HRV/sleep/resting-HR data is from ${latestWellnessDay}, ${ageDays} days ago. Treat any recovery claim as out of date and say so rather than presenting it as current.`,
+        );
+      }
+    }
+  }
+
   if (user.metadata.runsIncluded === 0 && queryType !== 'plan_generation') {
     warnings.push({
       code: 'no_recent_runs',
