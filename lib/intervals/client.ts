@@ -80,16 +80,19 @@ export class IntervalsClient {
     return `Basic ${Buffer.from(`${BASIC_AUTH_USERNAME}:${this.apiKey}`).toString('base64')}`;
   }
 
-  private async request<T>(path: string): Promise<T> {
+  private async request<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
     let lastError: IntervalsApiError | null = null;
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       const response = await this.fetchImpl(`${BASE_URL}${path}`, {
+        method: init?.method ?? 'GET',
         headers: {
           Authorization: this.authorization,
           'User-Agent': USER_AGENT,
           Accept: 'application/json',
+          ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
         },
+        ...(init?.body ? { body: JSON.stringify(init.body) } : {}),
       });
 
       if (response.ok) return (await response.json()) as T;
@@ -142,6 +145,56 @@ export class IntervalsClient {
 
     const time = streams.find((s) => s.type === 'time')?.data;
     return { hr, time: Array.isArray(time) ? time : null };
+  }
+
+  /**
+   * Put a structured workout on the athlete's calendar.
+   *
+   * The event's `target` field is IGNORED by the workout parser — only the
+   * suffix inside `description` decides how the numbers are read, and this app
+   * always emits `% HR`, which resolves against MAX heart rate (probed
+   * 2026-08-07; see lib/intervals/workout-format.ts).
+   *
+   * intervals.icu only pushes ~7 days ahead to the watch, so an event further
+   * out lands on the calendar but will not reach the device until it is inside
+   * that window.
+   */
+  async createWorkoutEvent(event: {
+    startDateLocal: string;
+    name: string;
+    description: string;
+    movingTimeSec?: number;
+  }): Promise<{ id: number | string }> {
+    return this.request(`/athlete/${this.athleteId}/events`, {
+      method: 'POST',
+      body: {
+        category: 'WORKOUT',
+        type: 'Run',
+        start_date_local: event.startDateLocal,
+        name: event.name,
+        description: event.description,
+        ...(event.movingTimeSec ? { moving_time: event.movingTimeSec } : {}),
+      },
+    });
+  }
+
+  /** Remove a calendar event. Used to undo a push. */
+  async deleteEvent(eventId: number | string): Promise<void> {
+    await this.request(`/athlete/${this.athleteId}/events/${eventId}`, { method: 'DELETE' });
+  }
+
+  /**
+   * The athlete's max HR as intervals.icu holds it, read from a recent
+   * activity. Null when no activity in the window carries it.
+   *
+   * Used as the push-time gate: percentages resolve against THIS number, so
+   * pushing while it disagrees with `athlete_profile.max_hr` would silently
+   * send a different bpm range than the plan intends.
+   */
+  async getAthleteMaxHr(oldest: string, newest: string): Promise<number | null> {
+    const activities = await this.getActivities(oldest, newest);
+    const withMax = activities.find((a) => typeof a.athlete_max_hr === 'number');
+    return withMax?.athlete_max_hr ?? null;
   }
 
   /** Daily wellness in a date window, inclusive. Dates are YYYY-MM-DD. */

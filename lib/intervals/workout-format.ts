@@ -100,41 +100,107 @@ export function parseDurationMinutes(duration: string | undefined): number | nul
   return bare ? Number(bare[1]) : null;
 }
 
+/**
+ * The bpm range from a `target_hr` string's parenthetical, e.g. "Z1-Z2
+ * (125-145)" -> {125, 145}.
+ *
+ * NOT anchored at the end of the string: 2 of ~45 real workouts carry trailing
+ * text — "Z3-Z4 (155-175) on climbs" and "Z3-Z4 (160-175) climbs" — and a `$`
+ * anchor would reject both.
+ */
+export function parseTargetBpm(targetHr: string | null | undefined): { low: number; high: number } | null {
+  if (!targetHr) return null;
+  const m = /\(\s*(\d{2,3})\s*[-–—]\s*(\d{2,3})\s*\)/.exec(targetHr);
+  if (!m) return null;
+  const low = Number(m[1]);
+  const high = Number(m[2]);
+  // Plausible running heart rates only — guards against a stray pace or
+  // distance in parentheses being read as bpm.
+  if (low < 60 || high > 220 || low >= high) return null;
+  return { low, high };
+}
+
 export interface WorkoutTranslation {
   description: string;
   /** The bpm range the percentages were derived from, for the UI to show. */
   bpmLow: number;
   bpmHigh: number;
   minutes: number;
+  /** Where the bpm came from — the plan's own numbers, or the zone label. */
+  source: 'target_bpm' | 'zone_band';
+  /** Non-fatal notes worth showing the athlete, e.g. dropped "+ bursts". */
+  notes: string[];
 }
 
 /**
  * A planned workout -> a pushable description.
  *
- * v1 emits ONE steady block at the prescribed zone. The plan's `description`
- * carries interval structure as free text ("Main: 4x(6min tempo / 3min easy)"),
- * and parsing that reliably is a separate problem — a mis-parsed interval
- * session on the watch is worse than a correct steady one. `renderWorkoutDescription`
- * already supports repeat blocks, so richer structure is a mapper change only.
+ * ## Uses the parenthetical bpm, NOT the zone label — deliberately the
+ * ## opposite of what `zone-discipline.ts` does
  *
- * Returns null when the workout carries no usable zone or duration, so the
- * caller can skip it rather than push something invented.
+ * The two features want different fields for different reasons, and someone
+ * will eventually "fix" one to match the other. They should not.
+ *
+ * - `zone-discipline.ts` compares intent against `pct_z1..z6`, which are
+ *   computed from the *label's* definition. It must use the label, and must
+ *   ignore the bpm — those numbers predate the max-HR-191 rescale.
+ * - Here the output is a target on a watch. The label's band is useless for
+ *   that: `Z1-Z2` is 0-143 bpm, an alert that would never fire. The
+ *   parenthetical is the author's actual intent, and it varies within a single
+ *   label — `Z2-Z3` appears as (145-165), (150-165), (145-160) and (145-162) —
+ *   which is someone expressing a specific target, not picking a zone.
+ *
+ * The bpm has also aged better than the label: `125-145` sits almost exactly on
+ * the current Z2 (124-143), closer than it fitted the bands it was written under.
+ *
+ * Falls back to the label's band only when there is no parenthetical, which
+ * happens once in ~45 workouts ("Z1-Z2 + bursts") — a real session that should
+ * still reach the watch.
+ *
+ * v1 emits ONE steady block. The plan's `description` carries interval
+ * structure as free text ("Main: 4x(6min tempo / 3min easy)") and a mis-parsed
+ * interval session on the wrist is worse than a correct steady one.
+ *
+ * Returns null only when the workout is not a session at all (rest days carry
+ * "—" for every field) or has no usable duration.
  */
 export function planWorkoutToDescription(
   workout: Workout,
   bands: ZoneBands,
   maxHr: number,
 ): WorkoutTranslation | null {
-  const band = parsePlannedZoneBand(workout.target_hr);
   const minutes = parseDurationMinutes(workout.duration);
-  if (!band || !minutes) return null;
+  if (!minutes) return null;
 
-  const floorBand = bands[`z${band.floor}` as keyof ZoneBands];
-  const ceilingBand = bands[`z${band.ceiling}` as keyof ZoneBands];
-  if (!floorBand || !ceilingBand) return null;
+  const notes: string[] = [];
+  let bpmLow: number;
+  let bpmHigh: number;
+  let source: WorkoutTranslation['source'];
 
-  const bpmLow = floorBand.low;
-  const bpmHigh = ceilingBand.high;
+  const targetBpm = parseTargetBpm(workout.target_hr);
+  if (targetBpm) {
+    ({ low: bpmLow, high: bpmHigh } = targetBpm);
+    source = 'target_bpm';
+  } else {
+    const band = parsePlannedZoneBand(workout.target_hr);
+    if (!band) return null;
+    const floorBand = bands[`z${band.floor}` as keyof ZoneBands];
+    const ceilingBand = bands[`z${band.ceiling}` as keyof ZoneBands];
+    if (!floorBand || !ceilingBand) return null;
+    bpmLow = floorBand.low;
+    bpmHigh = ceilingBand.high;
+    source = 'zone_band';
+    notes.push(`No bpm range in the plan — used the ${band.label} band (${bpmLow}-${bpmHigh} bpm).`);
+  }
+
+  // Anything after the closing paren is real coaching intent the percentages
+  // cannot carry ("on climbs", "+ bursts"). Surface it rather than drop it.
+  // Strip up to the closing paren only when there IS one — otherwise the
+  // replace is a no-op and the whole string reads as "trailing" text.
+  const trailing = targetBpm
+    ? (workout.target_hr ?? '').replace(/^.*\)/, '').trim()
+    : extraAfterZone(workout.target_hr);
+  if (trailing) notes.push(`Plan also says: "${trailing}".`);
 
   const steps: WorkoutStep[] = [
     {
@@ -145,5 +211,11 @@ export function planWorkoutToDescription(
     },
   ];
 
-  return { description: renderWorkoutDescription(steps), bpmLow, bpmHigh, minutes };
+  return { description: renderWorkoutDescription(steps), bpmLow, bpmHigh, minutes, source, notes };
+}
+
+/** Trailing text when there was no parenthetical at all, e.g. "Z1-Z2 + bursts". */
+function extraAfterZone(targetHr: string | null | undefined): string {
+  if (!targetHr) return '';
+  return targetHr.replace(/^\s*z\s*\d(?:\s*[-–—to]+\s*z?\s*\d)?/i, '').trim();
 }
