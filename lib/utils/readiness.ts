@@ -29,6 +29,16 @@
  * Resting HR deliberately does NOT gate a verdict on its own; it only nudges
  * the fatigue score. It is the noisiest of the three signals (illness, alcohol,
  * a warm room) and does not warrant overriding a plan by itself.
+ *
+ * ## Yesterday's readings are not today's
+ *
+ * The freshest row is usually NOT the freshest reading: the nightly sync writes
+ * today's row just after local midnight, before the watch has uploaded, so it
+ * carries ctl/atl and nothing else. Callers therefore pass the latest row that
+ * has readings, plus its `ageDays`. Anything older than today is used but
+ * disclosed in `reasons`; past RECOVERY_MAX_AGE_DAYS it is withheld from the
+ * rules entirely and the verdict falls back to training load. Judging today by
+ * a reading from last week is the failure this guards against.
  */
 
 import type { Run, Workout } from '@/lib/db/types';
@@ -56,6 +66,22 @@ export interface RecoverySignals {
   /** Rolling SD. Without it "below baseline" has no scale, so rules stay off. */
   hrvSd?: number | null;
   restingHrBaseline?: number | null;
+  /**
+   * How old these readings are, in calendar days. 0 = this morning.
+   *
+   * Not cosmetic. The nightly sync creates today's row before the watch has
+   * uploaded anything, so on most mornings the freshest real readings are
+   * yesterday's — which describe the night before last. That is a usable
+   * approximation, not a free substitution, so it is disclosed in `reasons`
+   * and stops being usable at all past RECOVERY_MAX_AGE_DAYS.
+   */
+  ageDays?: number | null;
+  /**
+   * Whether `hrvPrevious` is the calendar day immediately before the reading.
+   * The two-day rule claims a trend; two readings with a gap between them are
+   * not one. Undefined means "not established" and is treated as false.
+   */
+  hrvPreviousIsConsecutive?: boolean;
 }
 
 export interface ReadinessInput {
@@ -76,6 +102,14 @@ export interface ReadinessInput {
 
 /** Below baseline by more than this many SDs counts as suppressed. */
 const HRV_SUPPRESSED_SD = 1;
+/**
+ * Past this, recovery readings stop being evidence about today.
+ *
+ * A day-old HRV describes the night before last — close enough to act on with a
+ * disclosure. Four days old describes a different week of training, and letting
+ * it drive a REST verdict would be worse than falling back to training load.
+ */
+const RECOVERY_MAX_AGE_DAYS = 3;
 /** Under this, sleep caps the verdict regardless of everything else. */
 const MIN_SLEEP_SECS = 5 * 3600;
 /** Resting HR this far over baseline adds to fatigue. */
@@ -107,14 +141,20 @@ export function computeReadiness(input: ReadinessInput): ReadinessVerdict {
   const yesterdayHardPct =
     (yesterdayRun?.pct_z4 || 0) + (yesterdayRun?.pct_z5 || 0) + (yesterdayRun?.pct_z6 || 0);
 
-  const hrvDev = hrvDeviation(recovery?.hrv, recovery?.hrvBaseline, recovery?.hrvSd);
-  const hrvDevPrev = hrvDeviation(recovery?.hrvPrevious, recovery?.hrvBaseline, recovery?.hrvSd);
-  const sleepSecs = typeof recovery?.sleepSecs === 'number' ? recovery.sleepSecs : null;
+  // Stale readings are withheld from the rules entirely rather than quietly
+  // aged in. Same discipline as a missing reading: fall through to training
+  // load and say why, rather than judge today by a number from last week.
+  const ageDays = typeof recovery?.ageDays === 'number' ? recovery.ageDays : 0;
+  const recoveryTooOld = ageDays > RECOVERY_MAX_AGE_DAYS;
+
+  const hrvDev = recoveryTooOld ? null : hrvDeviation(recovery?.hrv, recovery?.hrvBaseline, recovery?.hrvSd);
+  const hrvDevPrev = recoveryTooOld ? null : hrvDeviation(recovery?.hrvPrevious, recovery?.hrvBaseline, recovery?.hrvSd);
+  const sleepSecs = !recoveryTooOld && typeof recovery?.sleepSecs === 'number' ? recovery.sleepSecs : null;
 
   // Resting HR only nudges fatigue — never decides a verdict alone. See header.
   let fatigueScore = input.fatigueScore;
   let rhrElevatedBy: number | null = null;
-  if (typeof recovery?.restingHr === 'number' && typeof recovery?.restingHrBaseline === 'number') {
+  if (!recoveryTooOld && typeof recovery?.restingHr === 'number' && typeof recovery?.restingHrBaseline === 'number') {
     const over = recovery.restingHr - recovery.restingHrBaseline;
     if (over >= RHR_ELEVATED_BPM) {
       rhrElevatedBy = over;
@@ -127,66 +167,100 @@ export function computeReadiness(input: ReadinessInput): ReadinessVerdict {
   const usedRecoveryData = hrvDev !== null || sleepSecs !== null || rhrElevatedBy !== null;
 
   const noteRecoveryGap = () => {
-    if (recovery && hrvDev === null) {
+    if (recovery && !recoveryTooOld && hrvDev === null) {
       reasons.push(
         recovery.hrv == null
-          ? 'No HRV reading for today, so this verdict is based on training load alone.'
+          ? 'No HRV reading available, so this verdict is based on training load alone.'
           : 'Not enough HRV history yet for a baseline, so this verdict is based on training load alone.',
       );
     }
+  };
+
+  /**
+   * Every exit goes through here so the age disclosure cannot be forgotten by a
+   * rule added later. Readings older than today are usable but must say so —
+   * yesterday's HRV describes the night before last.
+   */
+  const finish = (verdict: ReadinessLevel): ReadinessVerdict => {
+    if (recovery && recoveryTooOld) {
+      reasons.push(
+        `The most recent recovery readings are ${ageDays} days old — too stale to judge today, ` +
+          `so this verdict rests on training load and the plan.`,
+      );
+    } else if (usedRecoveryData && ageDays > 0) {
+      reasons.push(
+        ageDays === 1
+          ? "Based on yesterday's readings — today's have not synced from the watch yet."
+          : `Based on recovery readings from ${ageDays} days ago — nothing newer has synced from the watch.`,
+      );
+    }
+    return { verdict, reasons, usedRecoveryData };
   };
 
   // 1. Plan-mandated rest wins.
   if (plannedType && REST_TYPES.test(plannedType)) {
     reasons.push('Plan calls for a rest day — take it.');
     if (yesterdayHardPct > 40) reasons.push(`Yesterday ran hot (${Math.round(yesterdayHardPct)}% in Z4+), so the rest is earned.`);
-    return { verdict: 'REST', reasons, usedRecoveryData };
+    return finish('REST');
   }
 
   // 2. HRV suppressed two days running — a trend, not a bad night.
-  if (hrvDev !== null && hrvDevPrev !== null && hrvDev > HRV_SUPPRESSED_SD && hrvDevPrev > HRV_SUPPRESSED_SD) {
+  //    Requires the two readings to be adjacent days. A gap where the watch was
+  //    off is not a trend, and this rule returns REST — the most expensive
+  //    verdict to get wrong.
+  if (
+    hrvDev !== null && hrvDevPrev !== null &&
+    recovery?.hrvPreviousIsConsecutive === true &&
+    hrvDev > HRV_SUPPRESSED_SD && hrvDevPrev > HRV_SUPPRESSED_SD
+  ) {
     reasons.push(`HRV has been more than ${HRV_SUPPRESSED_SD} SD below your baseline two days running — that is a recovery trend, not one bad night.`);
     reasons.push('Take the day off; the adaptation happens while you rest.');
-    return { verdict: 'REST', reasons, usedRecoveryData };
+    return finish('REST');
   }
 
   // 3. Deep fatigue. Skipped entirely when there is no score.
   if (hasFatigue && (fatigueScore as number) >= 7.5) {
     reasons.push(`Fatigue ${(fatigueScore as number).toFixed(1)}/10 — body is asking for a day off.`);
     if (rhrElevatedBy !== null) reasons.push(`Resting HR is ${Math.round(rhrElevatedBy)} bpm above baseline, which fed into that.`);
-    return { verdict: 'REST', reasons, usedRecoveryData };
+    return finish('REST');
   }
 
   // 4. Short sleep caps the day regardless of how fresh the load looks.
   if (sleepSecs !== null && sleepSecs < MIN_SLEEP_SECS) {
     reasons.push(`Only ${(sleepSecs / 3600).toFixed(1)}h of sleep — under 5h, intensity costs more than it returns.`);
     if (todayIsQuality) reasons.push(`Today's plan is ${plannedType}; move it rather than run it tired.`);
-    return { verdict: 'EASY', reasons, usedRecoveryData };
+    return finish('EASY');
   }
 
   // 5. Suppressed HRV colliding with a quality session.
   if (hrvDev !== null && hrvDev > HRV_SUPPRESSED_SD && todayIsQuality) {
     reasons.push(`HRV is ${hrvDev.toFixed(1)} SD below your baseline and today's plan is ${plannedType} — your body has not finished absorbing the last session.`);
     reasons.push('Keep it easy and move the quality day.');
-    return { verdict: 'EASY', reasons, usedRecoveryData };
+    return finish('EASY');
   }
 
   // 6. Hard yesterday + quality today = collision.
   if (yesterdayHardPct > 40 && todayIsQuality) {
     reasons.push(`Yesterday was ${Math.round(yesterdayHardPct)}% Z4+ and today's plan is ${plannedType} — back-to-back hard days invite injury.`);
     reasons.push('Consider swapping today for easy and moving the quality session.');
-    return { verdict: 'EASY', reasons, usedRecoveryData };
+    return finish('EASY');
   }
 
   // 7. Moderate fatigue.
   if (hasFatigue && (fatigueScore as number) >= 6) {
     reasons.push(`Fatigue ${(fatigueScore as number).toFixed(1)}/10 — run, but keep it genuinely easy.`);
     if (rhrElevatedBy !== null) reasons.push(`Resting HR is ${Math.round(rhrElevatedBy)} bpm above baseline.`);
-    return { verdict: 'EASY', reasons, usedRecoveryData };
+    return finish('EASY');
   }
 
   // 8. Green light.
-  const freshness = hasFatigue ? `fatigue ${(fatigueScore as number).toFixed(1)}/10` : 'no red flags in the recovery data';
+  // "No red flags in the recovery data" claims the data was looked at. When
+  // none was usable — absent, or too old to count — say that instead.
+  const freshness = hasFatigue
+    ? `fatigue ${(fatigueScore as number).toFixed(1)}/10`
+    : usedRecoveryData
+      ? 'no red flags in the recovery data'
+      : 'nothing flagged, but there is little to go on';
   if (todayIsQuality) {
     reasons.push(`Fresh (${freshness}) — good day for the planned ${plannedType}.`);
   } else if (plannedType) {
@@ -201,5 +275,5 @@ export function computeReadiness(input: ReadinessInput): ReadinessVerdict {
     reasons.push(`HRV is ${Math.abs(hrvDev).toFixed(1)} SD above baseline — well recovered.`);
   }
   noteRecoveryGap();
-  return { verdict: 'GO', reasons, usedRecoveryData };
+  return finish('GO');
 }

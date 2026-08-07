@@ -58,6 +58,21 @@ export function userDateStrDaysAgo(days: number): string {
 }
 
 /**
+ * Whole calendar days from `from` to `to`, both YYYY-MM-DD.
+ *
+ * No timezone enters this: a calendar day is a calendar day, so both ends parse
+ * as UTC midnight and the difference is exact. Callers get the day strings from
+ * `userDateStr`, which is where the timezone was already applied — doing it
+ * twice is how an off-by-one appears at 01:00 Israel time.
+ */
+export function daysBetweenDateStr(from: string, to: string): number {
+  const a = Date.parse(`${from.slice(0, 10)}T00:00:00Z`);
+  const b = Date.parse(`${to.slice(0, 10)}T00:00:00Z`);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return NaN;
+  return Math.round((b - a) / 86_400_000);
+}
+
+/**
  * What wall-clock time does `timeZone` read at this instant, expressed as the
  * epoch ms of those same calendar fields interpreted as UTC.
  *

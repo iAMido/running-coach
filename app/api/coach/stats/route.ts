@@ -6,7 +6,7 @@ import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { getRecentFeedback, getWeeklySummary, getCurrentWeekStart } from '@/lib/db/feedback';
 import { calculateFatigueScore } from '@/lib/rag/user-formatter';
 import { computeReadiness, type RecoverySignals } from '@/lib/utils/readiness';
-import { getRecentWellness, getWellnessBaselines } from '@/lib/db/wellness';
+import { getLatestRecoveryReading, getWellnessBaselines } from '@/lib/db/wellness';
 import { plannedWorkoutForRunDate } from '@/lib/ai/run-reaction';
 
 export async function GET() {
@@ -86,24 +86,33 @@ export async function GET() {
 
     // Recovery layer. Best-effort: a wellness outage must degrade the verdict
     // to the training-load rules, never break the dashboard.
+    //
+    // Reads the latest row WITH readings, not the latest row. The nightly sync
+    // creates today's row just after local midnight carrying only ctl/atl, so
+    // `recent[0]` is watch-empty every morning — which rendered the Recovery
+    // tile as "--" daily and kept the two-day HRV rule from ever firing before
+    // the watch synced. Fitness and Form still read the latest row: ctl/atl are
+    // computed from training load and are genuinely current there.
     let recovery: RecoverySignals | null = null;
+    let recoveryAgeDays: number | null = null;
     try {
-      const [recent, baselines] = await Promise.all([
-        getRecentWellness(userId, 2),
+      const [latest, baselines] = await Promise.all([
+        getLatestRecoveryReading(userId),
         getWellnessBaselines(userId),
       ]);
-      const today = recent[0] ?? null;
-      const yesterday = recent[1] ?? null;
-      if (today) {
+      if (latest) {
+        recoveryAgeDays = latest.ageDays;
         recovery = {
-          hrv: today.hrv ?? null,
-          hrvPrevious: yesterday?.hrv ?? null,
-          restingHr: today.resting_hr ?? null,
-          sleepSecs: today.sleep_secs ?? null,
-          sleepScore: today.sleep_score ?? null,
+          hrv: latest.row.hrv ?? null,
+          hrvPrevious: latest.previousHrv,
+          hrvPreviousIsConsecutive: latest.previousHrvIsConsecutive,
+          restingHr: latest.row.resting_hr ?? null,
+          sleepSecs: latest.row.sleep_secs ?? null,
+          sleepScore: latest.row.sleep_score ?? null,
           hrvBaseline: baselines.hrvMean,
           hrvSd: baselines.hrvSd,
           restingHrBaseline: baselines.restingHrMean,
+          ageDays: latest.ageDays,
         };
       }
     } catch (err) {
@@ -151,6 +160,7 @@ export async function GET() {
                 ? Math.round((recovery.sleepSecs / 3600) * 10) / 10
                 : null,
             sleepScore: recovery.sleepScore ?? null,
+            ageDays: recoveryAgeDays,
           }
         : null,
       /** 7-day TRIMP against the trailing 28-day weekly average. */

@@ -362,6 +362,14 @@ export interface DashboardStats {
     hrvDelta: number | null;
     sleepHours: number | null;
     sleepScore: number | null;
+    /**
+     * Age of these readings in calendar days. 0 = this morning, 1 = yesterday.
+     *
+     * Normally 1 before the watch syncs: the nightly job writes today's row
+     * just after local midnight with only ctl/atl in it. The tile must render
+     * the age, or a day-old HRV reads as this morning's.
+     */
+    ageDays: number | null;
   } | null;
 
   /** 7-day TRIMP against the trailing 28-day weekly average. */

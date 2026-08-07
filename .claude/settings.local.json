@@ -87,7 +87,8 @@
       "Bash(git rev-list *)",
       "WebSearch",
       "WebFetch(domain:forum.intervals.icu)",
-      "WebFetch(domain:intervals.icu)"
+      "WebFetch(domain:intervals.icu)",
+      "Bash(python -c ' *)"
     ]
   },
   "enableAllProjectMcpServers": true,

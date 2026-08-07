@@ -4,7 +4,7 @@ import { getActivePlan } from '@/lib/db/plans';
 import { getRecentFeedback, getWeeklySummary } from '@/lib/db/feedback';
 import { getRecentWellness, getWellnessBaselines, type WellnessBaselines } from '@/lib/db/wellness';
 import { calculateCurrentWeek, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
-import { nowInUserTz } from '@/lib/utils/user-time';
+import { daysBetweenDateStr, nowInUserTz, userDateStr } from '@/lib/utils/user-time';
 import { formatPace } from '@/lib/utils/pace';
 import { percentileOf, medianOf } from '@/lib/utils/decoupling';
 import { formatZoneDiscipline } from '@/lib/utils/zone-discipline';
@@ -639,7 +639,29 @@ function formatRecovery(days: DailyWellness[], baselines: WellnessBaselines): st
   if (days.length === 0) return '';
 
   const lines: string[] = ['## Recovery (last 7 days)'];
-  const latest = days[0];
+
+  // The newest ROW is not the newest READING. The nightly sync writes today's
+  // row just after local midnight with only ctl/atl in it, so taking days[0]
+  // let the coach announce "HRV today: no reading" every morning while
+  // yesterday's 67 sat one row down. Watch-sourced fields read from the latest
+  // row that has any; ctl/atl keep reading the newest row, where they are real.
+  const latest = days.find((d) => d.hrv != null || d.resting_hr != null || d.sleep_secs != null) ?? days[0];
+  const loadRow = days[0];
+
+  // Every reading below is labelled with its date and age, so a day-old HRV can
+  // never be presented as this morning's.
+  const readingAge = daysBetweenDateStr(latest.day, userDateStr());
+  const asOf =
+    readingAge <= 0 ? 'today'
+    : readingAge === 1 ? 'yesterday'
+    : `${readingAge} days ago`;
+  const stamp = `${latest.day}, ${asOf}`;
+  if (readingAge > 0) {
+    lines.push(
+      `- READINGS ARE FROM ${stamp}. Today's have not synced from the watch yet — ` +
+        `describe them as ${asOf}'s, not as this morning's.`,
+    );
+  }
 
   const hrvVals = days.map((d) => d.hrv).filter((v): v is number => typeof v === 'number');
   if (typeof latest.hrv === 'number' && baselines.hrvMean !== null && baselines.hrvSd) {
@@ -650,13 +672,13 @@ function formatRecovery(days: DailyWellness[], baselines: WellnessBaselines): st
       : sdBelow < -1 ? 'well above normal — well recovered'
       : 'within normal range';
     lines.push(
-      `- HRV today: ${latest.hrv.toFixed(0)}ms vs ${baselines.hrvMean.toFixed(0)}ms baseline ` +
+      `- HRV (${asOf}): ${latest.hrv.toFixed(0)}ms vs ${baselines.hrvMean.toFixed(0)}ms baseline ` +
         `(${baselines.windowDays}-day mean) — ${sdBelow >= 0 ? '' : '+'}${(-sdBelow).toFixed(1)} SD, ${descriptor}.`,
     );
   } else if (typeof latest.hrv === 'number') {
-    lines.push(`- HRV today: ${latest.hrv.toFixed(0)}ms (not enough history yet for a baseline — do not call this high or low).`);
+    lines.push(`- HRV (${asOf}): ${latest.hrv.toFixed(0)}ms (not enough history yet for a baseline — do not call this high or low).`);
   } else {
-    lines.push('- HRV today: no reading (watch not worn overnight). Do not treat this as poor recovery.');
+    lines.push('- HRV: no reading in the last 7 days (watch not worn overnight). Do not treat this as poor recovery.');
   }
 
   if (hrvVals.length > 1) {
@@ -667,9 +689,9 @@ function formatRecovery(days: DailyWellness[], baselines: WellnessBaselines): st
   if (typeof latest.sleep_secs === 'number') {
     const hours = latest.sleep_secs / 3600;
     const score = typeof latest.sleep_score === 'number' ? `, sleep score ${latest.sleep_score}/100` : '';
-    lines.push(`- Sleep last night: ${hours.toFixed(1)}h${score}.`);
+    lines.push(`- Sleep (night of ${latest.day}, ${asOf}): ${hours.toFixed(1)}h${score}.`);
   } else {
-    lines.push('- Sleep last night: no data.');
+    lines.push('- Sleep: no data in the last 7 days.');
   }
 
   if (typeof latest.resting_hr === 'number') {
@@ -677,18 +699,18 @@ function formatRecovery(days: DailyWellness[], baselines: WellnessBaselines): st
       baselines.restingHrMean !== null
         ? ` vs ${baselines.restingHrMean.toFixed(0)} baseline (${latest.resting_hr - baselines.restingHrMean >= 0 ? '+' : ''}${(latest.resting_hr - baselines.restingHrMean).toFixed(0)} bpm)`
         : '';
-    lines.push(`- Resting HR: ${latest.resting_hr}${vs}.`);
+    lines.push(`- Resting HR (${asOf}): ${latest.resting_hr}${vs}.`);
   }
 
   // Fitness / Fatigue / Form, named in plain language.
-  if (typeof latest.ctl === 'number' && typeof latest.atl === 'number') {
-    const form = latest.ctl - latest.atl;
+  if (typeof loadRow.ctl === 'number' && typeof loadRow.atl === 'number') {
+    const form = loadRow.ctl - loadRow.atl;
     const formNote =
       form > 5 ? 'fresh, possibly detrained'
       : form >= -10 ? 'normal training range'
       : 'carrying real fatigue';
     lines.push(
-      `- Fitness ${latest.ctl.toFixed(1)} · Fatigue ${latest.atl.toFixed(1)} · Form ${form >= 0 ? '+' : ''}${form.toFixed(1)} (${formNote}).`,
+      `- Fitness ${loadRow.ctl.toFixed(1)} · Fatigue ${loadRow.atl.toFixed(1)} · Form ${form >= 0 ? '+' : ''}${form.toFixed(1)} (${formNote}).`,
     );
     lines.push('  Fitness is chronic training load, Fatigue is acute load, Form is Fitness minus Fatigue.');
   }

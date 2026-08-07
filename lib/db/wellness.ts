@@ -8,7 +8,7 @@
  */
 
 import { supabase } from '@/lib/db/supabase';
-import { userDateStrDaysAgo } from '@/lib/utils/user-time';
+import { daysBetweenDateStr, userDateStr, userDateStrDaysAgo } from '@/lib/utils/user-time';
 import type { DailyWellness } from '@/lib/db/types';
 import type { NormalizedWellness } from '@/lib/ingest/intervals';
 
@@ -104,7 +104,89 @@ export async function getWellnessBaselines(userId: string, windowDays = 28): Pro
   };
 }
 
-/** The newest wellness row, or null. Used to detect a stale recovery feed. */
+/**
+ * The newest wellness row that actually carries a watch reading.
+ *
+ * ## Why the newest row is the wrong row
+ *
+ * The nightly cron runs at 21:40 UTC — 00:40 in Israel — so it creates today's
+ * row less than an hour into the local day, before the watch has synced
+ * anything. That row is not empty: intervals.icu computes `ctl`/`atl` from
+ * training load, so they are present and current. Only the watch-sourced
+ * fields are absent.
+ *
+ * The result was a Recovery tile reading "--" every single morning, and a
+ * two-day HRV suppression rule that could never fire before the watch synced,
+ * with yesterday's complete row sitting one index away. Structural, not a
+ * one-off.
+ *
+ * So: fitness and form keep reading the latest row, and anything watch-sourced
+ * reads the latest row WITH readings — carrying its age, because using
+ * yesterday's HRV to judge today is a real approximation and every caller has
+ * to be able to say so.
+ */
+export interface LatestRecoveryReading {
+  row: DailyWellness;
+  /** Calendar days between that row's `day` and today, user timezone. */
+  ageDays: number;
+  /**
+   * The most recent HRV reading BEFORE `row` — what the two-day suppression
+   * rule needs. Taking the next row down would hand that rule the same reading
+   * it is already looking at whenever the latest row is a day old.
+   */
+  previousHrv: number | null;
+  /**
+   * True when `previousHrv` comes from the calendar day immediately before
+   * `row.day`. The rule says "two days running", and two readings four days
+   * apart are not that — a gap the watch left is not a trend.
+   */
+  previousHrvIsConsecutive: boolean;
+}
+
+/** A row counts as a reading only if the watch actually contributed something. */
+function hasWatchReading(row: DailyWellness): boolean {
+  return row.hrv != null || row.resting_hr != null || row.sleep_secs != null;
+}
+
+export async function getLatestRecoveryReading(
+  userId: string,
+  windowDays = 14,
+): Promise<LatestRecoveryReading | null> {
+  const { data, error } = await supabase
+    .from('daily_wellness')
+    .select('*')
+    .eq('user_id', userId)
+    .gte('day', userDateStrDaysAgo(windowDays))
+    .order('day', { ascending: false });
+
+  if (error) return null;
+  const rows = (data ?? []) as DailyWellness[];
+
+  const index = rows.findIndex(hasWatchReading);
+  if (index === -1) return null;
+  const row = rows[index];
+
+  // Strictly before the chosen row, so it can never be the same reading.
+  const previous = rows.slice(index + 1).find((r) => r.hrv != null) ?? null;
+
+  return {
+    row,
+    ageDays: daysBetweenDateStr(row.day, userDateStr()),
+    previousHrv: previous?.hrv ?? null,
+    previousHrvIsConsecutive: previous ? daysBetweenDateStr(previous.day, row.day) === 1 : false,
+  };
+}
+
+/**
+ * The newest wellness row, or null.
+ *
+ * ⚠️ NOT a freshness check. A row exists for today from just after local
+ * midnight carrying only ctl/atl, so this returns "today" every morning while
+ * every watch-sourced field in it is null — which is exactly how the preflight
+ * staleness check came to report the recovery feed as current on mornings it
+ * had no readings at all. Use `getLatestRecoveryReading` for anything that
+ * cares whether there is a READING.
+ */
 export async function getLatestWellness(userId: string): Promise<DailyWellness | null> {
   const { data, error } = await supabase
     .from('daily_wellness')

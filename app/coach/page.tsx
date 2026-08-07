@@ -384,6 +384,18 @@ export default function CoachDashboard() {
             const r = stats?.recoveryTile;
             const sleep = r?.sleepHours != null ? `slept ${r.sleepHours.toFixed(1)} h` : null;
 
+            // How old the readings are. Normally "yesterday": the nightly sync
+            // writes today's row just after local midnight, before the watch
+            // has uploaded anything, so the freshest real reading is the night
+            // before. Unlabelled, a day-old HRV reads as this morning's.
+            const age = r?.ageDays ?? null;
+            const stale = age != null && age > 3;
+            const ageLabel =
+              age == null || age === 0 ? null
+              : age === 1 ? 'yesterday'
+              : `${age} days ago`;
+            const ageNote = stale ? `${ageLabel} — stale, watch not synced` : ageLabel;
+
             if (!r) {
               return {
                 title: 'Recovery', value: '--', unit: '', desc: 'no recovery data',
@@ -406,6 +418,7 @@ export default function CoachDashboard() {
                 `HRV ${Math.round(r.hrv as number)}`,
                 r.hrvBaseline != null ? `baseline ${r.hrvBaseline.toFixed(1)}` : null,
                 sleep,
+                ageNote,
               ].filter(Boolean).join(' · ');
               return {
                 title: 'Recovery', value: `${sign}${r.hrvDelta}`, unit: 'vs baseline',
@@ -421,7 +434,7 @@ export default function CoachDashboard() {
             if (r.hrv != null) {
               return {
                 title: 'Recovery', value: `HRV ${Math.round(r.hrv)}`, unit: '',
-                desc: ['no baseline yet', sleep].filter(Boolean).join(' · '),
+                desc: ['no baseline yet', sleep, ageNote].filter(Boolean).join(' · '),
                 icon: HeartPulse, accent: 'oklch(0.78 0.15 75)',
                 iconBg: 'oklch(0.96 0.05 75)', iconColor: 'oklch(0.50 0.13 75)',
                 valueColor: undefined as string | undefined,
@@ -434,7 +447,9 @@ export default function CoachDashboard() {
               title: 'Recovery',
               value: r.sleepHours != null ? `${r.sleepHours.toFixed(1)}` : '--',
               unit: r.sleepHours != null ? 'h slept' : '',
-              desc: r.sleepHours != null ? 'no HRV last night' : 'no recovery data',
+              desc: r.sleepHours != null
+                ? ['no HRV reading', ageNote].filter(Boolean).join(' · ')
+                : 'no recovery data',
               icon: HeartPulse, accent: 'oklch(0.78 0.15 75)',
               iconBg: 'oklch(0.96 0.05 75)', iconColor: 'oklch(0.50 0.13 75)',
               valueColor: undefined as string | undefined,

@@ -18,7 +18,7 @@ import {
 } from '@/lib/supervisor';
 import { TOKEN_BUDGETS_PER_QUERY } from '@/lib/rag/types';
 import { MODEL_FOR } from '@/lib/ai/model-registry';
-import { getLatestWellness } from '@/lib/db/wellness';
+import { getLatestRecoveryReading } from '@/lib/db/wellness';
 
 // Detect if user wants to modify their training plan
 function detectPlanModificationIntent(query: string): boolean {
@@ -186,9 +186,15 @@ export async function POST(request: NextRequest) {
     // Recovery-feed freshness. Best-effort: if this lookup fails we pass
     // `undefined`, which means "not checked" and raises no warning — better
     // than a false "stale" claim from a transient database error.
+    //
+    // Measured from the last READING, not the last row. A row exists for today
+    // from just after local midnight — the nightly sync writes ctl/atl before
+    // the watch has uploaded anything — so asking for the newest row reported
+    // the recovery feed as perfectly current every morning while every
+    // watch-sourced field in it was null.
     let latestWellnessDay: string | null | undefined;
     try {
-      latestWellnessDay = (await getLatestWellness(userId))?.day ?? null;
+      latestWellnessDay = (await getLatestRecoveryReading(userId))?.row.day ?? null;
     } catch {
       latestWellnessDay = undefined;
     }
