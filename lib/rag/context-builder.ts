@@ -146,9 +146,15 @@ function assembleCombinedPrompt(
     sections.push('--- PRIORITY 1: ATHLETE DATA (Ground Truth) ---');
     sections.push(userContext.text);
 
-    // Add fatigue indicator
-    const fatigueLevel = getFatigueLevel(userContext.metadata.fatigueScore);
-    sections.push(`\nCurrent Fatigue: ${userContext.metadata.fatigueScore.toFixed(1)}/10 (${fatigueLevel})`);
+    // Add fatigue indicator — or say plainly that there is none to add.
+    // A default score rendered here as a real one is what the coach cited as
+    // evidence of under-recovery when no feedback had been logged for a month.
+    const fatigue = userContext.metadata.fatigueScore;
+    sections.push(
+      fatigue === null
+        ? `\nCurrent Fatigue: not available — no run feedback logged recently. Do not infer a fatigue level from its absence.`
+        : `\nCurrent Fatigue: ${fatigue.toFixed(1)}/10 (${getFatigueLevel(fatigue)})`,
+    );
   }
 
   // Priority 2: Old coach patterns
@@ -250,7 +256,8 @@ export async function buildQuickContext(
   query: string
 ): Promise<{
   userSummary: string;
-  fatigueScore: number;
+  /** Null when there is no feedback to compute it from — never a default. */
+  fatigueScore: number | null;
   currentPhase: string | null;
 }> {
   const userContext = await formatUserContext(userId, 2000);

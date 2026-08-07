@@ -331,7 +331,8 @@ export interface DashboardStats {
   readiness?: {
     verdict: 'GO' | 'EASY' | 'REST';
     reasons: string[];
-    fatigueScore: number;
+    /** Null when no feedback exists to compute it from. */
+    fatigueScore: number | null;
   };
 
   /**

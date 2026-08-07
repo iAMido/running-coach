@@ -260,7 +260,8 @@ export interface FormattedUserContext {
   tokenCount: number;
   metadata: {
     runsIncluded: number;
-    fatigueScore: number;
+    /** Null when there is no feedback to compute it from — never a default. */
+    fatigueScore: number | null;
     currentPhase: string | null;
     hasActivePlan: boolean;
   };

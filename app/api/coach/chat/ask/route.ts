@@ -416,7 +416,7 @@ function summarizeContext(
 ): string {
   const u = context.userContext.metadata;
   const lines = [
-    `current_phase=${u.currentPhase || 'none'} fatigue=${u.fatigueScore.toFixed(1)}/10 runs_in_context=${u.runsIncluded} has_plan=${u.hasActivePlan}`,
+    `current_phase=${u.currentPhase || 'none'} fatigue=${u.fatigueScore === null ? 'n/a' : u.fatigueScore.toFixed(1) + '/10'} runs_in_context=${u.runsIncluded} has_plan=${u.hasActivePlan}`,
     `book_sources=${context.bookContext.sources.length} coach_workouts=${context.coachContext.workoutsIncluded.length}`,
     `query_week=${currentWeek} plan_modification=${isPlanModification}`,
   ];

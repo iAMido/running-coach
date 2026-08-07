@@ -59,8 +59,13 @@ export interface RecoverySignals {
 }
 
 export interface ReadinessInput {
-  /** Composite 1-10 fatigue (from calculateFatigueScore). */
-  fatigueScore: number;
+  /**
+   * Composite 1-10 fatigue (from calculateFatigueScore), or NULL when there is
+   * no feedback to compute it from. Null must never be treated as a mid-range
+   * score — the rules below skip rather than assume, exactly as they do for a
+   * missing HRV reading.
+   */
+  fatigueScore: number | null;
   /** Most recent run within ~36h, if any. */
   yesterdayRun?: Pick<Run, 'pct_z4' | 'pct_z5' | 'pct_z6' | 'run_type' | 'distance_km'> | null;
   /** What the plan says today should be, if known. */
@@ -113,9 +118,11 @@ export function computeReadiness(input: ReadinessInput): ReadinessVerdict {
     const over = recovery.restingHr - recovery.restingHrBaseline;
     if (over >= RHR_ELEVATED_BPM) {
       rhrElevatedBy = over;
-      fatigueScore = Math.min(10, fatigueScore + RHR_FATIGUE_PENALTY);
+      // Only nudges a score that exists — it cannot conjure one.
+      if (fatigueScore !== null) fatigueScore = Math.min(10, fatigueScore + RHR_FATIGUE_PENALTY);
     }
   }
+  const hasFatigue = fatigueScore !== null;
 
   const usedRecoveryData = hrvDev !== null || sleepSecs !== null || rhrElevatedBy !== null;
 
@@ -143,9 +150,9 @@ export function computeReadiness(input: ReadinessInput): ReadinessVerdict {
     return { verdict: 'REST', reasons, usedRecoveryData };
   }
 
-  // 3. Deep fatigue.
-  if (fatigueScore >= 7.5) {
-    reasons.push(`Fatigue ${fatigueScore.toFixed(1)}/10 — body is asking for a day off.`);
+  // 3. Deep fatigue. Skipped entirely when there is no score.
+  if (hasFatigue && (fatigueScore as number) >= 7.5) {
+    reasons.push(`Fatigue ${(fatigueScore as number).toFixed(1)}/10 — body is asking for a day off.`);
     if (rhrElevatedBy !== null) reasons.push(`Resting HR is ${Math.round(rhrElevatedBy)} bpm above baseline, which fed into that.`);
     return { verdict: 'REST', reasons, usedRecoveryData };
   }
@@ -172,19 +179,23 @@ export function computeReadiness(input: ReadinessInput): ReadinessVerdict {
   }
 
   // 7. Moderate fatigue.
-  if (fatigueScore >= 6) {
-    reasons.push(`Fatigue ${fatigueScore.toFixed(1)}/10 — run, but keep it genuinely easy.`);
+  if (hasFatigue && (fatigueScore as number) >= 6) {
+    reasons.push(`Fatigue ${(fatigueScore as number).toFixed(1)}/10 — run, but keep it genuinely easy.`);
     if (rhrElevatedBy !== null) reasons.push(`Resting HR is ${Math.round(rhrElevatedBy)} bpm above baseline.`);
     return { verdict: 'EASY', reasons, usedRecoveryData };
   }
 
   // 8. Green light.
+  const freshness = hasFatigue ? `fatigue ${(fatigueScore as number).toFixed(1)}/10` : 'no red flags in the recovery data';
   if (todayIsQuality) {
-    reasons.push(`Fresh (fatigue ${fatigueScore.toFixed(1)}/10) — good day for the planned ${plannedType}.`);
+    reasons.push(`Fresh (${freshness}) — good day for the planned ${plannedType}.`);
   } else if (plannedType) {
     reasons.push(`Fresh — on plan for ${plannedType}.`);
   } else {
-    reasons.push(`Fresh (fatigue ${fatigueScore.toFixed(1)}/10).`);
+    reasons.push(`Fresh (${freshness}).`);
+  }
+  if (!hasFatigue) {
+    reasons.push('No run feedback logged recently, so this verdict rests on recovery data and the plan alone.');
   }
   if (hrvDev !== null && hrvDev < -HRV_SUPPRESSED_SD) {
     reasons.push(`HRV is ${Math.abs(hrvDev).toFixed(1)} SD above baseline — well recovered.`);

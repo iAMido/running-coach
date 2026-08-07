@@ -144,9 +144,16 @@ export async function formatUserContext(
 export function calculateFatigueScore(
   feedback: RunFeedback[],
   weeklySummary: WeeklySummary | null
-): number {
+): number | null {
+  // Returns NULL, not 5, when there is nothing to compute from.
+  //
+  // This used to return "5 — default middle value", which rendered as
+  // "Fatigue Score: 5.0/10" and was cited by the coach as evidence of
+  // under-recovery. There has been no run feedback since 2026-06-24, so every
+  // request produced that number. It means "no data", and a placeholder that
+  // reads as a measurement is the same failure class as the corrupt zone data.
   if (feedback.length === 0 && !weeklySummary) {
-    return 5; // Default middle value
+    return null;
   }
 
   let score = 0;
@@ -211,9 +218,15 @@ function formatProfile(profile: AthleteProfile): string {
 
   // HR zones
   if (profile.max_hr) {
-    lines.push(`Max HR: ${profile.max_hr} bpm`);
+    lines.push(`Max HR: ${profile.max_hr} bpm (measured — the zone bands below are anchored on it)`);
     if (profile.lactate_threshold_hr) {
-      lines.push(`Lactate Threshold HR: ${profile.lactate_threshold_hr} bpm`);
+      // Provenance matters here. 165 has never been lab- or field-tested. It was
+      // deliberately not raised to intervals.icu's 173, which is a peak-fitness
+      // estimate the athlete is nowhere near — his hardest recent session peaked
+      // at 166. Rendered bare, the coach reasoned from it as a hard boundary.
+      lines.push(
+        `Lactate Threshold HR: ${profile.lactate_threshold_hr} bpm (ESTIMATED, never tested — treat as rough context, not a boundary. Do not build prescriptions on it or claim a run was above/below "threshold" as though it were measured.)`,
+      );
     }
   }
 
@@ -235,7 +248,7 @@ function formatProfile(profile: AthleteProfile): string {
  */
 function formatTrainingStatus(
   runs: Run[],
-  fatigueScore: number,
+  fatigueScore: number | null,
   currentPhase: string | null
 ): string {
   const lines: string[] = ['## Current Training Status'];
@@ -249,7 +262,12 @@ function formatTrainingStatus(
   const weeklyRuns = thisWeekRuns.length;
 
   lines.push(`This Week: ${weeklyRuns} runs, ${weeklyKm.toFixed(1)} km`);
-  lines.push(`Fatigue Score: ${fatigueScore.toFixed(1)}/10 ${getFatigueDescription(fatigueScore)}`);
+  // Say the data is missing rather than printing a number that means nothing.
+  lines.push(
+    fatigueScore === null
+      ? 'Fatigue Score: not available — no run feedback logged recently. Do not infer a fatigue level from its absence.'
+      : `Fatigue Score: ${fatigueScore.toFixed(1)}/10 ${getFatigueDescription(fatigueScore)}`,
+  );
 
   if (currentPhase) {
     lines.push(`Current Phase: ${currentPhase}`);
