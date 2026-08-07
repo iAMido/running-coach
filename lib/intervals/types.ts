@@ -49,6 +49,17 @@ export interface IntervalsActivity {
    * this athlete's runs. Doubled at ingest into `cadence_spm`.
    */
   average_cadence?: number | null;
+  /**
+   * The athlete's max HR as intervals.icu holds it. Present on every activity.
+   *
+   * Load-bearing for write-back: pushed workouts are percentages that
+   * intervals.icu resolves against THIS number, so if it diverges from
+   * `athlete_profile.max_hr` every pushed workout silently means something
+   * else. Checked on every sync — see `warnIfMaxHrDiverged`.
+   */
+  athlete_max_hr?: number | null;
+  /** Their threshold HR (173). Does NOT feed % HR resolution — max does. */
+  lthr?: number | null;
   /** intervals.icu's own precomputed load. The app keeps its own TRIMP as
    *  authoritative; this is stored alongside only as a cross-check. */
   icu_training_load?: number | null;

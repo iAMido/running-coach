@@ -119,6 +119,10 @@ export async function syncIntervalsForUser(
   const activities = await client.getActivities(userDateStrDaysAgo(daysBack), newest);
   const runs = filterRuns(activities);
 
+  // Caught the day it happens, not the next time someone pushes a workout —
+  // the value is already in hand on every activity.
+  warnIfMaxHrDiverged(activities, profile?.max_hr ?? null);
+
   for (const activity of runs) {
     try {
       const upserted = await upsertRun(userId, toNormalizedRun(activity, client), {
@@ -159,6 +163,30 @@ export async function syncIntervalsForUser(
 
   warnIfDatesCorrected(result);
   return result;
+}
+
+/**
+ * Alarm when intervals.icu's max HR stops matching ours.
+ *
+ * Write-back pushes percentages, and intervals.icu resolves them against THEIR
+ * max HR — so if that number moves, every workout already on the calendar
+ * quietly comes to mean a different bpm range than the plan intended.
+ *
+ * Checked on sync rather than at push time because `athlete_max_hr` rides along
+ * on every activity payload, so the divergence is catchable the day it happens
+ * for free. A hard refusal still belongs at push time; this is the early
+ * warning, not the gate.
+ */
+export function warnIfMaxHrDiverged(activities: { athlete_max_hr?: number | null }[], profileMaxHr: number | null | undefined): void {
+  if (!profileMaxHr) return;
+  const theirs = activities.map((a) => a.athlete_max_hr).find((v) => typeof v === 'number');
+  if (typeof theirs !== 'number' || theirs === profileMaxHr) return;
+
+  console.warn(
+    `[intervals-sync] WARNING: max HR disagrees — intervals.icu has ${theirs}, athlete_profile has ${profileMaxHr}. ` +
+      `Pushed workouts are percentages that intervals.icu resolves against THEIR number, so every workout already on ` +
+      `the calendar now means a different bpm range than intended. Reconcile before pushing again.`,
+  );
 }
 
 /**
