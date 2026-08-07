@@ -27,6 +27,22 @@
  * re-keying or replacing a row silently destroys feedback and laps. A non-null
  * column is never overwritten, which also makes re-ingestion idempotent and
  * means historical `run_type` is never reclassified under newer zone bands.
+ *
+ * ## Idempotent is not the same as concurrency-safe
+ *
+ * Look-then-insert is correct for one caller at a time and silently wrong for
+ * two: both look up a brand-new activity, both find nothing, both insert. That
+ * was unreachable while the only callers were crons six hours apart, and became
+ * reachable the moment the app started syncing on open.
+ *
+ * `runs_user_filename_uniq` (partial unique index on `(user_id, filename)`)
+ * makes the duplicate impossible in the storage layer rather than by
+ * convention, so callers added later are covered without anyone remembering a
+ * rule. Rule 3 below therefore catches 23505 and re-reads the winner's row: a
+ * lost race resolves to rule 1, which is what it always meant.
+ *
+ * This does NOT protect the fuzzy path — two providers inserting the same run
+ * under different ids is a different problem, and it is what rule 2 is for.
  */
 
 import { supabase } from '@/lib/db/supabase';
@@ -224,14 +240,8 @@ export async function findExistingRun(
   userId: string,
   run: NormalizedRun,
 ): Promise<{ row: ExistingRunRow; matchedBy: MatchKind } | null> {
-  const { data: exact } = await supabase
-    .from('runs')
-    .select(EXISTING_COLUMNS)
-    .eq('user_id', userId)
-    .eq('filename', run.externalId)
-    .maybeSingle();
-
-  if (exact) return { row: exact as unknown as ExistingRunRow, matchedBy: 'filename' };
+  const exact = await findByFilename(userId, run.externalId);
+  if (exact) return { row: exact, matchedBy: 'filename' };
 
   const centre = new Date(run.date).getTime();
   if (!Number.isFinite(centre)) return null;
@@ -258,6 +268,17 @@ export async function findExistingRun(
   });
 
   return { row, matchedBy: 'fuzzy' };
+}
+
+/** The row for one provider activity id, or null. Unique by construction. */
+async function findByFilename(userId: string, externalId: string): Promise<ExistingRunRow | null> {
+  const { data } = await supabase
+    .from('runs')
+    .select(EXISTING_COLUMNS)
+    .eq('user_id', userId)
+    .eq('filename', externalId)
+    .maybeSingle();
+  return (data as unknown as ExistingRunRow) ?? null;
 }
 
 // ------------------------------------------------------------------ zones
@@ -392,10 +413,32 @@ export async function upsertRun(
   ctx: UpsertContext,
 ): Promise<UpsertResult> {
   const existing = await findExistingRun(userId, run);
-  return existing
-    ? enrichExisting(existing.row, existing.matchedBy, run, ctx)
-    : insertNew(userId, run, ctx);
+  if (existing) return enrichExisting(existing.row, existing.matchedBy, run, ctx);
+
+  try {
+    return await insertNew(userId, run, ctx);
+  } catch (err) {
+    if (!(err instanceof RunAlreadyImportedError)) throw err;
+
+    // Lost a race: another sync inserted this exact activity between our
+    // lookup and our insert. That is not an error — it is the answer to the
+    // question we were asking. Re-read the winner's row and carry on as a
+    // filename match, so the result is identical to having lost the race by a
+    // second longer.
+    const row = await findByFilename(userId, run.externalId);
+    if (!row) throw err; // constraint fired but the row is gone: genuinely wrong
+    return enrichExisting(row, 'filename', run, ctx);
+  }
 }
+
+/**
+ * `runs_user_filename_uniq` rejected the insert, so this activity is already
+ * stored. See supabase/migrations/20260807_runs_user_filename_uniq.sql.
+ */
+class RunAlreadyImportedError extends Error {}
+
+/** Postgres unique_violation, surfaced by PostgREST on the error body. */
+const UNIQUE_VIOLATION = '23505';
 
 async function insertNew(userId: string, run: NormalizedRun, ctx: UpsertContext): Promise<UpsertResult> {
   const avgHr = run.avgHr != null ? Math.round(run.avgHr) : null;
@@ -440,6 +483,9 @@ async function insertNew(userId: string, run: NormalizedRun, ctx: UpsertContext)
     .select('id')
     .single();
 
+  if (error?.code === UNIQUE_VIOLATION) {
+    throw new RunAlreadyImportedError(`Run ${run.externalId} was inserted by a concurrent sync.`);
+  }
   if (error || !inserted) {
     throw new Error(`Failed to insert run ${run.externalId}: ${error?.message ?? 'no row returned'}`);
   }
