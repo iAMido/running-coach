@@ -58,6 +58,89 @@ export interface IntervalsSyncResult {
   errors: string[];
 }
 
+/**
+ * How stale `last_sync_at` must be before opening the app triggers a sync.
+ *
+ * Long enough that a burst of navigation costs one API round trip, short enough
+ * that a run uploaded during breakfast is on the dashboard by the time it is
+ * looked at.
+ */
+export const AUTO_SYNC_STALE_MINUTES = 30;
+
+export interface SyncClaim {
+  claimed: boolean;
+  /** `last_sync_at` as it was before the claim — restored if the sync throws. */
+  previous: string | null;
+  /** The stamp written by this claim, so a rollback only reverts its own write. */
+  stamp: string | null;
+  reason: 'claimed' | 'fresh' | 'raced' | 'not_connected';
+}
+
+/**
+ * Take the right to run an automatic sync, atomically.
+ *
+ * Read-then-check is not enough here. Until sync-on-open existed the only two
+ * callers were crons six hours apart, so no two syncs could ever overlap. Two
+ * devices opening the app in the same ten seconds can, and both would find no
+ * existing row for a brand-new activity and both insert it — the duplicate this
+ * codebase has spent days eliminating, reintroduced through the front door.
+ *
+ * So the claim is a compare-and-swap: write `last_sync_at` only if it still
+ * holds the value we just read. The loser sees zero updated rows and skips.
+ *
+ * This briefly makes `last_sync_at` mean "started" rather than "completed",
+ * which is why a failure restores it — otherwise one error would suppress
+ * automatic syncing for the whole debounce window and, worse, leave a timestamp
+ * claiming a sync that never happened. Cron and manual syncs do not claim and
+ * keep the original write-on-completion behaviour.
+ */
+export async function claimAutoSync(
+  userId: string,
+  staleMinutes: number = AUTO_SYNC_STALE_MINUTES,
+): Promise<SyncClaim> {
+  const { data } = await supabase
+    .from('intervals_tokens')
+    .select('last_sync_at')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (!data) return { claimed: false, previous: null, stamp: null, reason: 'not_connected' };
+
+  const previous = (data as { last_sync_at: string | null }).last_sync_at;
+  if (previous) {
+    const age = Date.now() - Date.parse(previous);
+    if (Number.isFinite(age) && age < staleMinutes * 60_000) {
+      return { claimed: false, previous, stamp: null, reason: 'fresh' };
+    }
+  }
+
+  const stamp = new Date().toISOString();
+  const update = supabase.from('intervals_tokens').update({ last_sync_at: stamp }).eq('user_id', userId);
+  // Postgres equality never matches NULL, so the absent case needs `is`.
+  const guarded = previous === null ? update.is('last_sync_at', null) : update.eq('last_sync_at', previous);
+  const { data: rows } = await guarded.select('user_id');
+
+  if (!rows || rows.length === 0) {
+    return { claimed: false, previous, stamp: null, reason: 'raced' };
+  }
+  return { claimed: true, previous, stamp, reason: 'claimed' };
+}
+
+/**
+ * Undo a claim whose sync failed.
+ *
+ * Guarded on the stamp this claim wrote so it can never overwrite a *newer*
+ * successful sync that landed in between.
+ */
+export async function releaseAutoSyncClaim(userId: string, claim: SyncClaim): Promise<void> {
+  if (!claim.claimed || !claim.stamp) return;
+  await supabase
+    .from('intervals_tokens')
+    .update({ last_sync_at: claim.previous })
+    .eq('user_id', userId)
+    .eq('last_sync_at', claim.stamp);
+}
+
 export interface IntervalsSyncOptions {
   daysBack?: number;
   wellnessDaysBack?: number;

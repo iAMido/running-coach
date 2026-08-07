@@ -152,8 +152,15 @@ export const stravaSyncSchema = z.object({
 // scripts/backfill-intervals.ts, which is dry-run-first and reports what it
 // would change. A 400-day pull through here would perform the same
 // reconciliation unattended, with no report.
+//
+// `ifStaleMinutes` turns the call into an AUTOMATIC sync: the server runs it
+// only if `last_sync_at` is older than that, and reports `skipped` otherwise.
+// Sync-on-open passes it; the "Sync Now" button deliberately does not, because
+// a button that silently declines to do the thing it names is worse than a
+// redundant API call.
 export const intervalsSyncSchema = z.object({
   daysBack: z.number().int().min(1).max(30).optional(),
+  ifStaleMinutes: z.number().int().min(1).max(1440).optional(),
 });
 
 // Pushing a plan week to the watch. `preview` defaults to TRUE so a caller

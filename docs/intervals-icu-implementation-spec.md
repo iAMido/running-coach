@@ -340,16 +340,53 @@ same pattern as the Strava routes.
 
 ---
 
-## Phase 5 — webhook
+## Phase 5 — webhook: NOT AVAILABLE. Superseded by sync-on-open (2026-08-07)
 
-`app/api/intervals/webhook/route.ts`. intervals.icu supports webhooks for activity
-upload; register the endpoint and verify the shared secret on every call. On
-receipt, sync just that activity.
+**This section originally stated, as fact, that "intervals.icu supports webhooks for
+activity upload; register the endpoint and verify the shared secret on every call."
+That was written from a search result mentioning webhooks in general, without
+probing for one. It is wrong, and it is kept here rather than deleted so the same
+plan is not re-derived from the same marketing page in six months.**
 
-Cron stays as the backstop — the webhook is an optimisation, not a replacement.
-Payoff: runs land seconds after Garmin uploads instead of waiting up to 12 h, which
-makes the dashboard's 36-hour `coach_notes` window and the readiness verdict
-actually same-day.
+What the probe actually found (2026-08-07):
+
+- `ACTIVITY_UPLOADED` / `ACTIVITY_ANALYZED` are offered only to **registered OAuth
+  applications**. This app authenticates with an API key.
+- Registering an OAuth application is a manual email to `david@intervals.icu` with
+  app name, description, website URL, logo, privacy policy URL and redirect URIs.
+- Six plausible subscription endpoints, called with a working API key, all returned
+  clean application-level JSON 404s — not Cloudflare blocks, so the request reached
+  the service and there was nothing there:
+
+  ```
+  /athlete/{id}/webhooks   /athlete/{id}/webhook   /athlete/{id}/subscriptions
+  /webhooks                /push-subscriptions     /athlete/{id}/notification-settings
+  ```
+
+So the webhook costs an OAuth-app registration under the athlete's own name and
+domain, plus a rewrite of auth from API key to OAuth2 with token refresh. OAuth
+becomes worth doing the day a **second athlete** uses the app. Not before, and not
+for this.
+
+**What replaced it: sync-on-open** (`lib/hooks/use-sync-on-open.ts`).
+
+Opening `/coach` fires a background sync if `last_sync_at` is older than 30 minutes.
+The debounce lives on the server (`ifStaleMinutes` on `POST /api/intervals/sync`) and
+is a **compare-and-swap** on `last_sync_at`, not a read-then-check — until this
+existed the only callers were crons six hours apart, so no two syncs could overlap;
+two devices opening the app together can, and both would insert the same new
+activity. A failed sync restores the previous timestamp so an error never leaves a
+stamp claiming success.
+
+This targets the latency that actually costs something. The morning-after coach note
+and the readiness verdict are read by opening the app, so what matters is the gap
+between a run reaching intervals.icu and the athlete looking at it — not the gap
+until the next cron. Seconds when he is looking; the crons remain the unattended
+backstop for the weekly health audit, which is all they still need to cover.
+
+Extra cron entries were considered and rejected: Vercel Hobby allows 100 jobs at
+once-per-day each, so more frequent polling is available, but once sync-on-open
+exists it would buy freshness for a moment nobody is watching.
 
 ---
 

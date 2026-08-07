@@ -3,11 +3,12 @@
 import { useSession } from 'next-auth/react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Activity, Timer, TrendingUp, Calendar, Target, Zap, Play, ChevronRight, HeartPulse, Gauge } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { DashboardStats, Run, TrainingPlan, PlanWeek, Workout } from '@/lib/db/types';
 import { isWorkoutToday, getTodayDayName, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
 import { CoachHealthWidget } from '@/components/coach/coach-health-widget';
+import { useSyncOnOpen } from '@/lib/hooks/use-sync-on-open';
 
 export default function CoachDashboard() {
   const { data: session } = useSession();
@@ -16,32 +17,38 @@ export default function CoachDashboard() {
   const [activePlan, setActivePlan] = useState<TrainingPlan | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [statsRes, runsRes, planRes] = await Promise.all([
-          fetch('/api/coach/stats'),
-          fetch('/api/coach/runs?days=14&limit=10'),
-          fetch('/api/coach/plans'),
-        ]);
-        if (statsRes.ok) setStats(await statsRes.json());
-        if (runsRes.ok) {
-          const runsData = await runsRes.json();
-          setRecentRuns(runsData.runs || []);
-        }
-        if (planRes.ok) {
-          const planData = await planRes.json();
-          setActivePlan(planData.plan || null);
-        }
-      } catch (error) {
-        console.error('Failed to fetch data:', error);
-        setStats({ totalRuns: 0, totalDistanceKm: 0, thisWeekKm: 0, thisWeekRuns: 0, activePlan: null });
-      } finally {
-        setLoading(false);
+  const fetchData = useCallback(async () => {
+    try {
+      const [statsRes, runsRes, planRes] = await Promise.all([
+        fetch('/api/coach/stats'),
+        fetch('/api/coach/runs?days=14&limit=10'),
+        fetch('/api/coach/plans'),
+      ]);
+      if (statsRes.ok) setStats(await statsRes.json());
+      if (runsRes.ok) {
+        const runsData = await runsRes.json();
+        setRecentRuns(runsData.runs || []);
       }
-    };
-    fetchData();
+      if (planRes.ok) {
+        const planData = await planRes.json();
+        setActivePlan(planData.plan || null);
+      }
+    } catch (error) {
+      console.error('Failed to fetch data:', error);
+      setStats({ totalRuns: 0, totalDistanceKm: 0, thisWeekKm: 0, thisWeekRuns: 0, activePlan: null });
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Background pull from intervals.icu. Renders from the database first and
+  // re-reads only if the sync actually imported something, so the page never
+  // waits on a third party.
+  useSyncOnOpen(fetchData);
 
   // Get current week workouts from the plan
   const getCurrentWeekWorkouts = (): Record<string, Workout> | null => {
