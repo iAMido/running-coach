@@ -178,6 +178,19 @@ export class IntervalsClient {
     });
   }
 
+  /**
+   * Calendar events in a date window, inclusive. Dates are YYYY-MM-DD.
+   *
+   * Read before every push so existing app-created events can be replaced
+   * rather than duplicated.
+   */
+  async getEvents(oldest: string, newest: string): Promise<{ id: number | string; start_date_local?: string; description?: string | null }[]> {
+    const data = await this.request<{ id: number | string; start_date_local?: string; description?: string | null }[]>(
+      `/athlete/${this.athleteId}/events?oldest=${oldest}&newest=${newest}`,
+    );
+    return Array.isArray(data) ? data : [];
+  }
+
   /** Remove a calendar event. Used to undo a push. */
   async deleteEvent(eventId: number | string): Promise<void> {
     await this.request(`/athlete/${this.athleteId}/events/${eventId}`, { method: 'DELETE' });

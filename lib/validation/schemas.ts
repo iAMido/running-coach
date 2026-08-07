@@ -156,6 +156,14 @@ export const intervalsSyncSchema = z.object({
   daysBack: z.number().int().min(1).max(30).optional(),
 });
 
+// Pushing a plan week to the watch. `preview` defaults to TRUE so a caller
+// that forgets the flag gets a dry run rather than writing to a real training
+// calendar.
+export const pushWeekSchema = z.object({
+  weekNumber: z.number().int().min(1).max(52),
+  preview: z.boolean().optional().default(true),
+});
+
 // intervals.icu connection. Bounded tightly because these land in a token row:
 // the key is an opaque ~24-char string and the athlete id looks like "i665723".
 //

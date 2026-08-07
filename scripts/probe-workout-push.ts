@@ -68,7 +68,7 @@ async function main() {
     type: 'Run',
     name: 'ZZ TEST — delete me (RunCoach probe)',
     moving_time: 600,
-    description: `- 10m ${PCT_LOW}-${PCT_HIGH}% HR`,
+    description: argValue('--desc') ?? `- 10m ${PCT_LOW}-${PCT_HIGH}% HR`,
   };
 
   let eventId: string | number | null = null;
