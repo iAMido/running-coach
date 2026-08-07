@@ -5,6 +5,9 @@ import { supabase } from '@/lib/db/supabase';
 import { callOpenRouter } from '@/lib/ai/openrouter';
 import { buildEnhancedWeeklyAnalysisPrompt, buildCoachDynamicBlock, COACH_STATIC_BLOCK } from '@/lib/ai/coach-prompts';
 import { buildContext } from '@/lib/rag/context-builder';
+import { getEfficiencyRuns } from '@/lib/rag/user-formatter';
+import { buildEfficiencySummary, formatEfficiency } from '@/lib/utils/efficiency';
+import { userDateStr } from '@/lib/utils/user-time';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { reviewAnalysisSchema, validateInput } from '@/lib/validation/schemas';
 import { getActivePlan } from '@/lib/db/plans';
@@ -89,6 +92,19 @@ export async function POST(request: NextRequest) {
       laps: lapRows.filter(l => l.run_id === run.id),
     }));
 
+    // Aerobic efficiency: the weekly review is where trend metrics belong, and
+    // where this can sit beside CTL so the two answer "is the training working"
+    // together. It changes 1-2% in three weeks, so it has no business on a
+    // dashboard tile. Best-effort — a review must never fail over a trend line.
+    let efficiency = '';
+    try {
+      efficiency = formatEfficiency(
+        buildEfficiencySummary(await getEfficiencyRuns(userId), userDateStr()),
+      );
+    } catch (err) {
+      console.error('weekly review: efficiency block unavailable:', err);
+    }
+
     const reviewWeekNumber = activePlan?.start_date
       ? calculateCurrentWeek(activePlan.start_date, activePlan.duration_weeks, sunday).currentWeek
       : undefined;
@@ -119,6 +135,7 @@ export async function POST(request: NextRequest) {
       achievements,
       plan: activePlan,
       weekNumber: reviewWeekNumber,
+      efficiency,
     });
 
     const callStart = Date.now();

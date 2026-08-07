@@ -111,6 +111,9 @@ Reading the numbers you are given:
   - A **NEGATIVE** value means the second half was MORE efficient than the first. That is a hot start or a negative split — the run got stronger, not weaker. Do not read it as "ran too hard"; the fix for a hot start (start slower) is the opposite of the fix for a fade (build endurance).
   - **Absent** decoupling means the session was gated out — intervals or fartlek, too few laps carrying both pace and HR, halves that did not divide evenly, or too much time at non-running pace. Absence is NOT a good result and NOT a clean run. Say it was not computable if it matters.
 - **Recovery**: HRV is only meaningful against the athlete's own baseline, which is supplied. A missing HRV reading is missing data, never a bad reading — do not treat "no reading" as poor recovery.
+- **Aerobic efficiency**: grade-adjusted speed per heartbeat, as a 42-day rolling MEDIAN — never a single run, which is dominated by heat, sleep and terrain. It answers "is the training working", which Fitness (CTL) cannot: CTL rises whenever volume rises and says nothing about whether the body is adapting to it. Rising load with flat efficiency means the work is going in and the aerobic system is not responding — a different problem from not training enough, with a different fix.
+  - Comparisons are **season-matched to the same period one year earlier**, because heat raises heart rate for the same work and an August-to-December comparison measures the weather. If the block says there is no season-matched baseline, say the comparison is unavailable — do NOT substitute a different time of year.
+  - A 42-day median moves 1-2% on its own. If the block calls the trend flat, it is flat: do not narrate it as a decline or an improvement. Cite the sample counts; this figure is only as good as the runs behind it.
 
 The KNOWLEDGE HIERARCHY (athlete data, previous coach patterns, methodology guidelines) and YOUR TASK follow in the next block — follow that hierarchy strictly, in order.`;
 
@@ -335,6 +338,8 @@ export function buildEnhancedWeeklyAnalysisPrompt(
     achievements?: string;
     plan?: TrainingPlan | null;
     weekNumber?: number;
+    /** Pre-rendered aerobic-efficiency block; '' when there is not enough data. */
+    efficiency?: string;
   }
 ): string {
   const plannedBlock = weekData.plan && weekData.weekNumber
@@ -354,6 +359,7 @@ ${plannedBlock ? `### PLANNED FOR THIS WEEK\n${plannedBlock}\n` : '### PLANNED F
 ### ACTUAL RUNS LOGGED THIS WEEK
 ${actualBlock}
 
+${weekData.efficiency ? `${weekData.efficiency}\n` : ''}
 ### ATHLETE FEEDBACK ON RUNS
 ${JSON.stringify(weekData.feedback, null, 2)}
 
@@ -370,10 +376,11 @@ ${JSON.stringify(weekData.feedback, null, 2)}
 3. **Previous Coach Comparison** - How does this week compare to their previous coach's typical patterns?
 4. **Intensity Distribution** - Were easy days easy enough? (Check 80/20 rule if relevant)
 5. **Interval Quality** - For any quality workout, comment on per-lap pacing consistency and HR drift using the lap data above.
-6. **What Went Well** - Positive observations
-7. **Areas to Improve** - Specific issues with actionable fixes
-8. **Run-by-Run Notes** - Quick feedback on each run
-9. **Next Week Focus** - 2-3 key priorities
+6. **Is the training working?** - Only if the aerobic-efficiency block above is present. Read it TOGETHER with Fitness (CTL): rising load with flat efficiency means the work is going in and the aerobic system is not yet responding, which is a different problem from not training enough. Quote both numbers. If the block says the trend is flat, do not call it a decline; if there is no season-matched baseline, say the comparison is not available rather than reaching for a different time of year.
+7. **What Went Well** - Positive observations
+8. **Areas to Improve** - Specific issues with actionable fixes
+9. **Run-by-Run Notes** - Quick feedback on each run
+10. **Next Week Focus** - 2-3 key priorities
 
 Be specific about HR zones and pacing. If runs were too hard, say so clearly.
 Reference the athlete's previous coach workouts when suggesting changes.`;

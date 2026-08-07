@@ -7,6 +7,7 @@ import { calculateCurrentWeek, sortWorkoutsByDay } from '@/lib/utils/week-calcul
 import { daysBetweenDateStr, nowInUserTz, userDateStr } from '@/lib/utils/user-time';
 import { formatPace } from '@/lib/utils/pace';
 import { percentileOf, medianOf } from '@/lib/utils/decoupling';
+import { buildEfficiencySummary, formatEfficiency, type EfRun } from '@/lib/utils/efficiency';
 import { formatZoneDiscipline } from '@/lib/utils/zone-discipline';
 import { plannedWorkoutForRunDate } from '@/lib/ai/run-reaction';
 import { supabase } from '@/lib/db/supabase';
@@ -87,6 +88,19 @@ export async function formatUserContext(
     }
   } catch (err) {
     console.error('user-formatter: recovery block unavailable:', err);
+  }
+
+  // 2c. Aerobic efficiency. Sits next to recovery because it answers "is the
+  // training working" — the question CTL alone answers with a yes whenever
+  // volume rises. Best-effort; it is a trend, not a blocker.
+  try {
+    const efText = formatEfficiency(buildEfficiencySummary(await getEfficiencyRuns(userId), userDateStr()));
+    if (efText) {
+      sections.push(efText);
+      totalChars += efText.length;
+    }
+  } catch (err) {
+    console.error('user-formatter: efficiency block unavailable:', err);
   }
 
   // The athlete's own decoupling history, so each run can be placed against it
@@ -770,6 +784,32 @@ async function getLatestWeeklySummary(userId: string): Promise<WeeklySummary | n
  * this normal for me", and with ~76 values a shorter window would leave the
  * percentile too coarse to mean anything.
  */
+/**
+ * Every run that could carry an Efficiency Factor.
+ *
+ * Whole history, filtered in TypeScript by `isEfEligible` rather than in SQL, so
+ * the gates live in one place and the same rules apply wherever this is read.
+ */
+export async function getEfficiencyRuns(userId: string): Promise<EfRun[]> {
+  const { data } = await supabase
+    .from('runs')
+    .select('date,run_type,duration_min,avg_hr,gap_pace_min_km')
+    .eq('user_id', userId)
+    .not('gap_pace_min_km', 'is', null)
+    .order('date', { ascending: true });
+
+  return ((data ?? []) as {
+    date: string; run_type: string | null; duration_min: number | null;
+    avg_hr: number | null; gap_pace_min_km: number | null;
+  }[]).map((r) => ({
+    date: r.date,
+    runType: r.run_type,
+    durationMin: r.duration_min,
+    avgHr: r.avg_hr,
+    gapPaceMinKm: r.gap_pace_min_km,
+  }));
+}
+
 async function getDecouplingHistory(userId: string): Promise<number[]> {
   const { data } = await supabase
     .from('runs')
