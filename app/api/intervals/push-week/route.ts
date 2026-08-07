@@ -8,7 +8,14 @@ import { parseZonesFromProfile } from '@/lib/utils/zones';
 import { userDateStr, userDateStrDaysAgo } from '@/lib/utils/user-time';
 import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
 import { getIntervalsClientForUser } from '@/lib/intervals/sync';
-import { previewWeek, pushWeek, WATCH_HORIZON_DAYS } from '@/lib/intervals/push-week';
+import {
+  addDays,
+  isAppCreated,
+  previewWeek,
+  pushWeek,
+  weekStartDate,
+  WATCH_HORIZON_DAYS,
+} from '@/lib/intervals/push-week';
 import { IntervalsApiError } from '@/lib/intervals/client';
 import { pushWeekSchema, validateInput } from '@/lib/validation/schemas';
 import type { PlanWeek } from '@/lib/db/types';
@@ -63,12 +70,37 @@ export async function POST(request: NextRequest) {
     const bands = parseZonesFromProfile(profile);
     const today = userDateStr();
 
+    // The same number the push gate uses, read once here so the preview can
+    // show the refusal instead of the athlete meeting it as a 409 after
+    // reviewing a week he was never going to be allowed to send.
+    const theirMaxHr = await connection.client.getAthleteMaxHr(userDateStrDaysAgo(60), today);
+
     if (preview) {
+      // A push REPLACES, and replace is destructive even when it can only touch
+      // its own events. Count them so the confirmation says what will be
+      // removed, not just what will be written.
+      //
+      // Null means "could not read", which is NOT the same as zero: zero is a
+      // claim that nothing is there, and the push itself refuses to write blind
+      // for exactly this reason.
+      let existingAppEvents: number | null = null;
+      const start = weekStartDate(plan, weekNumber);
+      if (start) {
+        try {
+          const events = await connection.client.getEvents(start, addDays(start, 6));
+          existingAppEvents = events.filter((e) => isAppCreated(e.description)).length;
+        } catch {
+          existingAppEvents = null;
+        }
+      }
+
       return NextResponse.json({
         preview: true,
         weekNumber,
         maxHr: profile.max_hr,
+        theirMaxHr,
         horizonDays: WATCH_HORIZON_DAYS,
+        existingAppEvents,
         rows: previewWeek(plan, week, weekNumber, bands, profile.max_hr, today),
       });
     }
@@ -77,7 +109,6 @@ export async function POST(request: NextRequest) {
     // against THEIR max HR. If it disagrees with ours, every workout would mean
     // a different bpm range than the plan intends — silently. The sync-time
     // warning is the early alarm; this is the gate.
-    const theirMaxHr = await connection.client.getAthleteMaxHr(userDateStrDaysAgo(60), today);
     if (theirMaxHr !== null && theirMaxHr !== profile.max_hr) {
       return NextResponse.json(
         {

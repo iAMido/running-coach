@@ -7,6 +7,7 @@ import type { TrainingPlan, PlanWeek, Workout } from '@/lib/db/types';
 import { isWorkoutToday, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
 import { StrengthWorkout } from '@/components/coach/strength-workout';
 import { WorkoutCard, getWorkoutTagClass } from '@/components/coach/workout-card';
+import { PushToWatch } from '@/components/coach/push-to-watch';
 
 const planTypes = [
   { value: 'half-marathon', label: 'Half Marathon' },
@@ -415,6 +416,11 @@ export default function TrainingPlanPage() {
                   )}
                 </div>
               </div>
+
+              {/* Send this week to the watch. Hides itself when intervals.icu
+                  is not connected, so it costs nothing on an unconnected
+                  account. */}
+              <PushToWatch weekNumber={viewingWeek} currentWeek={calculatedCurrentWeek} />
 
               {/* Strength Training */}
               <StrengthWorkout weekNumber={viewingWeek} totalWeeks={totalWeeks} />

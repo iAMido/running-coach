@@ -81,7 +81,8 @@
       "Bash(git diff *)",
       "Bash(git stash *)",
       "Bash(awk 'NR<=496 && /^export function build/{fn=$0; ln=NR} END{}' lib/ai/coach-prompts.ts)",
-      "Bash(awk -F: '$1<496')"
+      "Bash(awk -F: '$1<496')",
+      "Bash(git commit -q -m ' *)"
     ]
   },
   "enableAllProjectMcpServers": true,
