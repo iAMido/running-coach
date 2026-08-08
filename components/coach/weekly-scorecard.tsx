@@ -22,7 +22,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Check, AlertTriangle, XCircle, BarChart3, Info } from 'lucide-react';
+import { Check, AlertTriangle, XCircle, BarChart3, Info, Minus } from 'lucide-react';
 
 type ScoreColour = 'good' | 'warn' | 'bad';
 
@@ -93,14 +93,25 @@ export function WeeklyScorecard() {
                     return <Icon className="w-3.5 h-3.5" />;
                   })()}
                 </span>
-              ) : (
-                // Deliberately not a grey traffic light — that would read as a
-                // verdict withheld. A chart glyph says "different kind of row".
+              ) : typeof row.percentile === 'number' ? (
+                // MEASURED, not graded. Deliberately not a grey traffic light —
+                // that would read as a verdict withheld. Solid chip and a chart
+                // glyph: this row has a real number, it just isn't a verdict.
                 <span
                   className="w-6 h-6 rounded-full grid place-items-center shrink-0 mt-0.5"
-                  style={{ background: 'var(--rc-surface-2)', color: 'var(--rc-ink-3)', border: '1px dashed var(--rc-line)' }}
+                  style={{ background: 'var(--rc-surface-2)', color: 'var(--rc-ink-2)', border: '1px solid var(--rc-line-2)' }}
                 >
                   <BarChart3 className="w-3.5 h-3.5" />
+                </span>
+              ) : (
+                // ABSENT. Must not look like the row above it: "measured but
+                // not graded" and "no evidence" are different states, and the
+                // whole card's honesty depends on the reader seeing which.
+                <span
+                  className="w-6 h-6 rounded-full grid place-items-center shrink-0 mt-0.5"
+                  style={{ background: 'transparent', color: 'var(--rc-ink-4)', border: '1px dashed var(--rc-line-2)' }}
+                >
+                  <Minus className="w-3.5 h-3.5" />
                 </span>
               )}
 
