@@ -7,7 +7,9 @@ import { buildEnhancedWeeklyAnalysisPrompt, buildCoachDynamicBlock, COACH_STATIC
 import { buildContext } from '@/lib/rag/context-builder';
 import { getEfficiencyRuns } from '@/lib/rag/user-formatter';
 import { buildEfficiencySummary, formatEfficiency } from '@/lib/utils/efficiency';
-import { userDateStr } from '@/lib/utils/user-time';
+import { userDateStr, shiftedDateStr } from '@/lib/utils/user-time';
+import { buildScorecardForUser } from '@/lib/coach/weekly-scorecard';
+import { formatScorecard } from '@/lib/utils/scorecard';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { reviewAnalysisSchema, validateInput } from '@/lib/validation/schemas';
 import { getActivePlan } from '@/lib/db/plans';
@@ -105,6 +107,21 @@ export async function POST(request: NextRequest) {
       console.error('weekly review: efficiency block unavailable:', err);
     }
 
+    // The same scorecard object the review page renders, so the coach cannot
+    // describe the week differently from the card sitting above its analysis.
+    // `sunday` here is a plain local Date built from calendar fields, so its
+    // own fields are the week boundary — shiftedDateStr, not userDateStr.
+    let scorecard = '';
+    try {
+      const saturday = new Date(sunday);
+      saturday.setDate(saturday.getDate() + 6);
+      scorecard = formatScorecard(
+        await buildScorecardForUser(userId, shiftedDateStr(sunday), shiftedDateStr(saturday), activePlan),
+      );
+    } catch (err) {
+      console.error('weekly review: scorecard unavailable:', err);
+    }
+
     const reviewWeekNumber = activePlan?.start_date
       ? calculateCurrentWeek(activePlan.start_date, activePlan.duration_weeks, sunday).currentWeek
       : undefined;
@@ -136,6 +153,7 @@ export async function POST(request: NextRequest) {
       plan: activePlan,
       weekNumber: reviewWeekNumber,
       efficiency,
+      scorecard,
     });
 
     const callStart = Date.now();

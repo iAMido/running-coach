@@ -5,9 +5,7 @@ import { nowInUserTz, userDateStrDaysAgo } from '@/lib/utils/user-time';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { getRecentFeedback, getWeeklySummary, getCurrentWeekStart } from '@/lib/db/feedback';
 import { calculateFatigueScore } from '@/lib/rag/user-formatter';
-import { computeReadiness, type RecoverySignals } from '@/lib/utils/readiness';
-import { getLatestRecoveryReading, getWellnessBaselines } from '@/lib/db/wellness';
-import { plannedWorkoutForRunDate } from '@/lib/ai/run-reaction';
+import { readinessForUser } from '@/lib/coach/readiness-service';
 
 export async function GET() {
   const auth = await getAuthenticatedUser();
@@ -78,53 +76,12 @@ export async function GET() {
       };
     }
 
-    // Deterministic readiness verdict (GO / EASY / REST) from the same
-    // signals the coach uses — fatigue score, yesterday's zones, today's
-    // planned workout. Zero LLM cost, always consistent with the data.
-    const fatigueScore = calculateFatigueScore(feedback, weeklySummary);
-    const { workout: todaysWorkout } = plannedWorkoutForRunDate(planWithWeekInfo || null, new Date());
-
-    // Recovery layer. Best-effort: a wellness outage must degrade the verdict
-    // to the training-load rules, never break the dashboard.
-    //
-    // Reads the latest row WITH readings, not the latest row. The nightly sync
-    // creates today's row just after local midnight carrying only ctl/atl, so
-    // `recent[0]` is watch-empty every morning — which rendered the Recovery
-    // tile as "--" daily and kept the two-day HRV rule from ever firing before
-    // the watch synced. Fitness and Form still read the latest row: ctl/atl are
-    // computed from training load and are genuinely current there.
-    let recovery: RecoverySignals | null = null;
-    let recoveryAgeDays: number | null = null;
-    try {
-      const [latest, baselines] = await Promise.all([
-        getLatestRecoveryReading(userId),
-        getWellnessBaselines(userId),
-      ]);
-      if (latest) {
-        recoveryAgeDays = latest.ageDays;
-        recovery = {
-          hrv: latest.row.hrv ?? null,
-          hrvPrevious: latest.previousHrv,
-          hrvPreviousIsConsecutive: latest.previousHrvIsConsecutive,
-          restingHr: latest.row.resting_hr ?? null,
-          sleepSecs: latest.row.sleep_secs ?? null,
-          sleepScore: latest.row.sleep_score ?? null,
-          hrvBaseline: baselines.hrvMean,
-          hrvSd: baselines.hrvSd,
-          restingHrBaseline: baselines.restingHrMean,
-          ageDays: latest.ageDays,
-        };
-      }
-    } catch (err) {
-      console.error('Readiness: wellness lookup failed, falling back to load only:', err);
-    }
-
-    const readiness = computeReadiness({
-      fatigueScore,
-      yesterdayRun: lastRunRes.data?.[0] ?? null,
-      todaysWorkout,
-      recovery,
-    });
+    // Deterministic readiness verdict (GO / EASY / REST). Assembled by
+    // `readinessForUser` so the dashboard badge and the weekly scorecard row
+    // are literally the same computation — two assemblies of the same inputs
+    // would eventually disagree, which is what the deterministic verdict
+    // exists to prevent.
+    const { readiness, fatigueScore, recoveryAgeDays, recovery } = await readinessForUser(userId, planWithWeekInfo || null);
 
     // ── Dashboard tiles ────────────────────────────────────────────────
     // Each is independent and best-effort: a gap in one must render as

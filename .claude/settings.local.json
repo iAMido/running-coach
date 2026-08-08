@@ -88,7 +88,8 @@
       "WebSearch",
       "WebFetch(domain:forum.intervals.icu)",
       "WebFetch(domain:intervals.icu)",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(bun test *)"
     ]
   },
   "enableAllProjectMcpServers": true,

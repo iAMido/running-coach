@@ -340,6 +340,8 @@ export function buildEnhancedWeeklyAnalysisPrompt(
     weekNumber?: number;
     /** Pre-rendered aerobic-efficiency block; '' when there is not enough data. */
     efficiency?: string;
+    /** Pre-rendered weekly scorecard — the SAME object the review page shows. */
+    scorecard?: string;
   }
 ): string {
   const plannedBlock = weekData.plan && weekData.weekNumber
@@ -360,6 +362,7 @@ ${plannedBlock ? `### PLANNED FOR THIS WEEK\n${plannedBlock}\n` : '### PLANNED F
 ${actualBlock}
 
 ${weekData.efficiency ? `${weekData.efficiency}\n` : ''}
+${weekData.scorecard ? `${weekData.scorecard}\n` : ''}
 ### ATHLETE FEEDBACK ON RUNS
 ${JSON.stringify(weekData.feedback, null, 2)}
 
@@ -376,11 +379,12 @@ ${JSON.stringify(weekData.feedback, null, 2)}
 3. **Previous Coach Comparison** - How does this week compare to their previous coach's typical patterns?
 4. **Intensity Distribution** - Were easy days easy enough? (Check 80/20 rule if relevant)
 5. **Interval Quality** - For any quality workout, comment on per-lap pacing consistency and HR drift using the lap data above.
-6. **Is the training working?** - Only if the aerobic-efficiency block above is present. Read it TOGETHER with Fitness (CTL): rising load with flat efficiency means the work is going in and the aerobic system is not yet responding, which is a different problem from not training enough. Quote both numbers. If the block says the trend is flat, do not call it a decline; if there is no season-matched baseline, say the comparison is not available rather than reaching for a different time of year.
-7. **What Went Well** - Positive observations
-8. **Areas to Improve** - Specific issues with actionable fixes
-9. **Run-by-Run Notes** - Quick feedback on each run
-10. **Next Week Focus** - 2-3 key priorities
+6. **Scorecard** - If a weekly scorecard is present above, refer to it rather than restating it. Rows marked [no verdict] carry NO colour on purpose: do not supply one, and do not translate a percentile into good/bad language. A row reading "Not measurable" means there was no evidence, which is not the same as a pass.
+7. **Is the training working?** - Only if the aerobic-efficiency block above is present. Read it TOGETHER with Fitness (CTL): rising load with flat efficiency means the work is going in and the aerobic system is not yet responding, which is a different problem from not training enough. Quote both numbers. If the block says the trend is flat, do not call it a decline; if there is no season-matched baseline, say the comparison is not available rather than reaching for a different time of year.
+8. **What Went Well** - Positive observations
+9. **Areas to Improve** - Specific issues with actionable fixes
+10. **Run-by-Run Notes** - Quick feedback on each run
+11. **Next Week Focus** - 2-3 key priorities
 
 Be specific about HR zones and pacing. If runs were too hard, say so clearly.
 Reference the athlete's previous coach workouts when suggesting changes.`;

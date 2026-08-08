@@ -123,6 +123,58 @@ export interface ZoneDisciplineInput {
   zones?: ZoneDistribution | null;
 }
 
+export type ZoneJudgement =
+  | 'on_target'
+  | 'above_target'
+  /** Quality sessions only — an easy run cannot fail by being easy. */
+  | 'below_target'
+  | 'no_zone_data'
+  | 'no_target';
+
+export interface ZoneDisciplineResult {
+  judgement: ZoneJudgement;
+  band: PlannedZoneBand | null;
+  isEasy: boolean;
+  isQuality: boolean;
+  inBandPct: number | null;
+  aboveCeilingPct: number | null;
+  belowFloorPct: number | null;
+  /** Share at the top of a wide quality band — null when not applicable. */
+  workZonePct: number | null;
+}
+
+/**
+ * The judgment behind the rendered line, as data.
+ *
+ * Split out so the weekly scorecard counts exactly what the prose reports. Two
+ * implementations of "was this session on target" would drift, and the one the
+ * athlete sees coloured would eventually disagree with the one the coach reads.
+ */
+export function judgeZoneDiscipline(input: ZoneDisciplineInput): ZoneDisciplineResult {
+  const type = input.plannedType ?? '';
+  const isEasy = EASY_SESSION.test(type);
+  const isQuality = !isEasy && QUALITY_SESSION.test(type);
+  const band = isEasy ? EASY_BAND : parsePlannedZoneBand(input.targetHr);
+  const zones = input.zones ?? {};
+
+  const base = { band, isEasy, isQuality, inBandPct: null, aboveCeilingPct: null, belowFloorPct: null, workZonePct: null };
+
+  if (!band) return { ...base, judgement: 'no_target' };
+  if (!hasZoneData(input.zones)) return { ...base, judgement: 'no_zone_data' };
+
+  const inBandPct = sumZones(zones, band.floor, band.ceiling);
+  const aboveCeilingPct = band.ceiling < 6 ? sumZones(zones, band.ceiling + 1, 6) : 0;
+  const belowFloorPct = band.floor > 1 ? sumZones(zones, 1, band.floor - 1) : 0;
+  const workZonePct =
+    isQuality && band.ceiling > band.floor && band.ceiling >= 3 ? zoneAt(zones, band.ceiling) : null;
+
+  let judgement: ZoneJudgement = 'on_target';
+  if (aboveCeilingPct > OFF_TARGET_FLAG_PCT) judgement = 'above_target';
+  else if (isQuality && belowFloorPct > OFF_TARGET_FLAG_PCT) judgement = 'below_target';
+
+  return { judgement, band, isEasy, isQuality, inBandPct, aboveCeilingPct, belowFloorPct, workZonePct };
+}
+
 /**
  * One bracketed line for a run block, or '' when there is nothing to say.
  *

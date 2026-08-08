@@ -5,6 +5,7 @@ import { Slider } from '@/components/ui/slider';
 import { Calendar, Brain, Activity, TrendingUp, Wand2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { WeeklyScorecard } from '@/components/coach/weekly-scorecard';
 import remarkGfm from 'remark-gfm';
 import type { Run, TrainingPlan } from '@/lib/db/types';
 
@@ -173,6 +174,11 @@ export default function WeeklyReviewPage() {
           Rate your training week and get AI-powered insights.
         </p>
       </div>
+
+      {/* Deterministic weekly scorecard. No LLM, so it is always consistent
+          with the data and costs nothing; the weekly analysis reads the same
+          object, so the page and the coach cannot disagree. */}
+      <WeeklyScorecard />
 
       <div className="grid gap-5 lg:grid-cols-2">
         {/* This Week's Runs */}

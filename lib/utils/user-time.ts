@@ -52,6 +52,21 @@ export function userDateStr(d: Date = new Date()): string {
 export function userDateStrDaysAgo(days: number): string {
   const d = nowInUserTz();
   d.setDate(d.getDate() - days);
+  return shiftedDateStr(d);
+}
+
+/**
+ * YYYY-MM-DD from a Date that has ALREADY been shifted by `nowInUserTz` or
+ * `dateInUserTz`.
+ *
+ * Its calendar fields are already the user's; its epoch is deliberately wrong.
+ * Passing such a Date to `userDateStr` applies the timezone a SECOND time and
+ * silently moves the date near midnight — reading a local-midnight Date back
+ * through `toISOString()` is how the plan-week comparison went a day out. Use
+ * this for shifted Dates and `userDateStr` for true instants; the two are not
+ * interchangeable.
+ */
+export function shiftedDateStr(d: Date): string {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${d.getFullYear()}-${month}-${day}`;
