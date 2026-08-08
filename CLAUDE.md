@@ -251,6 +251,19 @@ But it is only a proxy. `scripts/backfill-lap-fields.ts` verifies the property d
 
 **Intent vs actual (`lib/utils/zone-discipline.ts`):** compares the *planned* workout (via `plannedWorkoutForRunDate`) against `pct_z1..z6`. Intent must come from the **plan's** `type`/`target_hr`, never from `runs.run_type` — `classifyRun` derives that from the zone distribution, so comparing them measures the classifier against its own input. Only the zone *label* is parsed; the bpm in `"Z1-Z2 (125-145)"` predates the max-HR-191 rescale and often disagrees with its own label. Easy sessions are judged against the 80/20 band (Z1+Z2) rather than a literal `Z1` prescription; quality sessions also get their **work-zone share** rendered, because a wide `Z2-Z4` band (124–168 bpm) otherwise lets a warm-up count as compliance — 2026-08-03 read 96% in band with only 15% at Z4. One flag each way, both at 30%, applied symmetrically rather than inventing a second number.
 
+**Weekly scorecard coverage gate — 0.5, and it is correctly calibrated (measured 2026-08-08).** `MIN_JUDGED_COVERAGE` in `lib/utils/scorecard.ts` withholds the colour when fewer than half a week's runs are judgeable. A grey zone-discipline row is therefore **not** evidence the threshold is too strict, and lowering it is the wrong response. Measured across the whole active-plan window:
+
+| | |
+|---|---|
+| planned days so far | 42 (**35 = 83%** with a parseable `target_hr`; the other 7 are rest days, which cannot be judged anyway) |
+| runs in window | 30 (**30 = 100%** with valid zones — the plan began after the intervals.icu era, so the 560 nulled rows predate it entirely) |
+| runs on a planned day | 24 (80%) |
+| judgeable | **23 = 77%** |
+
+So neither zones nor `target_hr` is the constraint, and there is no plan-generation fix to make. The binding constraint is **day alignment**: the week of 2026-08-02 read 1-of-3 only because the athlete ran Sun/Mon/Thu against a plan prescribing Mon/Wed/Fri/Sat. That is an outlier, not the norm.
+
+An earlier version of this note asserted the opposite — that most weeks would render grey because `target_hr` and zone coverage were thin — inferred from that single week without measuring the window. Same failure shape as the n=1 season baseline and the two-August-medians estimate: **generalising from one observation is this codebase's most persistent remaining error**, now that the data itself is sound. Measure the window before drawing the curve.
+
 Two traps recorded rather than coded around, since neither has a real instance yet:
 - **Non-running time inflates apparent undershoot.** A session with genuine walking recovery sits below its band by construction. Only 2026-06-22 exceeds 20% non-running time and it is not currently judged as quality. If a real case appears, gate on the pace band (as `decoupling.ts` does) rather than blanket-excluding hill or interval sessions — that would silence the case that matters most, a "Threshold Intervals" session that never reached threshold.
 - **Planned name ≠ what was run.** 2026-07-20 was *prescribed* "Stairs/Hill Reps" but the athlete ran a road Tempo with 0% non-running time. Read `workout_name`/`run_type` for what happened; the plan only says what was asked for.
