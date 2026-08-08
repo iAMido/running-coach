@@ -264,6 +264,17 @@ So neither zones nor `target_hr` is the constraint, and there is no plan-generat
 
 An earlier version of this note asserted the opposite — that most weeks would render grey because `target_hr` and zone coverage were thin — inferred from that single week without measuring the window. Same failure shape as the n=1 season baseline and the two-August-medians estimate: **generalising from one observation is this codebase's most persistent remaining error**, now that the data itself is sound. Measure the window before drawing the curve.
 
+**`athlete_profile.training_days` is load-bearing and nothing validates it (traced 2026-08-08).** It feeds plan generation, and `COACH_STATIC_BLOCK`'s day anchors mirror it. Measured over the active plan's 30 runs, days computed in **Asia/Jerusalem** (day-of-week is exactly where a UTC error hides — verified separately that zero runs sit close enough to midnight to change day, so the pattern is not an artefact):
+
+```
+actual   Mon 8 · Wed 7 · Sun 5 · Sat 5 · Thu 2 · Fri 2 · Tue 1
+profile  "Monday (quality…), Wednesday, Friday (long)"
+```
+
+All 5 Sunday runs are off-plan — 5 for 5, a clustered miss rather than life scattering. Friday, designated long-run day, has 2 runs in nine weeks. That is an Israeli working week: Sunday is a workday he runs, Friday is the weekend and he mostly does not.
+
+Nothing here is a bug. The plan follows the profile faithfully; the profile is stale, and every consequence downstream is correct given a wrong input. This is the whole chain's only unvalidated human-entered field, and it silently sets the ceiling on the scorecard's judgeable coverage — the day-alignment constraint above traces entirely to it. **Before diagnosing a day-alignment problem anywhere, check this field against the actual run-day distribution.** Correcting it is the athlete's call, not an inference from the data.
+
 Two traps recorded rather than coded around, since neither has a real instance yet:
 - **Non-running time inflates apparent undershoot.** A session with genuine walking recovery sits below its band by construction. Only 2026-06-22 exceeds 20% non-running time and it is not currently judged as quality. If a real case appears, gate on the pace band (as `decoupling.ts` does) rather than blanket-excluding hill or interval sessions — that would silence the case that matters most, a "Threshold Intervals" session that never reached threshold.
 - **Planned name ≠ what was run.** 2026-07-20 was *prescribed* "Stairs/Hill Reps" but the athlete ran a road Tempo with 0% non-running time. Read `workout_name`/`run_type` for what happened; the plan only says what was asked for.
