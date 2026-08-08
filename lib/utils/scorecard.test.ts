@@ -81,6 +81,40 @@ test('zone discipline counts flags, not runs', () => {
   expect(card({ runs: [tooHard, tooHard] }).rows[0].colour).toBe('bad');
 });
 
+test('a verdict covering a minority of the week takes no colour', () => {
+  const judged = run();
+  const unjudgeable = run({ plannedTargetHr: null, plannedType: null });
+
+  // 1 of 3 judged: this is the real Week 9 shape, and it took a green tick
+  // before the coverage gate existed. A green glyph is what the eye takes.
+  const thin = card({ runs: [judged, unjudgeable, unjudgeable] }).rows[0];
+  expect(thin.colour).toBeNull();
+  expect(thin.value).toBe('1 of 3 runs judged · all on target');
+
+  // 2 of 3 clears half, so the verdict describes most of the week.
+  expect(card({ runs: [judged, judged, unjudgeable] }).rows[0].colour).toBe('good');
+
+  // A single judged run is FULLY covered — coverage is what is being tested,
+  // not sample size, so this must keep its colour.
+  expect(card({ runs: [judged] }).rows[0].colour).toBe('good');
+});
+
+test('coverage leads the value, not the small print', () => {
+  expect(card({ runs: [run(), run()] }).rows[0].value).toBe('2 of 2 runs judged · all on target');
+});
+
+test('the percentile carries the spread its sample supports', () => {
+  const history = Array.from({ length: 20 }, (_, i) => i);
+  const one = card({ runs: [run({ decouplingPct: 10 })], decouplingHistory: history })
+    .rows.find((r) => r.key === 'aerobic_control')!;
+  expect(one.sampleCount).toBe(1);
+  expect(one.percentileLow).toBe(one.percentileHigh);
+
+  const two = card({ runs: [run({ decouplingPct: 2 }), run({ decouplingPct: 18 })], decouplingHistory: history })
+    .rows.find((r) => r.key === 'aerobic_control')!;
+  expect(two.percentileLow!).toBeLessThan(two.percentileHigh!);
+});
+
 test('recovery mirrors the readiness verdict rather than inventing one', () => {
   const at = (v: ReadinessVerdict['verdict']) =>
     card({ readiness: { verdict: v, reasons: ['x'], usedRecoveryData: true } }).rows.find((r) => r.key === 'recovery')!.colour;

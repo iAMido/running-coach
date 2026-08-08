@@ -34,6 +34,9 @@ interface ScorecardRow {
   colour: ScoreColour | null;
   colourless?: string;
   percentile?: number;
+  percentileLow?: number;
+  percentileHigh?: number;
+  sampleCount?: number;
 }
 
 interface Scorecard {
@@ -132,29 +135,64 @@ export function WeeklyScorecard() {
                 </p>
 
                 {/* Percentile bar: where this week sits in HIS OWN distribution.
-                    This is what replaces a colour — a position, not a grade. */}
-                {typeof row.percentile === 'number' && (
-                  <div className="mt-2.5">
-                    <div className="h-1.5 rounded-full relative" style={{ background: 'var(--rc-surface-2)' }}>
-                      <span
-                        className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full"
-                        style={{
-                          left: `calc(${Math.max(0, Math.min(100, row.percentile))}% - 5px)`,
-                          background: 'var(--rc-ink-2)',
-                          border: '2px solid var(--rc-surface)',
-                        }}
-                      />
+                    This is what replaces a colour — a position, not a grade.
+
+                    The axis is deliberately NEUTRAL. An earlier version labelled
+                    the ends "most controlled" and "least", which asserts the
+                    direction of merit this row exists to withhold: we do not
+                    know whether 8.2% is bad for him. His own median is 6.5%, and
+                    Friel's bands are calibrated on other athletes. */}
+                {typeof row.percentile === 'number' && (() => {
+                  const clamp = (n: number) => Math.max(0, Math.min(100, n));
+                  const lo = clamp(row.percentileLow ?? row.percentile);
+                  const hi = clamp(row.percentileHigh ?? row.percentile);
+                  const mid = clamp(row.percentile);
+                  const single = (row.sampleCount ?? 1) < 2 || hi - lo < 1;
+                  return (
+                    <div className="mt-2.5">
+                      <div className="h-1.5 rounded-full relative" style={{ background: 'var(--rc-surface-2)' }}>
+                        {/* Median of his own history — the only reference point
+                            on the axis, and a fact rather than a target. */}
+                        <span
+                          className="absolute top-0 bottom-0 w-px"
+                          style={{ left: '50%', background: 'var(--rc-line-2)' }}
+                        />
+                        {/* The week's observed spread, not a modelled interval.
+                            One run cannot show a spread, so it renders as a soft
+                            mark rather than a confident dot. */}
+                        {!single && (
+                          <span
+                            className="absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full"
+                            style={{ left: `${lo}%`, width: `${Math.max(1, hi - lo)}%`, background: 'var(--rc-ink-5)' }}
+                          />
+                        )}
+                        <span
+                          className="absolute top-1/2 -translate-y-1/2 rounded-full"
+                          style={{
+                            left: `calc(${mid}% - ${single ? 6 : 5}px)`,
+                            width: single ? 12 : 10,
+                            height: single ? 12 : 10,
+                            background: single ? 'transparent' : 'var(--rc-ink-2)',
+                            border: single ? '2px dashed var(--rc-ink-4)' : '2px solid var(--rc-surface)',
+                          }}
+                        />
+                      </div>
+                      <div
+                        className="flex justify-between rc-mono text-[9.5px] mt-1"
+                        style={{ color: 'var(--rc-ink-4)', letterSpacing: '0.06em' }}
+                      >
+                        <span>P0</span>
+                        <span>P50 · YOUR MEDIAN</span>
+                        <span>P100</span>
+                      </div>
+                      <p className="text-[10.5px] mt-1" style={{ color: 'var(--rc-ink-4)' }}>
+                        {single
+                          ? 'One run this week — a single value, not a range.'
+                          : `Bar spans this week's ${row.sampleCount} runs, p${Math.round(lo)} to p${Math.round(hi)}.`}
+                      </p>
                     </div>
-                    <div
-                      className="flex justify-between rc-mono text-[9.5px] mt-1"
-                      style={{ color: 'var(--rc-ink-4)', letterSpacing: '0.06em' }}
-                    >
-                      <span>MOST CONTROLLED</span>
-                      <span>YOUR HISTORY</span>
-                      <span>LEAST</span>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {row.colourless && (
                   <p

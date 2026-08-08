@@ -72,6 +72,19 @@ export type ScorecardRow =
        * different KIND of row rather than as a missing value.
        */
       percentile?: number;
+      /**
+       * Percentiles of the week's LOWEST and HIGHEST individual values.
+       *
+       * A single pin drawn from a 2-run median asserts a precision the sample
+       * does not carry. These are the observed spread — the actual runs, not a
+       * modelled confidence interval, which would be a fabrication of exactly
+       * the kind this card refuses elsewhere. Equal to `percentile` when the
+       * week holds one run, which the UI renders as a soft mark instead.
+       */
+      percentileLow?: number;
+      percentileHigh?: number;
+      /** How many runs the percentile rests on. */
+      sampleCount?: number;
     });
 
 export interface Scorecard {
@@ -107,6 +120,22 @@ export interface ScorecardInput {
 /** Below this the percentile is too coarse to mean anything (matches decoupling.ts). */
 const MIN_HISTORY_FOR_PERCENTILE = 10;
 
+/**
+ * A verdict must cover at least this fraction of the week's runs.
+ *
+ * Without a threshold, "enough data" was never actually defined: a week with
+ * one judged run out of three took a green tick, and the disclosure explaining
+ * that two runs went unexamined sat in small text underneath. A green glyph is
+ * what the eye takes, and one run out of three is not a green week — it is an
+ * unmeasured one.
+ *
+ * A half is the honest place to draw it: below that, the verdict describes the
+ * minority of the week and the majority is unknown. A week with a single run,
+ * judged, is fully covered and keeps its colour — coverage, not sample size, is
+ * what is being tested.
+ */
+export const MIN_JUDGED_COVERAGE = 0.5;
+
 function zoneDisciplineRow(runs: ScorecardRun[]): ScorecardRow {
   const judged = runs
     .map((r) => ({ run: r, result: judgeZoneDiscipline({ targetHr: r.plannedTargetHr, plannedType: r.plannedType, zones: r.zones }) }))
@@ -129,30 +158,39 @@ function zoneDisciplineRow(runs: ScorecardRun[]): ScorecardRow {
   const above = judged.filter(({ result }) => result.judgement === 'above_target');
   const below = judged.filter(({ result }) => result.judgement === 'below_target');
   const flags = above.length + below.length;
-
-  const colour: ScoreColour = flags === 0 ? 'good' : flags === 1 ? 'warn' : 'bad';
-  const value = flags === 0 ? `${judged.length}/${judged.length} on target` : `${flags} of ${judged.length} off target`;
+  const unjudged = runs.length - judged.length;
+  const coverage = judged.length / runs.length;
 
   const parts: string[] = [];
   if (above.length) parts.push(`${above.length} above target (>30% beyond the planned ceiling)`);
   if (below.length) parts.push(`${below.length} quality session${below.length === 1 ? '' : 's'} below target intensity`);
   if (!parts.length) parts.push('every judged session stayed inside its planned band');
-
-  // How many runs this verdict does NOT cover. Without it, "1/1 on target"
-  // reads green over a week containing three runs, and the two that carried no
-  // planned target look like they passed. The header's run count makes the
-  // omission visible; this names it.
-  const unjudged = runs.length - judged.length;
   if (unjudged > 0) {
     parts.push(
-      `${unjudged} of ${runs.length} run${runs.length === 1 ? '' : 's'} not judged (no planned HR target, or no zone data) — this verdict does not cover ${unjudged === 1 ? 'it' : 'them'}`,
+      `${unjudged} not judged (no planned HR target, or no zone data) — this does not cover ${unjudged === 1 ? 'it' : 'them'}`,
     );
+  }
+  const detail = `${parts.join('; ')} · judged against the plan's own target`;
+
+  // Coverage leads, always. It is the number that decides how much the verdict
+  // is worth, so it goes where the eye lands rather than in the small print.
+  const value = `${judged.length} of ${runs.length} runs judged · ${flags === 0 ? 'all on target' : `${flags} off target`}`;
+
+  if (coverage < MIN_JUDGED_COVERAGE) {
+    return {
+      key: 'zone_discipline', axis: 'Zone discipline vs plan',
+      value, detail,
+      colour: null,
+      colourless:
+        `Not enough judged sessions to grade the week — ${judged.length} of ${runs.length} runs carried both a planned HR target and valid zone data. ` +
+        `The judged ${judged.length === 1 ? 'one is' : 'ones are'} described above, but a verdict over ${Math.round(coverage * 100)}% of the week would not be one about the week.`,
+    };
   }
 
   return {
     key: 'zone_discipline', axis: 'Zone discipline vs plan',
-    value, detail: `${parts.join('; ')} · judged against the plan's own target`,
-    colour,
+    value, detail,
+    colour: flags === 0 ? 'good' : flags === 1 ? 'warn' : 'bad',
   };
 }
 
@@ -215,6 +253,18 @@ function aerobicControlRow(runs: ScorecardRun[], history: number[]): ScorecardRo
       ? `${weekMedian.toFixed(1)}% median across ${week.length} steady run${week.length === 1 ? '' : 's'} · your own median is ${ownMedian.toFixed(1)}% over ${history.length} runs`
       : `${weekMedian.toFixed(1)}% median across ${week.length} steady run${week.length === 1 ? '' : 's'} · not enough history yet to place it`;
 
+  // The observed spread, not a modelled interval: the percentiles of the
+  // week's own lowest and highest runs.
+  const spread =
+    pct !== null
+      ? {
+          percentile: pct,
+          percentileLow: percentileOf(Math.min(...week), history) ?? pct,
+          percentileHigh: percentileOf(Math.max(...week), history) ?? pct,
+          sampleCount: week.length,
+        }
+      : {};
+
   return {
     key: 'aerobic_control', axis: 'Aerobic control',
     value: pct !== null ? `p${Math.round(pct)} of your own history` : `${weekMedian.toFixed(1)}%`,
@@ -222,7 +272,7 @@ function aerobicControlRow(runs: ScorecardRun[], history: number[]): ScorecardRo
     colour: null,
     colourless:
       'No colour on purpose. This decoupling is grade-adjusted, so the conventional 5%/8% bands — defined on raw Pa:HR and calibrated on other athletes — do not apply to it. On this athlete\'s own history the median is 6.5%, which those bands would call a fade. Read the percentile against himself.',
-    ...(pct !== null ? { percentile: pct } : {}),
+    ...spread,
   };
 }
 
