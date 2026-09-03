@@ -2,13 +2,14 @@
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { Target, ChevronLeft, ChevronRight, Sparkles, Calendar, Home, CheckCircle2, Mountain } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { TrainingPlan, PlanWeek, Workout } from '@/lib/db/types';
 import { isWorkoutToday, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
 import { StrengthWorkout } from '@/components/coach/strength-workout';
 import { WorkoutCard, getWorkoutTagClass } from '@/components/coach/workout-card';
 import { PushToWatch } from '@/components/coach/push-to-watch';
 import { PlanProposalCard } from '@/components/coach/plan-proposal-card';
+import { SeasonPlanPanel, type SeasonPlan } from '@/components/coach/season-plan';
 
 const planTypes = [
   { value: 'half-marathon', label: 'Half Marathon' },
@@ -78,6 +79,11 @@ export default function TrainingPlanPage() {
   const [raceDistanceKm, setRaceDistanceKm] = useState('');
   const [raceElevationGainM, setRaceElevationGainM] = useState('');
   const [terrainAccess, setTerrainAccess] = useState('');
+  // The season this block will serve, when one exists. useCallback-stable so
+  // the panel's effect does not re-fire on every render.
+  const [season, setSeason] = useState<SeasonPlan | null>(null);
+  const [blockNumber, setBlockNumber] = useState('1');
+  const handleSeasonLoaded = useCallback((p: SeasonPlan | null) => setSeason(p), []);
   const [recentRaceResult, setRecentRaceResult] = useState('');
   const [currentWeeklyKm, setCurrentWeeklyKm] = useState('');
   const [addressesWhat, setAddressesWhat] = useState('');
@@ -145,6 +151,10 @@ export default function TrainingPlanPage() {
           // and "no days at all" are different requests.
           ...(trainingDays.length > 0 ? { trainingDays } : {}),
           ...(trainingDayNotes ? { trainingDayNotes } : {}),
+          // Ties the block to the season so the generator is told which phase
+          // it is writing for. Omitted when there is no season — the block is
+          // then a valid standalone plan.
+          ...(season ? { macroPlanId: season.id, blockNumber: parseInt(blockNumber, 10) } : {}),
           notes,
           // Rich intake — server reads into PLAN GENERATION INTAKE block.
           // Each field is optional; omit empty strings so Zod accepts them.
@@ -528,6 +538,8 @@ export default function TrainingPlanPage() {
 
       {/* Generate Tab */}
       {activeTab === 'generate' && (
+        <>
+        <SeasonPlanPanel onLoaded={handleSeasonLoaded} />
         <div className="rc-card p-0 overflow-hidden">
           <div className="flex items-center justify-between px-6 pt-5 pb-3.5" style={{ borderBottom: '1px solid var(--rc-line)' }}>
             <div>
@@ -662,6 +674,30 @@ export default function TrainingPlanPage() {
                 </p>
               )}
             </div>
+
+            {/* Which block of the season this is. Only shown when a season
+                exists — without one there are no phases to serve and the
+                control would be asking about something that does not exist. */}
+            {season && (
+              <div className="space-y-2">
+                <label className="rc-mono text-[11px] font-medium uppercase" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.08em' }}>
+                  Season block
+                </label>
+                <select
+                  value={blockNumber}
+                  onChange={(e) => setBlockNumber(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl text-sm appearance-none focus:outline-none focus:ring-2"
+                  style={{ background: 'var(--rc-surface-2)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink)' }}
+                >
+                  {[1, 2, 3, 4, 5, 6].map((n) => (
+                    <option key={n} value={String(n)}>Block {n}</option>
+                  ))}
+                </select>
+                <p className="text-[11px]" style={{ color: 'var(--rc-ink-4)' }}>
+                  This block will be written against the matching phase of &ldquo;{season.goal_name}&rdquo; and its exit criteria.
+                </p>
+              </div>
+            )}
 
             {/* Rich intake — feeds the server's PLAN GENERATION INTAKE block.
                 Everything here is optional; server auto-computes 90-day stats,
@@ -859,6 +895,7 @@ export default function TrainingPlanPage() {
             )}
           </div>
         </div>
+        </>
       )}
     </div>
   );
