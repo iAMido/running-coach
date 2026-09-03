@@ -50,7 +50,12 @@ const RERUN = hasFlag('--rerun');
 
 /**
  * Second-pass expectations, for re-running after new columns are added
- * (Tier 1's gap_pace_min_km / cadence_spm).
+ * (Tier 1's gap_pace_min_km / cadence_spm; the 2026-09-03 elevation columns).
+ *
+ * Enrichment is fill-null-only, so a re-run populates any column added since
+ * the last pass with no change to this script beyond the assertions below —
+ * that is the whole reason the backfill goes through `upsertRun` rather than
+ * owning its own mapping.
  *
  * `dateCorrected: 0` is the important one. The 11 timestamp corrections landed
  * on 2026-08-06; a second pass finding any more means either the identity
@@ -63,8 +68,12 @@ const EXPECTED_RERUN = {
   /** Not asserted exactly — it grows with every new run. See verifyAcceptanceCriteria. */
   updates: 0,
   dateCorrected: 0,
-  runsBefore: 680,
-  runsAfter: 680,
+  // Deliberately NOT absolute counts. The table grows every day the sync runs,
+  // so a hardcoded 680 turns into a false failure the following week and
+  // teaches whoever hits it to pass --no-verify. On a re-run the invariant is
+  // that the count did not CHANGE — see verifyAcceptanceCriteria.
+  runsBefore: 0,
+  runsAfter: 0,
   correctionWindow: { from: '2025-12-15', to: '2026-01-11' },
   danglingFeedback: 0,
   unlinkedFeedback: 1,
@@ -289,7 +298,15 @@ function verifyAcceptanceCriteria(actual: {
     `got ${actual.fbAfter.unlinked}`,
   ]);
 
-  if (COMMIT) {
+  if (COMMIT && RERUN) {
+    // A re-run enriches in place and must never change the row count, whatever
+    // that count happens to be today.
+    checks.push([
+      'run count unchanged',
+      actual.runsAfter === actual.runsBefore,
+      `${actual.runsBefore} -> ${actual.runsAfter}`,
+    ]);
+  } else if (COMMIT) {
     checks.push([
       `run count ${EXPECTED.runsBefore} -> ${EXPECTED.runsAfter}`,
       actual.runsAfter === EXPECTED.runsAfter,

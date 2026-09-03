@@ -70,6 +70,14 @@ export interface NormalizedLap {
   gapPaceMinKm?: number | null;
   /** STEPS per minute, already doubled from the provider's one-leg rpm. */
   cadenceSpm?: number | null;
+  /**
+   * Metres climbed in this lap. Whole metres, positive.
+   *
+   * Says which SEGMENT of a session did the climbing. Deliberately never summed
+   * into the run total — provider laps are detected segments that do not cover
+   * the whole activity.
+   */
+  elevationGainM?: number | null;
 }
 
 export interface HrStream {
@@ -99,6 +107,10 @@ export interface NormalizedRun {
   gapPaceMinKm?: number | null;
   /** STEPS per minute, already doubled from the provider's one-leg rpm. */
   cadenceSpm?: number | null;
+  /** Metres climbed over the whole run, whole metres, positive. */
+  elevationGainM?: number | null;
+  /** Metres descended over the whole run, reported POSITIVE — not a negative gain. */
+  elevationLossM?: number | null;
   /** Fetched only when zones are actually needed — see `resolveZones`. */
   hrStream?: Lazy<HrStream | null> | null;
   /** Fetched only when the target row has no laps. */
@@ -156,6 +168,8 @@ export interface ExistingRunRow {
   avg_pace_str: string | null;
   gap_pace_min_km: number | null;
   cadence_spm: number | null;
+  elevation_gain_m: number | null;
+  elevation_loss_m: number | null;
   decoupling_pct: number | null;
   calories: number | null;
   run_type: string | null;
@@ -173,7 +187,10 @@ export interface ExistingRunRow {
 
 const EXISTING_COLUMNS =
   'id,filename,date,distance_km,duration_min,avg_hr,max_hr,avg_pace_min_km,avg_pace_str,' +
-  'gap_pace_min_km,cadence_spm,decoupling_pct,' +
+  // `vert_per_km` is a GENERATED column — Postgres computes it from
+  // elevation_gain_m and distance_km, and any attempt to write it errors.
+  // It is deliberately absent from both this list and every patch below.
+  'gap_pace_min_km,cadence_spm,elevation_gain_m,elevation_loss_m,decoupling_pct,' +
   'calories,run_type,workout_name,coach_notes,trimp,data_source,pct_z1,pct_z2,pct_z3,pct_z4,pct_z5,pct_z6';
 
 // -------------------------------------------------------------- lazy utils
@@ -360,6 +377,7 @@ async function writeLaps(runId: string, run: NormalizedRun): Promise<number> {
       avg_pace_str: lap.avgPaceStr ?? null,
       gap_pace_min_km: lap.gapPaceMinKm ?? null,
       cadence_spm: lap.cadenceSpm ?? null,
+      elevation_gain_m: lap.elevationGainM ?? null,
     }));
 
     const { error } = await supabase.from('laps').insert(rows);
@@ -455,6 +473,7 @@ async function insertNew(userId: string, run: NormalizedRun, ctx: UpsertContext)
     workoutName: run.workoutName,
     profile: ctx.profile,
     zonePercents: zonesForClassifier(zones),
+    elevationGainM: run.elevationGainM ?? null,
   });
 
   const trimp = avgHr ? calculateTrimp({ durationMin: run.durationMin, avgHr }) : null;
@@ -473,6 +492,8 @@ async function insertNew(userId: string, run: NormalizedRun, ctx: UpsertContext)
       avg_pace_str: formatPace(avgPaceMinKm),
       gap_pace_min_km: run.gapPaceMinKm ?? null,
       cadence_spm: run.cadenceSpm ?? null,
+      elevation_gain_m: run.elevationGainM ?? null,
+      elevation_loss_m: run.elevationLossM ?? null,
       calories: run.calories || null,
       run_type: runType,
       workout_name: run.workoutName ?? null,
@@ -551,6 +572,8 @@ export function buildEnrichPatch(
   fill('data_source', run.dataSource);
   fill('gap_pace_min_km', run.gapPaceMinKm ?? null);
   fill('cadence_spm', run.cadenceSpm ?? null);
+  fill('elevation_gain_m', run.elevationGainM ?? null);
+  fill('elevation_loss_m', run.elevationLossM ?? null);
 
   if (existing.avg_pace_min_km == null || existing.avg_pace_str == null) {
     const pace = calculatePace(run.distanceKm, run.durationMin);
@@ -575,6 +598,7 @@ export function buildEnrichPatch(
       workoutName: existing.workout_name ?? run.workoutName,
       profile: opts.profile,
       zonePercents: zonesForClassifier(opts.zones),
+      elevationGainM: existing.elevation_gain_m ?? run.elevationGainM ?? null,
     });
   }
 

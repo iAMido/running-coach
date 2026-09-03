@@ -64,8 +64,23 @@ export function toNormalizedLaps(intervals: IntervalsInterval[]): NormalizedLap[
       avgPaceStr: pace !== null ? formatPace(pace) : null,
       gapPaceMinKm: speedToPaceMinKm(lap.gap),
       cadenceSpm: toCadenceSpm(lap.average_cadence),
+      elevationGainM: toMetres(lap.total_elevation_gain),
     };
   });
+}
+
+/**
+ * Elevation arrives as a float with false precision (62.000008 m). Rounded to
+ * whole metres, which is well inside barometric accuracy and stops the column
+ * implying a resolution the sensor does not have.
+ *
+ * Negative is rejected rather than clamped: gain and loss are both reported
+ * positive, so a negative would mean the provider changed convention, and
+ * silently flipping the sign would hide that.
+ */
+export function toMetres(v: number | null | undefined): number | null {
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return null;
+  return Math.round(v);
 }
 
 /**
@@ -114,6 +129,13 @@ export function toNormalizedRun(activity: IntervalsActivity, client: IntervalsCl
     // threshold work and reading it as an easy run.
     gapPaceMinKm: speedToPaceMinKm(activity.gap),
     cadenceSpm: toCadenceSpm(activity.average_cadence),
+    // Climb and descent, both from the summary payload — no stream fetch and no
+    // extra request. Gain is the training variable this athlete's mountain
+    // build turns on (his median run is 8.8 m/km against a 61.9 m/km race);
+    // loss is stored separately because eccentric descent loading is its own
+    // stressor and a point-to-point route does not balance the two.
+    elevationGainM: toMetres(activity.total_elevation_gain),
+    elevationLossM: toMetres(activity.total_elevation_loss),
     // Zones are ALWAYS derived from the stream against the athlete's own bands.
     // `icu_hr_zone_times` is on the summary and tempting, but intervals.icu
     // disagrees with athlete_profile about where the zones are — using it would

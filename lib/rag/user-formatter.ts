@@ -7,6 +7,14 @@ import { calculateCurrentWeek, sortWorkoutsByDay } from '@/lib/utils/week-calcul
 import { daysBetweenDateStr, nowInUserTz, userDateStr } from '@/lib/utils/user-time';
 import { formatPace } from '@/lib/utils/pace';
 import { percentileOf, medianOf } from '@/lib/utils/decoupling';
+import {
+  TARGET_RACE,
+  climbCategory,
+  climbCategoryIsUnprecedented,
+  formatVert,
+  sumVert,
+  vertPerKm,
+} from '@/lib/utils/elevation';
 import { buildEfficiencySummary, formatEfficiency, type EfRun } from '@/lib/utils/efficiency';
 import { formatZoneDiscipline } from '@/lib/utils/zone-discipline';
 import { plannedWorkoutForRunDate } from '@/lib/ai/run-reaction';
@@ -276,6 +284,7 @@ function formatTrainingStatus(
   const weeklyRuns = thisWeekRuns.length;
 
   lines.push(`This Week: ${weeklyRuns} runs, ${weeklyKm.toFixed(1)} km`);
+  lines.push(formatWeeklyVert(thisWeekRuns, runs));
   // Say the data is missing rather than printing a number that means nothing.
   lines.push(
     fatigueScore === null
@@ -291,6 +300,71 @@ function formatTrainingStatus(
   const recentTypes = [...new Set(runs.slice(0, 5).map(r => r.run_type || r.workout_name).filter(Boolean))];
   if (recentTypes.length > 0) {
     lines.push(`Recent Workout Types: ${recentTypes.join(', ')}`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Weekly climb, with an explicit denominator and a four-week trend.
+ *
+ * Two things this must never do, both learned the expensive way in this
+ * codebase:
+ *
+ * 1. Present a total as though every run contributed. Elevation exists on 128
+ *    of 692 rows, so a week mixing measured and unmeasured runs has a total
+ *    that is a floor, not a sum. The count is stated inline rather than left
+ *    for the reader to assume.
+ * 2. Report zero when nothing was measured. "0 m climbed" and "we cannot see
+ *    the climbing" are different facts and the coach acts differently on each.
+ */
+function formatWeeklyVert(thisWeekRuns: Run[], allRuns: Run[]): string {
+  const week = sumVert(thisWeekRuns);
+  if (week.measured === 0) {
+    return thisWeekRuns.length === 0
+      ? 'Weekly Vert: no runs this week.'
+      : `Weekly Vert: not measured — none of this week's ${week.total} runs carried elevation data. This is missing data, not flat terrain.`;
+  }
+
+  const coverage = week.measured === week.total ? '' : ` (from ${week.measured} of ${week.total} runs — the rest carried no elevation data, so this is a floor)`;
+  const km = thisWeekRuns.reduce((sum, r) => sum + (r.distance_km || 0), 0);
+  const vpk = vertPerKm(week.totalM, km);
+  const gradient = vpk === null ? '' : ` · ${vpk.toFixed(1)} m/km avg`;
+
+  const lines = [`Weekly Vert: ${Math.round(week.totalM)} m${gradient}${coverage}`];
+
+  // Four preceding weeks, so "is the climbing going up" is answerable without
+  // the model estimating it from the run list.
+  const now = new Date();
+  const priorWeeks: string[] = [];
+  for (let w = 1; w <= 4; w++) {
+    const end = new Date(now.getTime() - w * 7 * 24 * 60 * 60 * 1000);
+    const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const inWeek = allRuns.filter((r) => {
+      const d = new Date(r.date);
+      return d >= start && d < end;
+    });
+    const sum = sumVert(inWeek);
+    priorWeeks.push(sum.measured === 0 ? 'n/a' : `${Math.round(sum.totalM)}m`);
+  }
+  lines.push(`Vert, previous 4 weeks (most recent first): ${priorWeeks.join(' · ')}`);
+
+  // The gap this whole build exists to close, stated as a number rather than
+  // left to be inferred from a list of runs.
+  const steepest = allRuns
+    .map((r) => vertPerKm(r.elevation_gain_m, r.distance_km))
+    .filter((v): v is number => v !== null)
+    .sort((a, b) => b - a)[0];
+  if (steepest !== undefined) {
+    const cat = climbCategory(steepest);
+    const race = TARGET_RACE.vertPerKm;
+    lines.push(
+      `Steepest run in the window: ${steepest.toFixed(1)} m/km (${cat}). ` +
+        `Target race is ${race.toFixed(1)} m/km — ${(race / steepest).toFixed(1)}x that` +
+        (climbCategoryIsUnprecedented(climbCategory(race)) && !climbCategoryIsUnprecedented(cat)
+          ? '. He has no session at race gradient to compare against; do not imply he has.'
+          : '.'),
+    );
   }
 
   return lines.join('\n');
@@ -419,6 +493,12 @@ function formatSingleRun(run: Run, decouplingHistory: number[] = []): string {
     parts.push(`${run.cadence_spm}spm`);
   }
 
+  // Climb, descent and gradient. Always rendered — including as [vert n/a] —
+  // because for this athlete's mountain build gradient IS the training
+  // variable, and a silently missing tag would let a steep session read as a
+  // road run. Same rule the GAP tag two lines up follows.
+  parts.push(formatVert(run.elevation_gain_m, run.distance_km, run.elevation_loss_m));
+
   if (typeof run.decoupling_pct === 'number') {
     parts.push(formatDecoupling(run.decoupling_pct, decouplingHistory));
   }
@@ -522,8 +602,12 @@ export function formatRunLaps(laps: Lap[] | undefined): string {
       : '';
     const hr = l.avg_hr ? `HR ${l.avg_hr}` : '';
     const cad = l.cadence_spm ? ` ${l.cadence_spm}spm` : '';
+    // Which segment did the climbing. Only rendered when there is climb worth
+    // naming — unlike the run-level tag, a per-lap [vert n/a] on every lap of
+    // every road session would be pure noise at 26 laps a run.
+    const elev = l.elevation_gain_m ? ` +${l.elevation_gain_m}m` : '';
     const drift = firstHr && l.avg_hr ? ` (${formatDrift(l.avg_hr - firstHr)})` : '';
-    return `    L${l.lap_number}: ${dist}km / ${dur} ${pace} ${gap} ${hr}${cad}${drift}`.trim().replace(/ +/g, ' ');
+    return `    L${l.lap_number}: ${dist}km / ${dur} ${pace} ${gap} ${hr}${cad}${elev}${drift}`.trim().replace(/ +/g, ' ');
   });
 
   const trailing = meaningful.length > MAX_LAPS ? `\n    … +${meaningful.length - MAX_LAPS} more laps` : '';

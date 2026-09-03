@@ -40,7 +40,14 @@ export async function getRecentRuns(userId: string, days = 14): Promise<Run[]> {
  * Quality = intervals/tempo/fartlek/long run, or any run with >15% time in Z4+.
  * Easy/recovery runs skip the lap pull to save tokens & bandwidth.
  */
-const QUALITY_RUN_TYPES = new Set(['Intervals', 'Tempo', 'Fartlek', 'Long Run', 'Race', 'Threshold', 'VO2max']);
+const QUALITY_RUN_TYPES = new Set([
+  'Intervals', 'Tempo', 'Fartlek', 'Long Run', 'Race', 'Threshold', 'VO2max',
+  // Climb sessions earn their laps for the same reason intervals do: the
+  // per-lap detail is the only place the climbing shows up. A 500 m session
+  // total says nothing about whether it was one sustained ascent or six reps,
+  // and laps carry elevation_gain_m to answer exactly that.
+  'Vert / Hill', 'Trail Long Run',
+]);
 
 function isQualityRun(run: Run): boolean {
   if (run.run_type && QUALITY_RUN_TYPES.has(run.run_type)) return true;

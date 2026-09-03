@@ -50,6 +50,21 @@ export interface IntervalsActivity {
    */
   average_cadence?: number | null;
   /**
+   * Metres climbed, already corrected. `use_elevation_correction` is true on
+   * every activity in the account, so this is intervals.icu's barometric/DEM
+   * figure rather than raw GPS altitude. Populated 128/130 in the 2026-09-03
+   * probe over 400 days.
+   */
+  total_elevation_gain?: number | null;
+  /**
+   * Metres descended, reported positive. Same 128/130 coverage as gain, and on
+   * the same summary payload — descent costs no extra request.
+   *
+   * Not redundant with gain: a point-to-point route has no reason for the two
+   * to match, and eccentric descent loading is a distinct stressor from climb.
+   */
+  total_elevation_loss?: number | null;
+  /**
    * The athlete's max HR as intervals.icu holds it. Present on every activity.
    *
    * Load-bearing for write-back: pushed workouts are percentages that
@@ -80,6 +95,16 @@ export interface IntervalsInterval {
   gap?: number | null;
   /** ONE-LEG cadence (rpm). Doubled at ingest — see IntervalsActivity. */
   average_cadence?: number | null;
+  /**
+   * Metres climbed IN THIS LAP. Present on 191/191 laps across a 12-run sample.
+   *
+   * ⚠ Does NOT sum to the activity's `total_elevation_gain` — measured 130.4 m
+   * summed across laps against 210.9 m on the activity. intervals.icu laps are
+   * auto-detected work/recovery segments that do not tile the whole run, so the
+   * shortfall is uncovered time rather than a discrepancy. Never derive a run's
+   * elevation from its laps.
+   */
+  total_elevation_gain?: number | null;
 
   // Richer than Strava ever provided, still unmapped. `intensity` would sharpen
   // the weekly-review per-rep commentary.
