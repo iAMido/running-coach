@@ -16,6 +16,10 @@ const planTypes = [
   { value: '5k-speed', label: '5K Speed' },
   { value: 'base-building', label: 'Base Building' },
   { value: 'maintenance', label: 'Maintenance' },
+  // Distance stopped describing the goal once elevation entered the picture.
+  // The race-profile fields below are what actually shape the plan — this type
+  // only nudges the phase split.
+  { value: 'trail-mountain', label: 'Trail / Mountain' },
 ];
 
 const durationOptions = [4, 6, 8, 10, 12, 16];
@@ -67,6 +71,12 @@ export default function TrainingPlanPage() {
   // block; gives Opus the runway it needs beyond the default 14-day RAG.)
   const [raceDate, setRaceDate] = useState('');
   const [targetTime, setTargetTime] = useState('');
+  // Race profile. Elevation is the field that changes the plan's shape rather
+  // than its numbers — 21 km flat and 21 km with 1300 m of climb share a
+  // distance and almost nothing else.
+  const [raceDistanceKm, setRaceDistanceKm] = useState('');
+  const [raceElevationGainM, setRaceElevationGainM] = useState('');
+  const [terrainAccess, setTerrainAccess] = useState('');
   const [recentRaceResult, setRecentRaceResult] = useState('');
   const [currentWeeklyKm, setCurrentWeeklyKm] = useState('');
   const [addressesWhat, setAddressesWhat] = useState('');
@@ -139,6 +149,9 @@ export default function TrainingPlanPage() {
           // Each field is optional; omit empty strings so Zod accepts them.
           ...(raceDate ? { raceDate } : {}),
           ...(targetTime ? { targetTime } : {}),
+          ...(raceDistanceKm ? { raceDistanceKm: parseFloat(raceDistanceKm) } : {}),
+          ...(raceElevationGainM ? { raceElevationGainM: parseInt(raceElevationGainM, 10) } : {}),
+          ...(terrainAccess ? { terrainAccess } : {}),
           ...(recentRaceResult ? { recentRaceResult } : {}),
           ...(currentWeeklyKm ? { currentWeeklyKm: parseFloat(currentWeeklyKm) } : {}),
           ...(addressesWhat ? { addressesWhat } : {}),
@@ -661,6 +674,62 @@ export default function TrainingPlanPage() {
                     style={{ background: 'var(--rc-surface)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink)' }}
                   />
                 </div>
+                <div className="space-y-1.5">
+                  <label className="rc-mono text-[10.5px] font-medium uppercase" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.08em' }}>Race distance (km)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="0.1"
+                    value={raceDistanceKm}
+                    onChange={e => setRaceDistanceKm(e.target.value)}
+                    placeholder="e.g. 21"
+                    className="w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2"
+                    style={{ background: 'var(--rc-surface)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink)' }}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="rc-mono text-[10.5px] font-medium uppercase" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.08em' }}>Race elevation gain (m)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="10"
+                    value={raceElevationGainM}
+                    onChange={e => setRaceElevationGainM(e.target.value)}
+                    placeholder="e.g. 1300"
+                    className="w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2"
+                    style={{ background: 'var(--rc-surface)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink)' }}
+                  />
+                </div>
+              </div>
+
+              {/* The gradient, computed live. This is the number that decides
+                  whether the plan is a road plan with hills in it or a
+                  climbing plan — showing it here means the athlete sees what
+                  he is actually asking for before he asks for it. */}
+              {raceDistanceKm && raceElevationGainM && parseFloat(raceDistanceKm) > 0 && (
+                <div
+                  className="rounded-lg px-3 py-2.5 text-[12px]"
+                  style={{ background: 'var(--rc-surface)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink-2)' }}
+                >
+                  <strong>{(parseInt(raceElevationGainM, 10) / parseFloat(raceDistanceKm)).toFixed(1)} m/km</strong>{' '}
+                  average gradient. The plan will be built around this, with weekly climb targets, descent
+                  treated as its own stressor, and long sessions prescribed in time-on-feet rather than pace.
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="rc-mono text-[10.5px] font-medium uppercase" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.08em' }}>Terrain you can actually train on</label>
+                <input
+                  type="text"
+                  value={terrainAccess}
+                  onChange={e => setTerrainAccess(e.target.value)}
+                  placeholder="e.g. flat roads locally; Jerusalem hills ~40 min drive; gym stairs + treadmill"
+                  className="w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2"
+                  style={{ background: 'var(--rc-surface)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink)' }}
+                />
+                <p className="text-[10.5px]" style={{ color: 'var(--rc-ink-4)' }}>
+                  A plan prescribing hills you cannot reach is a plan you will not run. Say what you have.
+                </p>
               </div>
 
               <div className="space-y-1.5">

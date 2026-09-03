@@ -266,6 +266,22 @@ An earlier version of this note asserted the opposite — that most weeks would 
 
 **Mountain race build (2027-07-03, 21K/1300m) — see `docs/mountain-race-plan.md`.** Full handoff reference plus a chunked implementation plan. **Decided 2026-09-03: the app tracks and advises; it does NOT generate the mountain plan** (the athlete builds it externally), so that doc's Chunks 4 and 6 — trail plan type, plan-form UI — are out of scope. Chunk 1 (elevation) is done; Chunks 2 (pace-band gates), 3 (trail methodology into RAG) and 5 (indoor alternative) remain.
 
+**Plan generation is elevation-aware as of 2026-09-03 (Chunks 4 + 5).** The app DOES generate the mountain plan — an earlier note here said track-and-advise only; that was a misunderstanding, corrected by the athlete.
+
+`buildRaceDemandBlock()` (`lib/ai/coach-prompts.ts`, pure, tested in `lib/ai/race-demand.test.ts`) renders a RACE DEMAND section into the plan prompt whenever `raceElevationGainM` is supplied. It computes the race's gradient rather than leaving the model to divide, and states the gap against the athlete's **own measured climbing** from `getClimbBaseline()` (`lib/db/runs.ts`, 120-day window). For this race it renders: *61.9 m/km, 3.1× his steepest run ever, 7.0× his median* — then instructs that gradient is the limiter and distance largely in hand. With no measured history it says so and starts conservatively instead of inventing a ramp.
+
+Returns `''` when there is no elevation target, so **road plans are completely unaffected by this path** — a test pins that.
+
+New plan inputs: `raceDistanceKm`, `raceElevationGainM`, `terrainAccess`, plus a `'Trail / Mountain'` plan type. The form shows the computed gradient live as you type. Terrain access is load-bearing, not decoration: a plan prescribing hills the athlete cannot reach is a plan that will not be run.
+
+⚠️ **Elevation and indoor fields survive a plan adjustment by CODE, not by prompt.** `carryForwardElevation()` in `plans/adjust/route.ts` fills `total_elevation_gain_m`, `elevation_gain_m` and `indoor_alternative` from the existing week when the adjusted week omits them. An adjustment rewrites whole weeks from model output, so without this a single mid-block tweak silently turns a mountain plan into a road plan. An adjusted week that *does* carry elevation wins outright — that is a deliberate change. Do not "simplify" this into a prompt instruction; "the model usually remembers" is not a property to rest on.
+
+**Every prescribed workout carries an `indoor_alternative` (Chunk 5).** The rule lives in `COACH_STATIC_BLOCK`, so it reaches `/coach/ask`, Grocky and plan generation alike — `buildEnhancedCoachSystemPrompt` alone would have missed the main chat. Equipment vocabulary: stairs, incline treadmill (הליכון), stair climber, spin bike, rowing erg, gym strength. **The rule requires stating the limit**: stairs, incline treadmill and stair climber train the CLIMBING half only and cannot reproduce descent, so a climb session's indoor substitute must be paired with eccentric work and must not be presented as complete.
+
+⚠️ **Three separate places hardcoded Monday/Wednesday/Friday day anchors** — `COACH_STATIC_BLOCK` and BOTH plan-prompt builders (the plan-prompt copies sat at the very END of the prompt, after the training-days parameter, so they were overriding it). All three now defer to the supplied days and state the Israeli working week explicitly. If a fourth appears, the symptom is a plan scheduled on days the athlete never selected.
+
+**Also fixed in passing:** `/coach/plan` offered "5K Speed" and "Maintenance", neither of which was in `planGenerationSchema`'s enum — both 400'd on submit. Two of six plan types were broken and nothing surfaced it.
+
 **Elevation is captured end to end as of 2026-09-03 (Chunk 1).** `runs.elevation_gain_m` / `elevation_loss_m`, generated `runs.vert_per_km`, and `laps.elevation_gain_m`; mapped in `lib/ingest/intervals.ts`, written by `upsertRun`, rendered by `lib/utils/elevation.ts`. Probed live over 130 activities / 400 days before anything was written:
 
 - `total_elevation_gain` **and** `total_elevation_loss` are both on the activity **summary** payload `getActivities` already fetches — 128/130 each. Descent costs no extra request and no altitude stream. Do not add one.

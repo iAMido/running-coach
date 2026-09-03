@@ -105,6 +105,28 @@ generating a plan. **Use those. Do not assume a default weekly shape.**
   Do not treat Sunday as a rest day or Saturday as the default long-run day
   unless the supplied days say so.
 
+## EVERY PRESCRIBED SESSION CARRIES AN INDOOR ALTERNATIVE
+Whenever you prescribe a workout — in a plan, in an adjustment, or in chat —
+give an indoor or gym equivalent alongside it. Weather, travel, injury caution
+and a late finish all happen, and an athlete with no stated alternative either
+skips the session or improvises one that misses its purpose.
+
+Equipment vocabulary: **stairs / stairwell, incline treadmill (הליכון), stair
+climber (StairMaster), spin bike, rowing erg, and gym strength work.** Match the
+alternative to the session's PURPOSE, not its shape — the indoor version of a
+threshold session is threshold effort on a treadmill, not "45 minutes of
+something".
+
+**State the limit honestly when there is one.** Stairs, incline treadmill and
+the stair climber all train the CLIMBING half only. They cannot reproduce
+descent: 1300 m up in a mountain race means 1300 m down, and the eccentric quad
+and calf loading of a long descent is a distinct stressor that climbing
+equipment does not touch. When a climb session's indoor substitute omits
+descent, say so, and pair it with eccentric work — controlled step-downs,
+eccentric calf raises, slow tempo split squats — rather than implying the
+substitution was complete. Never present stairs alone as covering "vertical
+training".
+
 ## SHOW THE NUMBER YOU USED
 When you make a claim about pace, heart rate, zone distribution, decoupling, volume or recovery, state the number it rests on and where it came from. Say "your last three easy runs averaged 7:40/km grade-adjusted" rather than "your easy runs have been slow." **If you do not have the number, say you do not have it rather than describing the shape of it.**
 
@@ -449,6 +471,94 @@ function dayBudgetNote(runsPerWeek: number, trainingDays?: string): string {
 `;
 }
 
+/** What the plan must prepare the athlete for, and where he is starting from. */
+export interface RaceDemand {
+  distanceKm?: number;
+  elevationGainM?: number;
+  terrainAccess?: string;
+  /** From getClimbBaseline — his own measured climbing, not an assumption. */
+  climb?: {
+    measuredRuns: number;
+    medianVertPerKm: number | null;
+    maxVertPerKm: number | null;
+    maxGainM: number | null;
+    avgWeeklyGainM: number | null;
+  };
+}
+
+/**
+ * Render the race's actual demand, and the distance between it and the athlete.
+ *
+ * This block is the difference between "a 21K plan" and "a plan for THIS 21K".
+ * Distance alone stopped describing the goal the moment a 1300 m race entered
+ * the picture: 21 km flat and 21 km with 1300 m of climb share a number and
+ * almost nothing else. The gradient is computed here rather than left for the
+ * model to divide, because the whole plan hangs off it.
+ *
+ * Every comparison is against the athlete's OWN measured history. Ask a model
+ * to build toward 1300 m without telling it where he starts and it produces a
+ * plausible ramp anchored to nothing — and this athlete is unusual in a way a
+ * generic ramp gets wrong in both directions at once: he already has the
+ * aerobic base for the distance and has never run anything near the gradient.
+ *
+ * Returns an empty string when there is no elevation target, so a road plan is
+ * completely unaffected by this code path.
+ */
+export function buildRaceDemandBlock(demand?: RaceDemand): string {
+  if (!demand?.elevationGainM || demand.elevationGainM <= 0) return '';
+
+  const gain = demand.elevationGainM;
+  const km = demand.distanceKm;
+  const raceVertPerKm = km && km > 0 ? gain / km : null;
+  const c = demand.climb;
+
+  const lines: string[] = ['', '### RACE DEMAND — BUILD THE PLAN AGAINST THIS'];
+  lines.push(`- Target race climb: **${gain} m**${km ? ` over ${km} km` : ''}.`);
+
+  if (raceVertPerKm !== null) {
+    lines.push(`- Race gradient: **${raceVertPerKm.toFixed(1)} m/km**. This, not the distance, is what the plan has to build.`);
+  }
+
+  if (c && c.measuredRuns > 0) {
+    lines.push(
+      `- Athlete's measured climbing (${c.measuredRuns} runs with elevation, last 120 days): ` +
+        `median **${c.medianVertPerKm?.toFixed(1) ?? '?'} m/km**, ` +
+        `steepest single run **${c.maxVertPerKm?.toFixed(1) ?? '?'} m/km**` +
+        (c.maxGainM !== null ? `, biggest single climb **${c.maxGainM} m**` : '') +
+        (c.avgWeeklyGainM !== null ? `, averaging **${c.avgWeeklyGainM} m/week**` : '') + '.',
+    );
+    if (raceVertPerKm !== null && c.maxVertPerKm) {
+      lines.push(
+        `- **The gap: race gradient is ${(raceVertPerKm / c.maxVertPerKm).toFixed(1)}x his steepest run ever` +
+          (c.medianVertPerKm ? ` and ${(raceVertPerKm / c.medianVertPerKm).toFixed(1)}x his median` : '') +
+          '.** Treat gradient as the limiter and distance as largely in hand. Do NOT write a plan that ' +
+          'builds distance he can already cover while leaving the climbing to the final weeks.',
+      );
+    }
+  } else {
+    lines.push(
+      '- **No measured climbing history is available for this athlete.** Say so in the plan notes and start ' +
+        'the vert progression conservatively; do not infer a starting point from distance or general fitness.',
+    );
+  }
+
+  if (demand.terrainAccess) {
+    lines.push(`- Terrain the athlete can actually reach: ${demand.terrainAccess}`);
+    lines.push('  Prescribe only what this terrain supports. A session needing a hill he does not have will not be run — if the terrain cannot deliver the gradient, say so and use repeats of what he has.');
+  }
+
+  lines.push('');
+  lines.push('**Requirements for an elevation-targeted plan:**');
+  lines.push('1. Give every week a `total_elevation_gain_m` and progress it deliberately. Cap weekly growth the way you would cap volume, and cut vert BEFORE km in a down week — climbing is the newer stress and the one carrying the injury risk.');
+  lines.push('2. Treat **descent as its own stressor**, not the free half of a climb. Eccentric quad and calf loading is what wrecks people late in a long descent, it is trained separately, and it must be built gradually rather than discovered on race day. This athlete has a **plantar fasciitis history** — state how the descent progression respects it.');
+  lines.push('3. Prescribe long climbing sessions as **time on feet plus a vert target**, not pace. Pace targets are close to meaningless on steep grade and will be missed by anyone following them honestly.');
+  lines.push('4. Treat **power-hiking as a trainable skill**, not a failure state. Above roughly 40 m/km hiking is faster and cheaper than running for most athletes — prescribe it deliberately and practise it.');
+  lines.push('5. If poles are appropriate, say which week they enter. Race gear is trained with, never met for the first time on race day.');
+  lines.push('');
+
+  return lines.join('\n');
+}
+
 /**
  * Build enhanced prompt for plan generation with 3-layer context
  */
@@ -461,13 +571,16 @@ export function buildEnhancedPlanGenerationPrompt(
     targetRace?: string;
     notes?: string;
     trainingDays?: string;
+    /** Race profile + the athlete's own climbing baseline. See buildRaceDemandBlock. */
+    raceDemand?: RaceDemand;
     /** Rendered intake block from buildPlanGenerationContext (90-day stats,
      *  PRs, prior plan outcomes, athlete intake form fields). Wider window
      *  than the default 14-day RAG context — plan-gen needs the runway. */
     intakeBlock?: string;
   }
 ): string {
-  const { planType, durationWeeks, runsPerWeek, targetRace, notes, trainingDays, intakeBlock } = params;
+  const { planType, durationWeeks, runsPerWeek, targetRace, notes, trainingDays, raceDemand, intakeBlock } = params;
+  const raceDemandBlock = buildRaceDemandBlock(raceDemand);
 
   // Calculate phase distribution
   const hasRaceGoal = targetRace && targetRace !== '';
@@ -497,6 +610,7 @@ ${intakeBlock || ''}
 - Training days: ${trainingDays || 'NOT SPECIFIED — say so in your response instead of assuming a schedule'}
 - Notes: ${notes || 'None'}
 ${dayBudgetNote(runsPerWeek, trainingDays)}
+${raceDemandBlock}
 ### SUGGESTED PHASE DISTRIBUTION
 - Base Phase: Weeks 1-${baseWeeks} (${baseWeeks} weeks)
 - Support/Build Phase: Weeks ${baseWeeks + 1}-${baseWeeks + supportWeeks} (${supportWeeks} weeks)
@@ -528,14 +642,22 @@ Return the plan as a JSON object with this structure:
       "phase": "Base",
       "focus": "Build aerobic foundation",
       "total_km": 35,
+      "total_elevation_gain_m": 320,
       "workouts": {
         "Sunday": {
           "type": "Easy Run",
           "duration": "45 min",
           "distance": "7 km",
+          "elevation_gain_m": 60,
           "target_hr": "Z1-Z2 (120-140)",
           "target_pace": "6:30-7:00/km",
           "description": "WU: 10min easy | Main: 25min easy | CD: 10min easy | Purpose: Aerobic base",
+          "indoor_alternative": {
+            "type": "Incline treadmill",
+            "equipment": "treadmill",
+            "duration": "45 min",
+            "description": "5% grade, easy effort. Trains climb only, not descent."
+          },
           "source": "Previous coach 'Recovery Run' or 'Book methodology'"
         }
       }
@@ -550,18 +672,25 @@ IMPORTANT:
 - Generate all ${durationWeeks} weeks with complete workout details for each training day
 - Include the "source" field to cite where each workout came from (previous coach or book)
 - Keep workout descriptions concise (under 80 chars each) to fit within token limits
+- Emit "total_elevation_gain_m" per week and "elevation_gain_m" per workout ONLY when a RACE DEMAND block appears above. Omit both for a flat-race or general-fitness plan - do NOT emit 0, which reads as "prescribed no climb" rather than "climb was not part of this plan"
+- Emit "indoor_alternative" on EVERY workout (see the indoor-alternative rule in your instructions)
 
 ### WRITING target_hr — THE ZONE LABEL AND THE BPM MUST AGREE
 - Sustained easy running lives in **Z1-Z2**. Prescribe easy runs and long runs that way. Reserve a bare **Z1** for genuine recovery jogs and walk-backs only: Z1 tops out around 124 bpm for this athlete, so asking for Z1 across a 45-minute run is asking for near-walking, and the session will be missed every time it is prescribed.
 - The bpm range you write MUST sit inside the zone label you write — check it against the HR ZONES block above before emitting. "Z1 (115-135)" is wrong, because 135 is in Z2. Write "Z1-Z2 (115-135)", or "Z1 (110-124)" if you genuinely mean recovery.
 - The label is later compared against what the athlete actually ran. A label that disagrees with its own numbers produces a false verdict on a session they executed correctly.
 
-### TRAINING DAY ANCHORS (Use these as defaults):
-- **Monday**: Quality work (thresholds, VO2max intervals, tempo runs)
-- **Wednesday**: Regular scheduled run (easy or moderate)
-- **Friday**: Long run day
-- Sunday, Tuesday, Thursday, Saturday: Easy runs, recovery, or rest
-- Only deviate from these anchors if explicitly requested`;
+### TRAINING DAY ANCHORS
+Use the "Training days" line in PLAN PARAMETERS above. Those are the days this
+athlete actually trains, stated by him for this plan.
+- Schedule only on those days. Never place a session on a day not listed.
+- Put the hardest quality session on the day he names for quality and the long
+  run on the day he names for it. If he named no roles, choose sensibly and say
+  which day you gave which role.
+- Israeli working week: Sunday is a WORKDAY and Friday-Saturday is the weekend.
+  Do not assume Sunday is free or that Saturday is the natural long-run day.
+- If the training days line says NOT SPECIFIED, say so and ask - do not invent
+  a schedule`;
 }
 
 /**
@@ -682,12 +811,17 @@ IMPORTANT:
 - Order workouts in each week as: Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday
 - Generate all ${durationWeeks} weeks with complete workout details for each training day
 
-### TRAINING DAY ANCHORS (Use these as defaults):
-- **Monday**: Quality work (thresholds, VO2max intervals, tempo runs)
-- **Wednesday**: Regular scheduled run (easy or moderate)
-- **Friday**: Long run day
-- Sunday, Tuesday, Thursday, Saturday: Easy runs, recovery, or rest
-- Only deviate from these anchors if explicitly requested`;
+### TRAINING DAY ANCHORS
+Use the "Training days" line in PLAN PARAMETERS above. Those are the days this
+athlete actually trains, stated by him for this plan.
+- Schedule only on those days. Never place a session on a day not listed.
+- Put the hardest quality session on the day he names for quality and the long
+  run on the day he names for it. If he named no roles, choose sensibly and say
+  which day you gave which role.
+- Israeli working week: Sunday is a WORKDAY and Friday-Saturday is the weekend.
+  Do not assume Sunday is free or that Saturday is the natural long-run day.
+- If the training days line says NOT SPECIFIED, say so and ask - do not invent
+  a schedule`;
 }
 
 /**

@@ -158,6 +158,12 @@ export interface PlanWeek {
   phase: string;
   focus: string;
   total_km: number;
+  /**
+   * Planned climb for the week, metres. Only emitted for plans built against a
+   * race with an elevation profile. Absent means the plan did not prescribe
+   * vert — NOT that the week is flat.
+   */
+  total_elevation_gain_m?: number | null;
   workouts: Record<string, Workout>;
 }
 
@@ -169,6 +175,19 @@ export interface Workout {
   target_pace?: string;
   description?: string;
   notes?: string;
+  /** Prescribed climb for this session, metres. Absent = not prescribed. */
+  elevation_gain_m?: number | null;
+  /**
+   * How to run this session without the terrain it asks for — stairs, incline
+   * treadmill, stair climber, or the eccentric work that climbing machines
+   * cannot replicate. Present on every workout once the indoor rule is active.
+   */
+  indoor_alternative?: {
+    type: string;
+    equipment: string;
+    duration?: string;
+    description?: string;
+  } | null;
 }
 
 export interface RunFeedback {

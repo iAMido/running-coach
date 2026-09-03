@@ -219,3 +219,66 @@ export async function getWeeklyVolume(userId: string, weeks = 12): Promise<{ wee
     km: Math.round(km * 10) / 10,
   }));
 }
+
+/**
+ * The athlete's measured climbing history, for grounding a plan's vert
+ * prescription in what he has actually done.
+ *
+ * Exists because the alternative is the model inventing a starting point. Ask
+ * an LLM to build toward 1300 m without telling it where the athlete is and it
+ * will produce a plausible-looking ramp anchored to nothing — and this athlete's
+ * real position is unusual enough that a generic ramp would be wrong in both
+ * directions at once: he has the aerobic base for the distance and has never
+ * run anything near the gradient.
+ *
+ * `measuredRuns` travels with the numbers so the caller can say how much
+ * history is behind them. Elevation exists on a minority of rows, and a median
+ * drawn from 4 runs must not read like one drawn from 128 — the mistake this
+ * codebase has made with an n=1 season baseline and a two-sample median before.
+ */
+export interface ClimbBaseline {
+  measuredRuns: number;
+  medianVertPerKm: number | null;
+  maxVertPerKm: number | null;
+  /** Largest single-run climb, metres. */
+  maxGainM: number | null;
+  /** Mean weekly climb over the window, metres. Null when nothing was measured. */
+  avgWeeklyGainM: number | null;
+}
+
+export async function getClimbBaseline(userId: string, days = 120): Promise<ClimbBaseline> {
+  const empty: ClimbBaseline = {
+    measuredRuns: 0, medianVertPerKm: null, maxVertPerKm: null,
+    maxGainM: null, avgWeeklyGainM: null,
+  };
+
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('runs')
+    .select('elevation_gain_m,vert_per_km')
+    .eq('user_id', userId)
+    .gte('date', since)
+    .not('elevation_gain_m', 'is', null);
+
+  if (error || !data || data.length === 0) return empty;
+
+  const rows = data as { elevation_gain_m: number | null; vert_per_km: number | null }[];
+  const gradients = rows
+    .map((r) => r.vert_per_km)
+    .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+    .sort((a, b) => a - b);
+  const gains = rows
+    .map((r) => r.elevation_gain_m)
+    .filter((v): v is number => typeof v === 'number');
+
+  if (gains.length === 0) return empty;
+
+  const totalGain = gains.reduce((sum, g) => sum + g, 0);
+  return {
+    measuredRuns: gains.length,
+    medianVertPerKm: gradients.length ? gradients[Math.floor(gradients.length / 2)] : null,
+    maxVertPerKm: gradients.length ? gradients[gradients.length - 1] : null,
+    maxGainM: Math.max(...gains),
+    avgWeeklyGainM: Math.round(totalGain / (days / 7)),
+  };
+}

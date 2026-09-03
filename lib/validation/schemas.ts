@@ -59,7 +59,14 @@ export const WEEKDAYS = [
 ] as const;
 
 export const planGenerationSchema = z.object({
-  planType: z.enum(['Half Marathon', 'Marathon', '10K', '5K', 'Base Building', 'Custom']),
+  planType: z.enum([
+    'Half Marathon', 'Marathon', '10K', '5K', 'Base Building', 'Custom',
+    // Distance alone stopped describing the goal once a 1300 m race entered
+    // the picture. Kept as a type for phase shaping, but the elevation fields
+    // below are what actually drive the plan — a flat 21K and a 21K with
+    // 1300 m of climb are different events sharing a distance.
+    'Trail / Mountain', '5K Speed', 'Maintenance',
+  ]),
   durationWeeks: z.number().int().min(1).max(52),
   runsPerWeek: z.number().int().min(1).max(14),
   /**
@@ -71,6 +78,26 @@ export const planGenerationSchema = z.object({
   trainingDays: z.array(z.enum(WEEKDAYS)).min(1).max(7).optional(),
   /** Free-text note on which day carries which session, e.g. "Monday quality". */
   trainingDayNotes: safeString.max(300).optional(),
+
+  // ---- Race profile. What the plan must actually prepare the athlete FOR. ----
+  /**
+   * Race distance in km. Distinct from `planType`: the type shapes the phase
+   * split, this is the number the plan's long runs have to build toward.
+   */
+  raceDistanceKm: z.number().positive().max(500).optional(),
+  /**
+   * Total climb of the target race, metres. The single most decision-changing
+   * field in this form when it is present — with distance it yields the race's
+   * gradient, which the plan is then built against and which the athlete's own
+   * measured history can be compared to.
+   */
+  raceElevationGainM: z.number().int().min(0).max(30000).optional(),
+  /**
+   * What terrain the athlete can actually train on. A plan prescribing 60 m/km
+   * repeats to someone with no hill inside an hour's drive is a plan that will
+   * not be run.
+   */
+  terrainAccess: safeText.max(600).optional(),
   targetRace: safeString.max(200).optional(),
   notes: safeText.max(2000).optional(),
   // Rich intake (form-driven)

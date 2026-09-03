@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
       for (const adjustedWeek of adjustmentResult.adjusted_weeks) {
         const weekIndex = updatedWeeks.findIndex(w => w.week_number === adjustedWeek.week_number);
         if (weekIndex !== -1) {
-          updatedWeeks[weekIndex] = adjustedWeek;
+          updatedWeeks[weekIndex] = carryForwardElevation(updatedWeeks[weekIndex], adjustedWeek);
         } else {
           updatedWeeks.push(adjustedWeek);
         }
@@ -175,4 +175,48 @@ export async function POST(request: NextRequest) {
     console.error('Error adjusting plan:', error);
     return NextResponse.json({ error: 'Failed to adjust plan' }, { status: 500 });
   }
+}
+
+/**
+ * Keep a week's elevation prescription across an adjustment that ignored it.
+ *
+ * An adjustment rewrites whole weeks from model output. If the adjustment
+ * prompt does not happen to mention elevation, the model rewrites the week
+ * without those fields and the plan silently loses its vert targets — the
+ * athlete then sees a mountain plan quietly become a road plan after one
+ * mid-block tweak, with nothing in the UI to say it happened.
+ *
+ * Guaranteed in code rather than asked for in a prompt, because "the model
+ * usually remembers" is not a property this can rest on. An adjusted week that
+ * DOES carry elevation wins outright — that is a deliberate change, and the
+ * whole point of an adjustment is to be allowed to make one.
+ */
+function carryForwardElevation(
+  existing: Record<string, unknown> | undefined,
+  adjusted: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!existing) return adjusted;
+
+  const merged: Record<string, unknown> = { ...adjusted };
+  if (merged.total_elevation_gain_m == null && existing.total_elevation_gain_m != null) {
+    merged.total_elevation_gain_m = existing.total_elevation_gain_m;
+  }
+
+  const oldWorkouts = existing.workouts as Record<string, Record<string, unknown>> | undefined;
+  const newWorkouts = merged.workouts as Record<string, Record<string, unknown>> | undefined;
+  if (oldWorkouts && newWorkouts) {
+    for (const [day, workout] of Object.entries(newWorkouts)) {
+      const before = oldWorkouts[day];
+      if (!before || !workout) continue;
+      // Only fills gaps. A day whose session genuinely changed keeps its new
+      // values; a day the model merely restated keeps what it had.
+      if (workout.elevation_gain_m == null && before.elevation_gain_m != null) {
+        workout.elevation_gain_m = before.elevation_gain_m;
+      }
+      if (workout.indoor_alternative == null && before.indoor_alternative != null) {
+        workout.indoor_alternative = before.indoor_alternative;
+      }
+    }
+  }
+  return merged;
 }

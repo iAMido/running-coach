@@ -6,6 +6,7 @@ import { callOpenRouter } from '@/lib/ai/openrouter';
 import { buildEnhancedPlanGenerationPrompt, COACH_STATIC_BLOCK } from '@/lib/ai/coach-prompts';
 import { buildContext, getContextStats } from '@/lib/rag/context-builder';
 import { getAthleteProfile } from '@/lib/db/profile';
+import { getClimbBaseline } from '@/lib/db/runs';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { planGenerationSchema, validateInput } from '@/lib/validation/schemas';
 import {
@@ -43,6 +44,7 @@ export async function POST(request: NextRequest) {
     const {
       planType, durationWeeks, runsPerWeek, targetRace, notes,
       trainingDays: requestedDays, trainingDayNotes,
+      raceDistanceKm, raceElevationGainM, terrainAccess,
       raceDate, targetTime, recentRaceResult, currentWeeklyKm, addressesWhat, limitations,
     } = validation.data;
 
@@ -60,6 +62,14 @@ export async function POST(request: NextRequest) {
       }),
     ]);
 
+    // His own measured climbing, fetched ONLY when the race actually has an
+    // elevation target - a road plan pays nothing for this. Without it the
+    // model has no anchor for a vert ramp and invents one.
+    const climbBaseline = raceElevationGainM
+      ? await getClimbBaseline(userId)
+      : undefined;
+
+
     // Pre-flight supervisor gate for plan generation. Flags zero book
     // sources or zero coach workouts surfaced — both mean the resulting
     // plan will lean entirely on the model's priors.
@@ -73,6 +83,14 @@ export async function POST(request: NextRequest) {
       targetRace,
       notes,
       trainingDays: resolveTrainingDays(requestedDays, profile?.training_days, trainingDayNotes),
+      // Race profile + his OWN measured climbing. Without the second
+      // half the model has no anchor and invents a starting point.
+      raceDemand: {
+        distanceKm: raceDistanceKm,
+        elevationGainM: raceElevationGainM,
+        terrainAccess,
+        climb: climbBaseline,
+      },
       intakeBlock: planGenCtx.intakeBlock,
     });
     if (preflight.augmentedSystemSuffix) {
