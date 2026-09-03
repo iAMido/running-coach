@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
 
   const {
     planType, durationWeeks, runsPerWeek, targetRace, notes,
+    trainingDays: requestedDays, trainingDayNotes,
     raceDate, targetTime, recentRaceResult, currentWeeklyKm, addressesWhat, limitations,
   } = validation.data;
   const profile = await getAthleteProfile(userId);
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
     runsPerWeek,
     targetRace,
     notes,
-    trainingDays: profile?.training_days,
+    trainingDays: resolveTrainingDays(requestedDays, profile?.training_days, trainingDayNotes),
     intakeBlock: planGenCtx.intakeBlock,
   });
   if (preflight.augmentedSystemSuffix) {
@@ -229,4 +230,28 @@ export async function POST(request: NextRequest) {
       'Connection': 'keep-alive',
     },
   });
+}
+
+/**
+ * Days for this plan: what the request asked for, else what the profile says.
+ *
+ * Request wins deliberately. `athlete_profile.training_days` is the one
+ * human-entered field in this chain that nothing validates, and it sat stale
+ * for months while every plan built on it inherited the error. A per-request
+ * choice is the athlete stating the days at the moment they are actually
+ * deciding, which is the most reliable moment there is.
+ *
+ * Returns undefined rather than a default when neither source has anything —
+ * the prompt then says the days are unspecified instead of quietly inventing
+ * Mon/Wed/Fri, which is how the stale value went unnoticed in the first place.
+ */
+function resolveTrainingDays(
+  requested: readonly string[] | undefined,
+  profileDays: string | null | undefined,
+  dayNotes: string | undefined,
+): string | undefined {
+  if (requested && requested.length > 0) {
+    return dayNotes ? `${requested.join(', ')} (${dayNotes})` : requested.join(', ');
+  }
+  return profileDays || undefined;
 }

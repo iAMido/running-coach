@@ -47,10 +47,30 @@ export const runSchema = z.object({
 // for plan-gen quality — they carry race date, target time, recent race,
 // current volume, what-to-address, and limitations. The server enriches
 // further from runs/plans tables before building the prompt.
+/**
+ * Days of the week, canonical spelling. Used by plan generation so a plan can
+ * be built around the days the athlete actually runs rather than around
+ * whatever `athlete_profile.training_days` happened to say when it was last
+ * edited — a field that went stale for months and silently capped the weekly
+ * scorecard's judgeable coverage.
+ */
+export const WEEKDAYS = [
+  'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+] as const;
+
 export const planGenerationSchema = z.object({
   planType: z.enum(['Half Marathon', 'Marathon', '10K', '5K', 'Base Building', 'Custom']),
   durationWeeks: z.number().int().min(1).max(52),
   runsPerWeek: z.number().int().min(1).max(14),
+  /**
+   * Which days the plan may schedule on. Omitted means "fall back to the
+   * profile" — an empty array is rejected rather than treated as "any day",
+   * because a plan free to use all seven days is a different request from a
+   * plan whose days were simply not stated.
+   */
+  trainingDays: z.array(z.enum(WEEKDAYS)).min(1).max(7).optional(),
+  /** Free-text note on which day carries which session, e.g. "Monday quality". */
+  trainingDayNotes: safeString.max(300).optional(),
   targetRace: safeString.max(200).optional(),
   notes: safeText.max(2000).optional(),
   // Rich intake (form-driven)

@@ -94,13 +94,16 @@ When prescribing workouts, ALWAYS include:
 - **Pace ranges**: Specific min/km for each segment
 - **Purpose**: What adaptation this targets
 
-### Training Day Anchors (Default Schedule):
-When creating or adjusting training plans, use these day anchors:
-- **Monday**: Quality work (thresholds, VO2max intervals, tempo runs)
-- **Wednesday**: Regular scheduled run (easy or moderate)
-- **Friday**: Long run day
-- Other days: Easy runs, recovery, or rest as needed
-- Adjust only if the athlete explicitly requests different days
+### Training Day Anchors:
+The athlete's days are supplied per request — as "Available Training Days" in
+the athlete context, and as "Training days" in the plan parameters when
+generating a plan. **Use those. Do not assume a default weekly shape.**
+- If a request supplies days, they override anything you remember or infer.
+- If no days are supplied, say so and ask, rather than inventing a schedule.
+- Never move a session to a day the athlete has not offered.
+- Israeli working week: Sunday is a workday, Friday-Saturday is the weekend.
+  Do not treat Sunday as a rest day or Saturday as the default long-run day
+  unless the supplied days say so.
 
 ## SHOW THE NUMBER YOU USED
 When you make a claim about pace, heart rate, zone distribution, decoupling, volume or recovery, state the number it rests on and where it came from. Say "your last three easy runs averaged 7:40/km grade-adjusted" rather than "your easy runs have been slow." **If you do not have the number, say you do not have it rather than describing the shape of it.**
@@ -427,6 +430,26 @@ function formatZoneDistribution(r: Run): string {
 }
 
 /**
+ * Warn the model when it has been asked for more sessions than there are days
+ * to put them on.
+ *
+ * Without this the model silently resolves the conflict itself, usually by
+ * scheduling on a day the athlete never offered — which then reads as the
+ * athlete skipping a prescribed session when they had no such day. Stating the
+ * arithmetic makes doubling-up an explicit, visible choice.
+ */
+function dayBudgetNote(runsPerWeek: number, trainingDays?: string): string {
+  if (!trainingDays) return '';
+  const dayCount = trainingDays.split(',').filter((d) => d.trim().length > 0).length;
+  if (dayCount === 0 || runsPerWeek <= dayCount) return '';
+  return `
+⚠️ ${runsPerWeek} runs per week across only ${dayCount} available days. ` +
+    `Some days must carry two sessions. Say which, and why those days — do NOT ` +
+    `schedule onto a day that is not in the list above.
+`;
+}
+
+/**
  * Build enhanced prompt for plan generation with 3-layer context
  */
 export function buildEnhancedPlanGenerationPrompt(
@@ -471,9 +494,9 @@ ${intakeBlock || ''}
 - Duration: ${durationWeeks} weeks
 - Runs per week: ${runsPerWeek}
 - Target race: ${targetRace || 'No specific race'}
-- Training days: ${trainingDays || 'Mon, Wed, Fri, Sun'}
+- Training days: ${trainingDays || 'NOT SPECIFIED — say so in your response instead of assuming a schedule'}
 - Notes: ${notes || 'None'}
-
+${dayBudgetNote(runsPerWeek, trainingDays)}
 ### SUGGESTED PHASE DISTRIBUTION
 - Base Phase: Weeks 1-${baseWeeks} (${baseWeeks} weeks)
 - Support/Build Phase: Weeks ${baseWeeks + 1}-${baseWeeks + supportWeeks} (${supportWeeks} weeks)
@@ -613,9 +636,9 @@ ${hasRaceGoal ? `- Taper: Week ${durationWeeks} (1 week)` : ''}
 - Duration: ${durationWeeks} weeks
 - Runs per week: ${runsPerWeek}
 - Target race: ${targetRace || 'No specific race'}
-- Training days: ${trainingDays || 'Mon, Wed, Fri, Sun'}
+- Training days: ${trainingDays || 'NOT SPECIFIED — say so in your response instead of assuming a schedule'}
 - Notes: ${notes || 'None'}
-
+${dayBudgetNote(runsPerWeek, trainingDays)}
 ## TRIPHASIC PACE CALCULATOR (sub-2hr HM)
 - Race Pace: 5:40/km (100%)
 - Fast Quality (106-114%): 4:58-5:21/km

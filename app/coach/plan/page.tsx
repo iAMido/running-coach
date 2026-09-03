@@ -19,12 +19,49 @@ const planTypes = [
 ];
 
 const durationOptions = [4, 6, 8, 10, 12, 16];
-const runsPerWeekOptions = [3, 4, 5];
+const runsPerWeekOptions = [3, 4, 5, 6, 7];
+
+/**
+ * Sunday first — this athlete trains on an Israeli week, where Sunday is a
+ * workday and Friday-Saturday is the weekend. A Monday-first picker quietly
+ * suggests the wrong shape.
+ */
+const WEEKDAY_OPTIONS = [
+  { value: 'Sunday', short: 'Sun' },
+  { value: 'Monday', short: 'Mon' },
+  { value: 'Tuesday', short: 'Tue' },
+  { value: 'Wednesday', short: 'Wed' },
+  { value: 'Thursday', short: 'Thu' },
+  { value: 'Friday', short: 'Fri' },
+  { value: 'Saturday', short: 'Sat' },
+] as const;
 
 export default function TrainingPlanPage() {
   const [planType, setPlanType] = useState('');
   const [duration, setDuration] = useState('8');
   const [runsPerWeek, setRunsPerWeek] = useState('4');
+  // Which days this plan may schedule on. Empty = fall back to the profile,
+  // which is what the server does. Prefilled from the profile below so the
+  // common case is one glance and no clicks, and a change is deliberate.
+  const [trainingDays, setTrainingDays] = useState<string[]>([]);
+  const [trainingDayNotes, setTrainingDayNotes] = useState('');
+  const [profileDays, setProfileDays] = useState<string | null>(null);
+
+  // Seed the picker from the saved profile so the default is the athlete's
+  // real week rather than an invented one. Best-effort: a failure here leaves
+  // the picker empty, which the server reads as "use the profile" — the same
+  // behaviour as before this control existed.
+  useEffect(() => {
+    fetch('/api/coach/profile')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const days: string | undefined = data?.profile?.training_days ?? data?.training_days;
+        if (!days) return;
+        setProfileDays(days);
+        setTrainingDays(WEEKDAY_OPTIONS.filter((d) => days.includes(d.value)).map((d) => d.value));
+      })
+      .catch(() => {});
+  }, []);
   const [notes, setNotes] = useState('');
   // Rich plan-gen intake (server reads these into the PLAN GENERATION INTAKE
   // block; gives Opus the runway it needs beyond the default 14-day RAG.)
@@ -92,6 +129,11 @@ export default function TrainingPlanPage() {
           planType: planTypes.find(p => p.value === planType)?.label || planType,
           durationWeeks: parseInt(duration),
           runsPerWeek: parseInt(runsPerWeek),
+          // Omitted entirely when nothing is picked, so the server falls back
+          // to the profile rather than receiving an empty array — "not stated"
+          // and "no days at all" are different requests.
+          ...(trainingDays.length > 0 ? { trainingDays } : {}),
+          ...(trainingDayNotes ? { trainingDayNotes } : {}),
           notes,
           // Rich intake — server reads into PLAN GENERATION INTAKE block.
           // Each field is optional; omit empty strings so Zod accepts them.
@@ -516,6 +558,68 @@ export default function TrainingPlanPage() {
                   <option key={num} value={num.toString()}>{num} runs/week</option>
                 ))}
               </select>
+            </div>
+
+            {/* Training Days — which days the plan may use. Prefilled from the
+                profile; changing it here affects THIS plan only and does not
+                rewrite the saved profile, so a one-off block (travel, a heavy
+                work month) cannot silently become the permanent default. */}
+            <div className="space-y-2">
+              <label className="rc-mono text-[11px] font-medium uppercase" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.08em' }}>
+                Training Days
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {WEEKDAY_OPTIONS.map((day) => {
+                  const on = trainingDays.includes(day.value);
+                  return (
+                    <button
+                      key={day.value}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() =>
+                        setTrainingDays((prev) =>
+                          prev.includes(day.value) ? prev.filter((d) => d !== day.value) : [...prev, day.value],
+                        )
+                      }
+                      className="px-3 py-2 rounded-xl text-[12px] font-medium transition-colors"
+                      style={{
+                        background: on ? 'var(--rc-blue)' : 'var(--rc-surface-2)',
+                        border: `1px solid ${on ? 'var(--rc-blue)' : 'var(--rc-line)'}`,
+                        color: on ? 'white' : 'var(--rc-ink-3)',
+                      }}
+                    >
+                      {day.short}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <input
+                type="text"
+                value={trainingDayNotes}
+                onChange={(e) => setTrainingDayNotes(e.target.value)}
+                placeholder="Which day carries what — e.g. Monday quality, Friday long"
+                className="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2"
+                style={{ background: 'var(--rc-surface-2)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink)' }}
+              />
+
+              {/* State the arithmetic rather than blocking on it. More runs
+                  than days is a legitimate request — it means doubling up —
+                  but it must be a visible choice, because the alternative is
+                  the model quietly scheduling onto a day that was never
+                  offered and the athlete then reading as having skipped it. */}
+              {trainingDays.length > 0 && parseInt(runsPerWeek) > trainingDays.length && (
+                <p className="text-[11px]" style={{ color: 'var(--rc-amber, oklch(0.55 0.14 75))' }}>
+                  {runsPerWeek} runs across {trainingDays.length} days — some days will carry two sessions.
+                </p>
+              )}
+              {trainingDays.length === 0 && (
+                <p className="text-[11px]" style={{ color: 'var(--rc-ink-4)' }}>
+                  {profileDays
+                    ? `No days selected — the plan will use your saved days: ${profileDays}`
+                    : 'No days selected, and none saved on your profile. The coach will ask rather than assume a schedule.'}
+                </p>
+              )}
             </div>
 
             {/* Rich intake — feeds the server's PLAN GENERATION INTAKE block.
