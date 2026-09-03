@@ -2,10 +2,11 @@
 
 import { useSession } from 'next-auth/react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Activity, Timer, TrendingUp, Calendar, Target, Zap, Play, ChevronRight, HeartPulse, Gauge } from 'lucide-react';
+import { Activity, Timer, TrendingUp, Calendar, Target, Zap, Play, ChevronRight, HeartPulse, Gauge, Mountain } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { DashboardStats, Run, TrainingPlan, PlanWeek, Workout } from '@/lib/db/types';
+import { climbCategory, TARGET_RACE } from '@/lib/utils/elevation';
 import { isWorkoutToday, getTodayDayName, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
 import { CoachHealthWidget } from '@/components/coach/coach-health-widget';
 import { useSyncOnOpen } from '@/lib/hooks/use-sync-on-open';
@@ -325,7 +326,7 @@ export default function CoachDashboard() {
       })()}
 
       {/* Stat Cards */}
-      <div className="grid gap-3.5 grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3.5 grid-cols-2 lg:grid-cols-5">
         {[
           // 1. THIS WEEK — actual against planned. Falls back to the old
           //    actual-only display when there is no plan to compare against.
@@ -479,6 +480,47 @@ export default function CoachDashboard() {
               iconBg: 'oklch(0.96 0.04 305)',
               iconColor: 'oklch(0.42 0.18 305)',
               valueColor: colour,
+            };
+          })(),
+
+          // 5. VERT — weekly climb. Earns a tile (where Efficiency Factor did
+          //    not) because it changes week to week and drives a real weekly
+          //    decision: this athlete is building toward a 61.9 m/km race off a
+          //    history whose steepest run ever is 20.2, so the question "did I
+          //    climb this week" has an answer he can act on before Sunday.
+          //
+          //    The gradient, not the total, carries the meaning — 600 m over
+          //    60 km is flat running. So m/km is the subtitle, with the band
+          //    name, and a total drawn from only some of the week's runs says
+          //    so rather than passing itself off as the week's climbing.
+          (() => {
+            const v = stats?.weeklyVert;
+            const band = climbCategory(v?.vertPerKm ?? null);
+            const partial = v != null && v.measuredRuns < v.totalRuns;
+            return {
+              title: 'Vert',
+              value: v == null ? '--' : `${v.gainM}`,
+              unit: v == null ? '' : 'm',
+              desc:
+                v == null
+                  ? (stats?.thisWeekRuns ?? 0) === 0
+                    ? 'no runs this week'
+                    : 'not measured this week'
+                  : partial
+                    ? `${v.measuredRuns} of ${v.totalRuns} runs measured — at least`
+                    : v.vertPerKm != null
+                      ? `${v.vertPerKm.toFixed(1)} m/km · ${band} · race ${TARGET_RACE.vertPerKm.toFixed(0)}`
+                      : 'no distance to compare against',
+              icon: Mountain,
+              accent: 'oklch(0.55 0.14 145)',
+              iconBg: 'oklch(0.96 0.04 145)',
+              iconColor: 'oklch(0.42 0.14 145)',
+              // Deliberately uncoloured. There is no established good or bad
+              // weekly vert for this athlete yet — 128 measured runs and no
+              // mountain block behind him. Colouring it would assert a verdict
+              // the data cannot support, the same mistake the aerobic-control
+              // scorecard row exists to avoid.
+              valueColor: undefined as string | undefined,
             };
           })(),
         ].map((card) => {

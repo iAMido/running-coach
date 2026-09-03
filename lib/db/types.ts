@@ -395,6 +395,23 @@ export interface DashboardStats {
     weeklyAvg28: number | null;
     pctChange: number | null;
   };
+
+  /**
+   * Weekly climb. Null when NO run this week carried an elevation reading —
+   * which is a different fact from 0 m climbed, and the tile renders it
+   * differently.
+   *
+   * `measuredRuns` < `totalRuns` means the total is a floor: elevation exists
+   * on a minority of historical rows, so a week can legitimately mix measured
+   * and unmeasured runs.
+   */
+  weeklyVert?: {
+    gainM: number;
+    measuredRuns: number;
+    totalRuns: number;
+    /** Average gradient across the week, m/km. Null if the week has no distance. */
+    vertPerKm: number | null;
+  } | null;
 }
 
 // ============================================================

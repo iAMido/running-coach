@@ -8,6 +8,8 @@ import ReactMarkdown from 'react-markdown';
 import { WeeklyScorecard } from '@/components/coach/weekly-scorecard';
 import remarkGfm from 'remark-gfm';
 import type { Run, TrainingPlan } from '@/lib/db/types';
+import { VertBadge } from '@/components/coach/vert-badge';
+import { sumVert } from '@/lib/utils/elevation';
 
 export default function WeeklyReviewPage() {
   const [overallFeeling, setOverallFeeling] = useState([7]);
@@ -95,6 +97,9 @@ export default function WeeklyReviewPage() {
   };
 
   const totalDistance = weeklyRuns.reduce((sum, run) => sum + (run.distance_km || 0), 0);
+  // Carries its own denominator: elevation is absent on most historical rows,
+  // so a week's climb can be a floor rather than a total.
+  const weekVert = sumVert(weeklyRuns);
   const totalDuration = weeklyRuns.reduce((sum, run) => sum + (run.duration_min || 0), 0);
 
   const getWeekDateRange = (): string => {
@@ -202,11 +207,20 @@ export default function WeeklyReviewPage() {
           ) : weeklyRuns.length > 0 ? (
             <>
               {/* Summary Stats */}
-              <div className="grid grid-cols-3 gap-3 px-6 pt-5 pb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-6 pt-5 pb-4">
                 {[
                   { label: 'RUNS', value: weeklyRuns.length, unit: '', accent: 'var(--rc-blue)' },
                   { label: 'DISTANCE', value: totalDistance.toFixed(1), unit: 'km', accent: 'var(--rc-amber)' },
                   { label: 'DURATION', value: Math.round(totalDuration), unit: 'min', accent: 'var(--rc-purple)' },
+                  // '--' rather than 0 when nothing in the week carried a
+                  // reading: an unmeasured week and a flat week are different
+                  // facts, and only one of them is a training observation.
+                  {
+                    label: weekVert.measured === weekVert.total ? 'VERT' : `VERT (${weekVert.measured}/${weekVert.total})`,
+                    value: weekVert.measured === 0 ? '--' : Math.round(weekVert.totalM),
+                    unit: weekVert.measured === 0 ? '' : 'm',
+                    accent: 'oklch(0.55 0.14 145)',
+                  },
                 ].map((s) => (
                   <div
                     key={s.label}
@@ -249,6 +263,7 @@ export default function WeeklyReviewPage() {
                       {run.distance_km?.toFixed(1)}<span className="text-[11px] font-medium ml-0.5" style={{ color: 'var(--rc-ink-3)' }}>km</span>
                     </div>
                     <div className="rc-mono text-[11px]" style={{ color: 'var(--rc-ink-4)' }}>{run.avg_pace_str || '-'}</div>
+                    <VertBadge gainM={run.elevation_gain_m} distanceKm={run.distance_km} showAbsent className="mt-0.5" />
                   </div>
                 </div>
               ))}
@@ -497,6 +512,12 @@ export default function WeeklyReviewPage() {
             {[
               { label: 'Total runs', value: weeklyRuns.length, unit: '', accent: 'var(--rc-blue)' },
               { label: 'Total distance', value: totalDistance.toFixed(1), unit: 'km', accent: 'var(--rc-good)' },
+              {
+                label: weekVert.measured === weekVert.total ? 'Total vert' : `Total vert (${weekVert.measured}/${weekVert.total} runs)`,
+                value: weekVert.measured === 0 ? '--' : Math.round(weekVert.totalM),
+                unit: weekVert.measured === 0 ? '' : 'm',
+                accent: 'oklch(0.55 0.14 145)',
+              },
               { label: 'Avg distance', value: (totalDistance / weeklyRuns.length).toFixed(1), unit: 'km', accent: 'var(--rc-purple)' },
               {
                 label: 'Avg HR',

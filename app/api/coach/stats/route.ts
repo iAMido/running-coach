@@ -5,6 +5,7 @@ import { nowInUserTz, userDateStrDaysAgo } from '@/lib/utils/user-time';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { getRecentFeedback, getWeeklySummary, getCurrentWeekStart } from '@/lib/db/feedback';
 import { calculateFatigueScore } from '@/lib/rag/user-formatter';
+import { sumVert, vertPerKm } from '@/lib/utils/elevation';
 import { readinessForUser } from '@/lib/coach/readiness-service';
 
 export async function GET() {
@@ -29,7 +30,7 @@ export async function GET() {
       supabase.rpc('run_totals', { p_user_id: userId }),
       supabase
         .from('runs')
-        .select('distance_km')
+        .select('distance_km,elevation_gain_m')
         .eq('user_id', userId)
         .gte('date', sunday.toISOString()),
       supabase
@@ -60,6 +61,22 @@ export async function GET() {
       (sum, run) => sum + (run.distance_km || 0), 0
     );
     const thisWeekRuns = weekData?.length || 0;
+
+    // Weekly climb. `measuredRuns` travels with the total because elevation
+    // exists on a minority of rows: a week mixing measured and unmeasured runs
+    // has a total that is a FLOOR, and the tile has to be able to say so
+    // rather than presenting it as the week's climbing. Null when nothing was
+    // measured — "we cannot see the climbing" is not "you climbed nothing".
+    const weekVert = sumVert((weekData || []) as { elevation_gain_m?: number | null }[]);
+    const weeklyVert =
+      weekVert.measured === 0
+        ? null
+        : {
+            gainM: Math.round(weekVert.totalM),
+            measuredRuns: weekVert.measured,
+            totalRuns: weekVert.total,
+            vertPerKm: vertPerKm(weekVert.totalM, thisWeekKm),
+          };
 
     const activePlan = planRes.data;
 
@@ -122,6 +139,11 @@ export async function GET() {
         : null,
       /** 7-day TRIMP against the trailing 28-day weekly average. */
       loadRamp,
+      /**
+       * Weekly climb, or null when no run this week carried an elevation
+       * reading. Never 0 as a stand-in for unmeasured.
+       */
+      weeklyVert,
     });
   } catch (error) {
     console.error('Error fetching stats:', error);

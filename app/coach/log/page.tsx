@@ -6,6 +6,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { ClipboardList, CheckCircle, Save, Activity } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { Run } from '@/lib/db/types';
+import { VertBadge } from '@/components/coach/vert-badge';
 
 const feelingOptions = ['Great', 'Good', 'Okay', 'Tired', 'Exhausted'];
 
@@ -564,6 +565,7 @@ export default function LogRunsPage() {
                         {run.distance_km.toFixed(1)}<span className="text-[11px] font-medium ml-0.5" style={{ color: 'var(--rc-ink-3)' }}>km</span>
                       </div>
                       <div className="rc-mono text-[12px]" style={{ color: 'var(--rc-ink-3)' }}>{run.avg_pace_str || '-'}</div>
+                      <VertBadge gainM={run.elevation_gain_m} distanceKm={run.distance_km} showAbsent className="mt-0.5" />
                     </div>
                   </div>
                 );
