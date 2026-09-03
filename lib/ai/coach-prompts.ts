@@ -9,6 +9,7 @@
 import type { AthleteProfile, Lap, Run, TrainingPlan } from '@/lib/db/types';
 import type { EnhancedContext, QueryType } from '@/lib/rag/types';
 import { formatRunLaps, formatPlannedWeek } from '@/lib/rag/user-formatter';
+import { formatGoalPaceBlock, goalPace } from '@/lib/utils/goal-pace';
 
 // Legacy interface for backwards compatibility
 interface LegacyCoachContext {
@@ -235,13 +236,7 @@ export function buildCoachSystemPrompt(context: LegacyCoachContext = {}): string
 - Z5 (VO2max): ${profile?.hr_zone_z5 || '170-185'} bpm - Hard intervals
 - Z6 (Anaerobic): ${profile?.hr_zone_z6 || '185+'} bpm - Sprint/max
 
-## PACE ZONES (for sub-2hr HM goal = 5:40/km race pace)
-- Recovery/WU/CD: 7:00-7:30 min/km
-- Easy/Z2: 6:30-7:00 min/km
-- Tempo/Z3: 5:50-6:15 min/km
-- Threshold/Z4: 5:25-5:50 min/km
-- Interval/Z5: 5:00-5:25 min/km
-- HM race pace: 5:40 min/km
+${formatGoalPaceBlock(goalPace(profile?.current_goal, profile?.long_term_goal))}
 
 ================================================================================
 ## RUN ELITE TRIPHASIC MODEL (Your Core Methodology)
@@ -268,10 +263,10 @@ Elite runners do NOT train in the "gray zone" (moderate intensity). Instead:
   - Fast Quality: 106-114% of race pace (faster than race pace)
   - Endurance Quality: 86-94% of race pace (slower than race pace)
 
-**SUPPORT PHASE PACE CALCULATOR (for HM sub-2hr, race pace 5:40/km):**
-- Fast Quality (106-114%): 4:58-5:21/km
-- Endurance Quality (86-94%): 6:01-6:36/km
-- Easy runs: 6:30-7:00+/km
+**SUPPORT PHASE PACES:** use the PACE ZONES block above, which is derived from
+this athlete's own stated goal. If that block says no race pace could be
+derived, prescribe by heart-rate zone and effort and say pace targets are
+unavailable — do not fall back to a remembered number.
 
 **3. SPECIFIC TRAINING (Peak Phase)**
 - Focus: Race-specific fitness
@@ -625,6 +620,10 @@ ${macroContext ? `${macroContext}
 **This block serves the phase marked CURRENT above.** Write it to satisfy that phase's exit criteria — its weekly km and vert ranges are the band you work inside, not suggestions. Do NOT restate the whole season; generate only these ${durationWeeks} weeks.
 ` : ''}
 ### SUGGESTED PHASE DISTRIBUTION
+This split is a DEFAULT, not a prescription. The methodology retrieved above is
+the primary source: if it prescribes a different structure for this race type,
+distance or terrain, follow the books and say in the methodology field which source you
+followed and where you departed from the default.
 - Base Phase: Weeks 1-${baseWeeks} (${baseWeeks} weeks)
 - Support/Build Phase: Weeks ${baseWeeks + 1}-${baseWeeks + supportWeeks} (${supportWeeks} weeks)
 - Specific/Peak Phase: Weeks ${baseWeeks + supportWeeks + 1}-${hasRaceGoal ? durationWeeks - 1 : durationWeeks} (${specificWeeks} weeks)
@@ -781,11 +780,7 @@ ${hasRaceGoal ? `- Taper: Week ${durationWeeks} (1 week)` : ''}
 - Training days: ${trainingDays || 'NOT SPECIFIED — say so in your response instead of assuming a schedule'}
 - Notes: ${notes || 'None'}
 ${dayBudgetNote(runsPerWeek, trainingDays)}
-## TRIPHASIC PACE CALCULATOR (sub-2hr HM)
-- Race Pace: 5:40/km (100%)
-- Fast Quality (106-114%): 4:58-5:21/km
-- Endurance Quality (86-94%): 6:01-6:36/km
-- Easy: 6:30-7:00+/km
+${formatGoalPaceBlock(goalPace(targetRace, notes))}
 
 Return the plan as a JSON object with this structure:
 {
