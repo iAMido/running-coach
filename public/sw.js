@@ -4,7 +4,10 @@
 // The activate handler below deletes any cache with a name that DOESN'T
 // match the current — so bumping forces every installed PWA to drop its
 // pre-bump cached JS on next page open.
-const CACHE_NAME = 'running-coach-v2-gfm';
+// Bumped 2026-09-04: the precache list pointed at .png icons that do not
+// exist (the files are .svg), which broke the ENTIRE precache — see the
+// install handler. Existing clients must re-install the cache.
+const CACHE_NAME = 'running-coach-v3-precache-fix';
 const OFFLINE_URL = '/offline';
 
 // Assets to cache on install
@@ -16,18 +19,37 @@ const STATIC_ASSETS = [
   '/coach/review',
   '/coach/settings',
   '/offline',
-  '/icons/icon-192x192.png',
-  '/icons/icon-512x512.png',
+  '/icons/icon-192x192.svg',
+  '/icons/icon-512x512.svg',
 ];
 
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      console.log('[SW] Caching static assets');
-      return cache.addAll(STATIC_ASSETS).catch((err) => {
-        console.log('[SW] Some assets failed to cache:', err);
-      });
+    caches.open(CACHE_NAME).then(async (cache) => {
+      // Cache each asset INDIVIDUALLY.
+      //
+      // `cache.addAll` is atomic: if any single request fails, the whole call
+      // rejects and NOTHING is cached. This file listed two .png icons that do
+      // not exist (the files are .svg), so every install failed entirely — and
+      // the `.catch` swallowed it into a console.log. The offline page itself
+      // was therefore never cached, which meant going offline showed the
+      // browser's own error page rather than /offline. The PWA looked fine and
+      // had no cache at all.
+      //
+      // One missing asset should cost that asset, not the entire offline
+      // capability.
+      const results = await Promise.allSettled(
+        STATIC_ASSETS.map((url) => cache.add(url)),
+      );
+      const failed = STATIC_ASSETS.filter((_, i) => results[i].status === 'rejected');
+      if (failed.length > 0) {
+        // Loud, and it names them. A silent partial precache is how this
+        // survived: the symptom only appears offline, weeks later.
+        console.error('[SW] These assets failed to cache:', failed);
+      } else {
+        console.log('[SW] Cached', STATIC_ASSETS.length, 'static assets');
+      }
     })
   );
   // Activate immediately

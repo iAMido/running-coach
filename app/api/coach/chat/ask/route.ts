@@ -203,7 +203,6 @@ export async function POST(request: NextRequest) {
       context,
       queryType,
       plan: activePlan,
-      hasActivePlan: !!activePlan,
       latestWellnessDay,
     });
     if (preflight.augmentedSystemSuffix) {

@@ -28,7 +28,10 @@ export interface PreflightInput {
   /** Actual runs for the period being analyzed (weekly review). */
   weekRuns?: Run[];
   /** For plan_modification: must be truthy. */
-  hasActivePlan?: boolean;
+  // `hasActivePlan` was removed 2026-09-04: it was declared, destructured and
+  // never read, while callers dutifully passed it. An input that looks
+  // consulted and is not is the same trap as a default that looks measured.
+  // The real gate is `requireActivePlan`, exported separately below.
   /**
    * `day` (YYYY-MM-DD) of the newest daily_wellness row, or null when there is
    * none. Undefined means the caller did not check, and no warning is raised —
@@ -48,12 +51,32 @@ export function validateContext(input: PreflightInput): PreflightResult {
   const warnings: PreflightWarning[] = [];
   const augmentations: string[] = [];
 
-  const { context, queryType, plan, weekRuns, hasActivePlan, latestWellnessDay } = input;
+  const { context, queryType, plan, weekRuns, latestWellnessDay } = input;
   const user = context.userContext;
   const coach = context.coachContext;
   const book = context.bookContext;
 
   // ── Always-on checks ─────────────────────────────────────────────────
+
+  // Retrieval health, on EVERY query type.
+  //
+  // This check used to live only under `plan_generation`. When RAG vector
+  // search was dead for months (a search_path bug, then a threshold above the
+  // corpus maximum), it fired exactly ONCE — on the single plan generation ever
+  // run — while 20 chat and weekly-review calls reported a clean preflight. The
+  // most-used paths were the least monitored, which is the wrong way round.
+  //
+  // Zero sources is now unambiguous. With the threshold calibrated to 0.45
+  // against the real corpus every measured query returns matches, so an empty
+  // result means retrieval FAILED rather than that nothing was relevant.
+  if (book.sources.length === 0) {
+    warnings.push({
+      code: 'no_book_sources',
+      message:
+        'Methodology retrieval returned NO sources. The coach is running on the model\'s priors alone. This usually means retrieval is broken, not that the corpus is empty.',
+      severity: 'warn',
+    });
+  }
   if (user.tokenCount < 200) {
     warnings.push({
       code: 'user_context_too_small',
@@ -131,13 +154,7 @@ export function validateContext(input: PreflightInput): PreflightResult {
     }
 
     case 'plan_generation': {
-      if (book.sources.length === 0) {
-        warnings.push({
-          code: 'no_book_sources',
-          message: 'Methodology retrieval returned no book sources. Plan will rely on the model\'s priors only.',
-          severity: 'warn',
-        });
-      }
+      // no_book_sources is now an always-on check — see validateContext.
       if (coach.workoutsIncluded.length === 0) {
         warnings.push({
           code: 'no_coach_workouts',
