@@ -266,6 +266,24 @@ An earlier version of this note asserted the opposite — that most weeks would 
 
 **Mountain race build (2027-07-03, 21K/1300m) — see `docs/mountain-race-plan.md`.** Full handoff reference plus a chunked implementation plan. **Decided 2026-09-03: the app tracks and advises; it does NOT generate the mountain plan** (the athlete builds it externally), so that doc's Chunks 4 and 6 — trail plan type, plan-form UI — are out of scope. Chunk 1 (elevation) is done; Chunks 2 (pace-band gates), 3 (trail methodology into RAG) and 5 (indoor alternative) remain.
 
+⚠️ **RAG vector search was broken for every AI call, and failed silently. Fixed 2026-09-03.**
+
+`match_instructions`, `match_user_resources`, `search_instructions` and `search_instructions_filtered` pinned `search_path = pg_catalog, public, runcoach` — hardening against a mutable search_path — but the `vector` extension lives in the **`extensions`** schema. pgvector's `<=>` was therefore unresolvable inside the function bodies, and every call raised `operator does not exist: extensions.vector <=> extensions.vector`.
+
+So book methodology, coach workouts and user resources all returned nothing, and **Ask Coach, weekly review and plan generation were running on the model's priors alone.** The corpus was intact the entire time: 7 books, **1,452 instructions, every one embedded**, none of it reachable.
+
+It survived because it fails **soft** — each retriever catches the error and continues with an empty layer, so the only symptom is a console warning on a server nobody watches. What exposed it: a generated plan cited *"Training for the Uphill Athlete"*, a book not in this database. With an empty RAG layer the model had nothing real to cite and confabulated a plausible source. After the fix, the same prompt cited 80/20 and the Norwegian Method — both genuinely loaded.
+
+Two lessons worth keeping:
+- **A silent-degradation path needs a loud check.** The supervisor pre-flight is meant to flag "no book sources for plan generation" and did not save us. If this class of failure matters, that check deserves attention.
+- **A fabricated citation is a symptom of an empty context, not just a model quirk.** It is the cheapest available signal that retrieval died.
+
+Fix: `supabase/migrations/20260903_fix_vector_search_path.sql` adds `extensions` to each path, still pinned. **Any future function doing vector work in `runcoach` needs `extensions` on its search_path.**
+
+**Verifying prompt changes end to end:** `scripts/verify-plan-generation.ts` runs the real plan-generation path (one Opus call) and writes nothing to the database. Unit tests cannot answer whether the model actually emits the fields a prompt asked for; this can. Its first run caught both the RAG breakage above and the fact that the new elevation/indoor fields had no UI to render them.
+
+Measured result of the 2026-09-03 verification run — 12-week trail plan, 4 days, 21K/1300 m: 12/12 weeks carried `total_elevation_gain_m`, 48/48 workouts carried `elevation_gain_m` and `indoor_alternative`, **zero sessions scheduled outside the four selected days**, and the down weeks cut vert harder than km (week 3→4: vert −45%, km −20%), which is what the prompt asks for and the thing most likely to be quietly ignored.
+
 **Plan generation is elevation-aware as of 2026-09-03 (Chunks 4 + 5).** The app DOES generate the mountain plan — an earlier note here said track-and-advise only; that was a misunderstanding, corrected by the athlete.
 
 `buildRaceDemandBlock()` (`lib/ai/coach-prompts.ts`, pure, tested in `lib/ai/race-demand.test.ts`) renders a RACE DEMAND section into the plan prompt whenever `raceElevationGainM` is supplied. It computes the race's gradient rather than leaving the model to divide, and states the gap against the athlete's **own measured climbing** from `getClimbBaseline()` (`lib/db/runs.ts`, 120-day window). For this race it renders: *61.9 m/km, 3.1× his steepest run ever, 7.0× his median* — then instructs that gradient is the limiter and distance largely in hand. With no measured history it says so and starts conservatively instead of inventing a ramp.
