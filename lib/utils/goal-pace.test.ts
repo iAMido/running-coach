@@ -89,7 +89,6 @@ test('the terrain pattern contains no invisible control characters', () => {
   // cat and editor view. The regex is now built from an array of strings for
   // the same reason.
   const source = TERRAIN_WITHOUT_FLAT_PACE.source;
-  // eslint-disable-next-line no-control-regex
   expect(/[\x00-\x1f]/.test(source)).toBe(false);
 
   // And it does the job it exists for, on the athlete's real profile text.
