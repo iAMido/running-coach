@@ -51,7 +51,7 @@ export type ScoreColour = 'good' | 'warn' | 'bad';
 
 interface ScorecardRowBase {
   /** Stable key for the UI; not shown. */
-  key: 'zone_discipline' | 'recovery' | 'aerobic_control';
+  key: 'zone_discipline' | 'recovery' | 'aerobic_control' | 'climb';
   axis: string;
   /** The headline figure or verdict. */
   value: string;
@@ -105,6 +105,10 @@ export interface ScorecardRun {
   /** The plan's target_hr for that day, when the day was planned. */
   plannedTargetHr: string | null;
   plannedType: string | null;
+  /** Metres climbed. Null means UNMEASURED, never flat. */
+  elevationGainM: number | null;
+  /** What the plan asked for that day, when it asked for anything. */
+  plannedElevationGainM: number | null;
 }
 
 export interface ScorecardInput {
@@ -115,6 +119,12 @@ export interface ScorecardInput {
   readiness: ReadinessVerdict | null;
   /** Every decoupling value this athlete has, for the percentile. */
   decouplingHistory: number[];
+  /**
+   * The macro phase's weekly vert band, when a season is active. Gives the
+   * climb row something to be judged against on a week the plan itself did not
+   * prescribe day-by-day vert.
+   */
+  phaseVertRangeM?: [number, number] | null;
 }
 
 /** Below this the percentile is too coarse to mean anything (matches decoupling.ts). */
@@ -289,7 +299,73 @@ export function buildScorecard(input: ScorecardInput): Scorecard {
       zoneDisciplineRow(input.runs),
       recoveryRow(input.readiness),
       aerobicControlRow(input.runs, input.decouplingHistory),
+      climbRow(input.runs, input.phaseVertRangeM ?? null),
     ],
+  };
+}
+
+/**
+ * Weekly climb against what was asked for.
+ *
+ * Coloured ONLY when there is a target to compare against — a prescribed
+ * per-day vert, or the active phase's weekly band. Without one this reports
+ * the number and withholds a verdict, because "you climbed 300 m" is not good
+ * or bad until something says what it should have been. That is the same rule
+ * the aerobic-control row follows, and for the same reason.
+ *
+ * Unmeasured never counts as zero. A week whose runs carry no elevation says
+ * so; it does not report 0 m and score itself red.
+ */
+function climbRow(runs: ScorecardRun[], phaseVertRangeM: [number, number] | null): ScorecardRow {
+  const measured = runs.filter((r) => typeof r.elevationGainM === 'number');
+  if (runs.length === 0 || measured.length === 0) {
+    return {
+      key: 'climb', axis: 'Climb',
+      value: 'Not measured', colour: null,
+      detail: runs.length === 0
+        ? 'no runs this week'
+        : `none of this week's ${runs.length} runs carried elevation data — this is missing data, not flat terrain`,
+      colourless: 'no elevation data this week',
+    };
+  }
+
+  const actual = measured.reduce((sum, r) => sum + (r.elevationGainM as number), 0);
+  const partial = measured.length < runs.length;
+  const coverage = partial ? ` (from ${measured.length} of ${runs.length} runs, so a floor)` : '';
+
+  const planned = runs.reduce(
+    (sum, r) => (typeof r.plannedElevationGainM === 'number' ? sum + r.plannedElevationGainM : sum),
+    0,
+  );
+  const hasPlanned = runs.some((r) => typeof r.plannedElevationGainM === 'number');
+
+  // A plan's own per-day targets beat the phase band: it is the more specific
+  // statement of intent for this particular week.
+  if (hasPlanned && planned > 0) {
+    const ratio = actual / planned;
+    return {
+      key: 'climb', axis: 'Climb',
+      value: `${Math.round(actual)} m of ${Math.round(planned)} m`,
+      colour: ratio >= 0.85 && ratio <= 1.2 ? 'good' : ratio >= 0.6 ? 'warn' : 'bad',
+      detail: `${Math.round(ratio * 100)}% of the climb the plan asked for${coverage}.`,
+    };
+  }
+
+  if (phaseVertRangeM) {
+    const [floor, ceiling] = phaseVertRangeM;
+    return {
+      key: 'climb', axis: 'Climb',
+      value: `${Math.round(actual)} m`,
+      colour: actual >= floor && actual <= ceiling ? 'good' : actual >= floor * 0.75 ? 'warn' : 'bad',
+      detail: `Phase band is ${floor}-${ceiling} m/week${coverage}.`,
+    };
+  }
+
+  return {
+    key: 'climb', axis: 'Climb',
+    value: `${Math.round(actual)} m`, colour: null,
+    detail: `Across ${measured.length} run${measured.length === 1 ? '' : 's'}${coverage}.`,
+    colourless: 'no weekly climb target to judge against — the plan prescribed none and no season phase is active',
   };
 }
 

@@ -20,6 +20,8 @@ function run(over: Partial<ScorecardRun> = {}): ScorecardRun {
     decouplingPct: 6.0,
     plannedTargetHr: 'Z1-Z2 (125-145)',
     plannedType: 'Easy Run',
+    elevationGainM: 80,
+    plannedElevationGainM: null,
     ...over,
   };
 }
@@ -128,4 +130,53 @@ test('sample size travels with the card', () => {
   const c = card({ runs: [run(), run({ zones: null })] });
   expect(c.runCount).toBe(2);
   expect(c.runsWithZones).toBe(1);
+});
+
+test('the climb row withholds a verdict when nothing says what the climb should be', () => {
+  // 80 m is neither good nor bad on its own. Without a prescribed target or an
+  // active phase band there is nothing to judge it against, and inventing one
+  // is what the whole card refuses to do.
+  const row = card().rows.find((r) => r.key === 'climb')!;
+  expect(row.colour).toBeNull();
+  expect(row.value).toContain('80 m');
+  expect('colourless' in row && row.colourless).toContain('no weekly climb target');
+});
+
+test('unmeasured climb is never scored as zero', () => {
+  // A week with no elevation readings must say so. Reporting 0 m and colouring
+  // it red would score the athlete on missing data.
+  const row = card({ runs: [run({ elevationGainM: null })] }).rows.find((r) => r.key === 'climb')!;
+  expect(row.colour).toBeNull();
+  expect(row.value).toBe('Not measured');
+  expect(row.detail).toContain('not flat terrain');
+});
+
+test('a prescribed climb target is what the week is judged against', () => {
+  const onTarget = card({
+    runs: [run({ elevationGainM: 400, plannedElevationGainM: 400 })],
+  }).rows.find((r) => r.key === 'climb')!;
+  expect(onTarget.colour).toBe('good');
+  expect(onTarget.value).toBe('400 m of 400 m');
+
+  const wellShort = card({
+    runs: [run({ elevationGainM: 100, plannedElevationGainM: 400 })],
+  }).rows.find((r) => r.key === 'climb')!;
+  expect(wellShort.colour).toBe('bad');
+});
+
+test('the phase band judges a week the plan did not prescribe vert for', () => {
+  const inBand = card({
+    runs: [run({ elevationGainM: 600 })],
+    phaseVertRangeM: [500, 800],
+  }).rows.find((r) => r.key === 'climb')!;
+  expect(inBand.colour).toBe('good');
+  expect(inBand.detail).toContain('500-800 m/week');
+});
+
+test('a partial week says its total is a floor', () => {
+  const row = card({
+    runs: [run({ elevationGainM: 300 }), run({ elevationGainM: null })],
+  }).rows.find((r) => r.key === 'climb')!;
+  expect(row.detail).toContain('floor');
+  expect(row.value).toContain('300 m');
 });

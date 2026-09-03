@@ -300,6 +300,20 @@ Verified after: book layer **0 → 26,040 tokens** across 20 chunks from 4 books
 
 Measured result of the 2026-09-03 verification run — 12-week trail plan, 4 days, 21K/1300 m: 12/12 weeks carried `total_elevation_gain_m`, 48/48 workouts carried `elevation_gain_m` and `indoor_alternative`, **zero sessions scheduled outside the four selected days**, and the down weeks cut vert harder than km (week 3→4: vert −45%, km −20%), which is what the prompt asks for and the thing most likely to be quietly ignored.
 
+⚠️ **The pace band is gradient-gated as of 2026-09-03 — power-hiking counts as work on a climb.** `decoupling.ts` and `efficiency.ts` keep the 3–12 min/km band on ordinary runs and raise the ceiling to `MAX_PLAUSIBLE_PACE_MIN_KM_STEEP = 22` when `vert_per_km >= 15` (the same `VERT_SESSION_MIN_M_PER_KM` the classifier uses — one definition, shared).
+
+Gated on **gradient, not run type**, and the data chose that: of 13 laps above 12 min/km in this athlete's history, the contaminating ones (28.5–88.9 min/km, all 70–85 s fragments covering 21–49 m — standing still on a stair session) come from runs at **6.7 and 10.1 m/km**. Flat runs, which never qualify for the raised ceiling. Blanket-excluding climb sessions by type would instead silence the case that matters most: a climb session that never reached its target effort.
+
+22 is **provisional** — above the 15–20 power-hiking band rather than inside it, chosen with no mountain-session data to calibrate against. Re-measure once a real climbing block exists.
+
+⚠️ **`MIN_LAP_DURATION_SEC = 30` applies ONLY on the steep path**, and that restriction is load-bearing. It exists because the raised ceiling would admit the 1–3 second, 3-metre lap fragments that resolve to 13–29 min/km. Applied globally it would drop **79 laps across 50 runs** that sit under 30 s *inside* the normal 3–12 band, silently restating half the stored decoupling values under a rule they were never computed with. (It was written globally first, with a comment asserting it was a no-op. Measuring proved otherwise — the assertion had been made before the query.)
+
+Unmeasured gradient always keeps the road ceiling. Absent is not steep.
+
+**Elevation reaches the watch (2026-09-03).** `planWorkoutToDescription` emits the climb target and the indoor alternative as **notes**, never as workout steps — intervals.icu's parser has no elevation syntax and inventing one risks malforming the workout. The climb also enters the event *name*, since on a calendar that is all the athlete sees without opening it. A test pins that the parser-facing half of the description stays byte-identical whatever notes are attached; that half was verified live and must not drift.
+
+**The scorecard has a `climb` row (2026-09-03).** Coloured only when there is something to judge against — the plan's own per-day `elevation_gain_m` first, else the active macro phase's `weekly_vert_range_m`. With neither it reports the number and withholds a verdict, exactly as the aerobic-control row does. An unmeasured week renders "Not measured", never 0 m scored red. A week mixing measured and unmeasured runs says its total is a floor. `formatScorecard` and the UI both iterate rows generically, so the row reaches the weekly review prompt and the page with no further wiring.
+
 **Adaptation runs as THREE loops on three clocks (2026-09-03).** Do not collapse them into one mechanism.
 
 | loop | cadence | scope | entry point |

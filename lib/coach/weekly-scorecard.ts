@@ -13,11 +13,13 @@ import { buildScorecard, type Scorecard, type ScorecardRun } from '@/lib/utils/s
 import { plannedWorkoutForRunDate } from '@/lib/ai/run-reaction';
 import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
 import type { TrainingPlan } from '@/lib/db/types';
+import { getActiveMacroPlan, phaseForWeek } from '@/lib/coach/macro-plan';
 
 interface WeekRunRow {
   date: string;
   run_type: string | null;
   decoupling_pct: number | null;
+  elevation_gain_m: number | null;
   pct_z1: number | null; pct_z2: number | null; pct_z3: number | null;
   pct_z4: number | null; pct_z5: number | null; pct_z6: number | null;
 }
@@ -37,7 +39,7 @@ export async function buildScorecardForUser(
   const [runsRes, historyRes, readiness] = await Promise.all([
     supabase
       .from('runs')
-      .select('date,run_type,decoupling_pct,pct_z1,pct_z2,pct_z3,pct_z4,pct_z5,pct_z6')
+      .select('date,run_type,decoupling_pct,elevation_gain_m,pct_z1,pct_z2,pct_z3,pct_z4,pct_z5,pct_z6')
       .eq('user_id', userId)
       .gte('date', `${weekStart}T00:00:00Z`)
       .lte('date', `${weekEnd}T23:59:59Z`)
@@ -62,10 +64,26 @@ export async function buildScorecardForUser(
         pct_z4: r.pct_z4, pct_z5: r.pct_z5, pct_z6: r.pct_z6,
       },
       decouplingPct: r.decoupling_pct,
+      elevationGainM: r.elevation_gain_m,
       plannedTargetHr: workout?.target_hr ?? null,
       plannedType: workout?.type ?? null,
+      plannedElevationGainM: workout?.elevation_gain_m ?? null,
     };
   });
+
+  // The season's weekly climb band, so a week the plan did not prescribe
+  // day-by-day vert still has something to be judged against. Best-effort: a
+  // missing season leaves the climb row without a verdict, which is honest.
+  let phaseVertRangeM: [number, number] | null = null;
+  try {
+    const macro = await getActiveMacroPlan(userId);
+    if (macro && plan?.start_date) {
+      const seasonWeek = calculateCurrentWeek(plan.start_date, plan.duration_weeks, new Date(`${weekStart}T12:00:00Z`)).currentWeek;
+      phaseVertRangeM = phaseForWeek(macro, seasonWeek)?.weekly_vert_range_m ?? null;
+    }
+  } catch (err) {
+    console.error('scorecard: season phase unavailable:', err);
+  }
 
   const weekNumber = plan?.start_date
     ? calculateCurrentWeek(plan.start_date, plan.duration_weeks, new Date(`${weekStart}T12:00:00Z`)).currentWeek
@@ -76,6 +94,7 @@ export async function buildScorecardForUser(
     weekStart,
     weekEnd,
     runs,
+    phaseVertRangeM,
     readiness: readiness?.readiness ?? null,
     decouplingHistory: ((historyRes.data ?? []) as { decoupling_pct: number }[]).map((r) => r.decoupling_pct),
   });
