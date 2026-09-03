@@ -1,5 +1,6 @@
 /**
- * One-shot: add gap_pace_min_km + cadence_spm to lap rows that already exist.
+ * One-shot: add gap_pace_min_km, cadence_spm and elevation_gain_m to lap rows
+ * that already exist.
  *
  * Why this is separate from `backfill-intervals.ts`: `upsertRun` gates lap
  * writing on `countLaps(existing.id) === 0`. That gate is correct — it is what
@@ -96,20 +97,23 @@ async function main() {
     try {
       const { data: lapRows } = await supabase
         .from('laps')
-        .select('id,lap_number,distance_km,gap_pace_min_km,cadence_spm')
+        .select('id,lap_number,distance_km,gap_pace_min_km,cadence_spm,elevation_gain_m')
         .eq('run_id', run.id)
         .order('lap_number', { ascending: true });
 
       const stored = (lapRows ?? []) as {
         id: string; lap_number: number; distance_km: number | null;
         gap_pace_min_km: number | null; cadence_spm: number | null;
+        elevation_gain_m: number | null;
       }[];
       if (stored.length === 0) {
         runsNoLapsStored++;
         continue;
       }
 
-      const needing = stored.filter((l) => l.gap_pace_min_km == null || l.cadence_spm == null);
+      const needing = stored.filter(
+        (l) => l.gap_pace_min_km == null || l.cadence_spm == null || l.elevation_gain_m == null,
+      );
       if (needing.length === 0) {
         runsAlreadyDone++;
         continue;
@@ -155,6 +159,12 @@ async function main() {
         const patch: Record<string, unknown> = {};
         if (lap.gap_pace_min_km == null && src.gapPaceMinKm != null) patch.gap_pace_min_km = src.gapPaceMinKm;
         if (lap.cadence_spm == null && src.cadenceSpm != null) patch.cadence_spm = src.cadenceSpm;
+        // Which SEGMENT of the session climbed. Never summed into the run
+        // total: provider laps are detected segments that do not tile the
+        // activity (measured 130.4 m across laps against 210.9 m on the run).
+        if (lap.elevation_gain_m == null && src.elevationGainM != null) {
+          patch.elevation_gain_m = src.elevationGainM;
+        }
         if (Object.keys(patch).length === 0) continue;
 
         if (COMMIT) {
@@ -203,7 +213,11 @@ async function main() {
     .from('laps')
     .select('*', { count: 'exact', head: true })
     .not('gap_pace_min_km', 'is', null);
-  console.log(`\nlaps total: ${totalLaps} · with GAP now: ${withGap}`);
+  const { count: withElev } = await supabase
+    .from('laps')
+    .select('*', { count: 'exact', head: true })
+    .not('elevation_gain_m', 'is', null);
+  console.log(`\nlaps total: ${totalLaps} · with GAP now: ${withGap} · with elevation now: ${withElev}`);
 }
 
 main().catch((err) => {

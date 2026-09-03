@@ -5,8 +5,12 @@
  * that matters there is not the distance, which this athlete can already cover,
  * but the gradient: **61.9 m/km**, against a measured history of
  *
- *   n=128 runs carrying elevation, probed live 2026-09-03
- *   min 0.0 · p25 7.5 · median 8.8 · p75 10.8 · p90 11.6 · max 20.2 m/km
+ *   n=128 runs carrying elevation, measured 2026-09-03 after the backfill
+ *   min 0.0 · p25 7.5 · median 8.8 · p75 10.9 · p90 11.7 · p95 12.0 · max 20.2
+ *
+ * Note where the mass sits: p95 is 12.0, and his two steepest runs (20.2 and
+ * 13.3) are both from a New York trip. His steepest run in Israel is 12.7. The
+ * terrain he can reach from home is essentially one band wide.
  *
  * Race day is ~3x his steepest single run ever and ~7x his typical one.
  *
@@ -56,11 +60,26 @@ export type ClimbCategory = 'Flat' | 'Rolling' | 'Hilly' | 'Mountain';
 /**
  * Lower bound of each band, m/km, keyed to the athlete's own distribution.
  *
- *   Flat     < 5     — 18 of his 128 runs. Below his p25 (7.5).
- *   Rolling  5-12    — 109 runs. His median (8.8) and p90 (11.6) both sit here;
- *                      this is simply what his normal running is.
- *   Hilly    12-25   — 1 run (20.2, his steepest ever). Genuinely rare for him.
+ *   Flat     < 5     — 19 of his 128 runs. Below his p25 (7.5).
+ *   Rolling  5-15    — 107 runs. His median (8.8), p90 (11.7) and p95 (12.0)
+ *                      all sit here, as does every run he has done in Israel.
+ *                      This is simply what his normal running is.
+ *   Hilly    15-25   — 1 run (20.2, in New York). Genuinely rare for him.
  *   Mountain >= 25   — 0 runs. NOTHING in his history reaches this band.
+ *
+ * ## Why the Hilly floor is 15 and not 12
+ *
+ * 12 was the first choice and it was wrong, in a way only measuring after the
+ * backfill revealed: **his p95 is exactly 12.0**, so a floor of 12 landed on
+ * top of a dense cluster. Seven runs cleared it, and five of them were
+ * ordinary 5-8 km easy and recovery runs sitting at 12.0-12.7 — a one-metre
+ * difference in recorded climb flipped them between "easy run" and "hill
+ * session". A band boundary inside the bulk of a distribution does not
+ * classify, it coin-flips.
+ *
+ * 15 sits clear above everything he can reach from home (his Israeli maximum
+ * is 12.7) and below the gradients mountain training will actually produce —
+ * the local trail loops in docs/mountain-race-plan.md run 26-47 m/km.
  *
  * `Mountain` having no historical member is the point, not an oversight: race
  * day is 61.9 m/km and the gap between "his hardest ever" and "the race" is the
@@ -69,7 +88,7 @@ export type ClimbCategory = 'Flat' | 'Rolling' | 'Hilly' | 'Mountain';
  */
 export const CLIMB_BANDS: { category: ClimbCategory; minVertPerKm: number }[] = [
   { category: 'Mountain', minVertPerKm: 25 },
-  { category: 'Hilly', minVertPerKm: 12 },
+  { category: 'Hilly', minVertPerKm: 15 },
   { category: 'Rolling', minVertPerKm: 5 },
   { category: 'Flat', minVertPerKm: 0 },
 ];
@@ -95,13 +114,16 @@ export function climbCategoryIsUnprecedented(category: ClimbCategory | null): bo
  * The gradient at which a run is a climbing session rather than a run that
  * happened to go uphill.
  *
- * 12 m/km is his `Hilly` floor, and it flags exactly 1 of his 128 recorded
- * runs. That rarity is the calibration: on his current terrain this fires
- * almost never, and once mountain-specific work starts it should fire often.
- * A threshold that already matched a third of his history would measure his
- * neighbourhood, not his training.
+ * Tracks the `Hilly` floor, and flags exactly 1 of his 128 recorded runs. That
+ * rarity is the calibration: on the terrain he can currently reach this fires
+ * almost never, and once mountain-specific work starts it should fire often. A
+ * threshold matching a third of his history would be measuring his
+ * neighbourhood rather than his training.
+ *
+ * Sits deliberately clear of the 12.0-12.7 cluster at his p95 — see the note
+ * on CLIMB_BANDS for what happens to a boundary placed inside the bulk.
  */
-export const VERT_SESSION_MIN_M_PER_KM = 12;
+export const VERT_SESSION_MIN_M_PER_KM = 15;
 
 /**
  * Distance at which a high-vert session reads as a long run rather than a

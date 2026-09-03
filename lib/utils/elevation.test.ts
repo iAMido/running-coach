@@ -37,7 +37,7 @@ test('the Mountain band has no member in this athlete history, and that is the p
   // His measured maximum is 20.2 m/km over 128 runs; race day is 61.9. If a
   // future change lowers the Mountain floor to "fill" the band, this fails —
   // which is the intended outcome, because the empty band IS the training gap.
-  const ATHLETE_STEEPEST_EVER = 20.2;
+  const ATHLETE_STEEPEST_EVER = 20.2; // New York, 2025-10-31
   expect(climbCategory(ATHLETE_STEEPEST_EVER)).toBe('Hilly');
   expect(climbCategoryIsUnprecedented(climbCategory(ATHLETE_STEEPEST_EVER))).toBe(false);
 
@@ -50,8 +50,8 @@ test('bands match the measured distribution they were derived from', () => {
   expect(climbCategory(4.9)).toBe('Flat');
   expect(climbCategory(5)).toBe('Rolling');
   expect(climbCategory(8.8)).toBe('Rolling'); // his median run
-  expect(climbCategory(11.6)).toBe('Rolling'); // his p90
-  expect(climbCategory(12)).toBe('Hilly');
+  expect(climbCategory(11.7)).toBe('Rolling'); // his p90
+  expect(climbCategory(15)).toBe('Hilly');
   expect(climbCategory(25)).toBe('Mountain');
 
   // Bands are ordered descending so `find` returns the tightest match.
@@ -59,12 +59,22 @@ test('bands match the measured distribution they were derived from', () => {
   expect([...floors].sort((a, b) => b - a)).toEqual(floors);
 });
 
-test('the vert-session threshold is rare on his current terrain', () => {
-  // Fires on 1 of 128 recorded runs. A threshold that already matched a third
-  // of his history would be measuring his neighbourhood, not his training.
-  expect(VERT_SESSION_MIN_M_PER_KM).toBe(12);
+test('the vert-session threshold clears the cluster at his p95', () => {
+  // Fires on 1 of 128 recorded runs. A threshold matching a third of his
+  // history would be measuring his neighbourhood, not his training.
+  expect(VERT_SESSION_MIN_M_PER_KM).toBe(15);
   expect(8.8).toBeLessThan(VERT_SESSION_MIN_M_PER_KM); // median run: not a vert session
   expect(20.2).toBeGreaterThan(VERT_SESSION_MIN_M_PER_KM); // steepest ever: is one
+
+  // The regression this test exists for. The first version of this threshold
+  // was 12, which is EXACTLY his p95 — five ordinary 5-8 km easy and recovery
+  // runs sat at 12.0-12.7 and would have been relabelled hill sessions on a
+  // one-metre difference in recorded climb. Every one of those must stay below
+  // the line, and his steepest Israeli run (12.7) is the binding case.
+  for (const clusterRun of [12.0, 12.1, 12.7]) {
+    expect(clusterRun).toBeLessThan(VERT_SESSION_MIN_M_PER_KM);
+    expect(climbCategory(clusterRun)).toBe('Rolling');
+  }
 });
 
 test('race gradient is roughly 3x his steepest and 7x his median', () => {
@@ -78,6 +88,8 @@ test('descent renders alongside climb and is positive, not a negative gain', () 
   expect(formatVert(340, 10, 380)).toBe('[+340m / -380m, 34.0 m/km — Mountain]');
   // Loss is optional; gain alone still renders.
   expect(formatVert(88, 10)).toBe('[+88m, 8.8 m/km — Rolling]');
+  // His steepest Israeli run reads as ordinary, because it is.
+  expect(formatVert(127, 10)).toBe('[+127m, 12.7 m/km — Rolling]');
   // No distance means no gradient, but the raw climb is still worth stating.
   expect(formatVert(340, 0)).toBe('[+340m]');
 });
