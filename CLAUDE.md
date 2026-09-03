@@ -264,6 +264,8 @@ So neither zones nor `target_hr` is the constraint, and there is no plan-generat
 
 An earlier version of this note asserted the opposite — that most weeks would render grey because `target_hr` and zone coverage were thin — inferred from that single week without measuring the window. Same failure shape as the n=1 season baseline and the two-August-medians estimate: **generalising from one observation is this codebase's most persistent remaining error**, now that the data itself is sound. Measure the window before drawing the curve.
 
+**Mountain race build (2027-07-03, 21K/1300m) — see `docs/mountain-race-plan.md`.** Full handoff reference plus a chunked implementation plan. Two facts from it that change decisions elsewhere: intervals.icu supplies `total_elevation_loss` as well as gain on the summary payload (128/130 runs), so descent needs no stream fetch; and the race's **61.9 m/km** is ~3× the athlete's steepest recorded run (20.2) and 7× his median (8.8), which makes gradient — not distance — the training problem. Also note the decoupling and efficiency pace-band gates (3–12 min/km) will exclude power-hiking sessions once mountain training starts; that is the "no real instance yet" trap below, about to have many.
+
 **`athlete_profile.training_days` is load-bearing and nothing validates it (traced 2026-08-08).** It feeds plan generation, and `COACH_STATIC_BLOCK`'s day anchors mirror it. Measured over the active plan's 30 runs, days computed in **Asia/Jerusalem** (day-of-week is exactly where a UTC error hides — verified separately that zero runs sit close enough to midnight to change day, so the pattern is not an artefact):
 
 ```

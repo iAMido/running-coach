@@ -89,7 +89,10 @@
       "WebFetch(domain:forum.intervals.icu)",
       "WebFetch(domain:intervals.icu)",
       "Bash(python -c ' *)",
-      "Bash(bun test *)"
+      "Bash(bun test *)",
+      "Bash(git remote *)",
+      "Bash(bun --version)",
+      "mcp__0732c469-5241-4c0f-ace9-16687f83d9e6__find_trails_near_location"
     ]
   },
   "enableAllProjectMcpServers": true,
