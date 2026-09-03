@@ -1,7 +1,7 @@
 'use client';
 
 import { Skeleton } from '@/components/ui/skeleton';
-import { Target, ChevronLeft, ChevronRight, Sparkles, Calendar, Home, CheckCircle2 } from 'lucide-react';
+import { Target, ChevronLeft, ChevronRight, Sparkles, Calendar, Home, CheckCircle2, Mountain } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { TrainingPlan, PlanWeek, Workout } from '@/lib/db/types';
 import { isWorkoutToday, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
@@ -439,6 +439,26 @@ export default function TrainingPlanPage() {
                     >
                       <strong>Focus:</strong> {weekData.focus}
                     </p>
+                  )}
+
+                  {/* Week targets. Vert renders only when the plan prescribed
+                      it — a road plan shows km alone, exactly as before, and
+                      an absent target is never drawn as 0 m. */}
+                  {(weekData?.total_km || typeof weekData?.total_elevation_gain_m === 'number') && (
+                    <div className="flex items-center justify-center gap-4 mb-5 text-[12px]" style={{ color: 'var(--rc-ink-3)' }}>
+                      {weekData?.total_km ? (
+                        <span className="rc-mono">{weekData.total_km} km planned</span>
+                      ) : null}
+                      {typeof weekData?.total_elevation_gain_m === 'number' && (
+                        <span className="rc-mono flex items-center gap-1" style={{ color: 'oklch(0.45 0.14 145)' }}>
+                          <Mountain className="w-3.5 h-3.5" />
+                          {weekData.total_elevation_gain_m} m climb
+                          {weekData.total_km
+                            ? ` · ${(weekData.total_elevation_gain_m / weekData.total_km).toFixed(1)} m/km`
+                            : ''}
+                        </span>
+                      )}
+                    </div>
                   )}
 
                   {weekData?.workouts && Object.keys(weekData.workouts).length > 0 ? (

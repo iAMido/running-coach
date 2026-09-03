@@ -68,7 +68,11 @@ export function getDefaultProfile(): Partial<AthleteProfile> {
     max_hr: 185,
     lactate_threshold_hr: 165,
     current_goal: 'General fitness',
-    training_days: 'Mon, Wed, Fri',
+    // Deliberately empty. A seeded 'Mon, Wed, Fri' is indistinguishable from a
+    // deliberate answer once it is in the row, and every plan built on it
+    // inherits the guess — which is what happened here for months. An empty
+    // value makes the prompt say the days are unset and ask.
+    training_days: '',
     hr_zone_z1: '0-120',
     hr_zone_z2: '120-140',
     hr_zone_z3: '140-155',

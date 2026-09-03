@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Activity, Flame, ChevronDown, ChevronUp, Timer, Target, Zap } from 'lucide-react';
+import { Activity, Flame, ChevronDown, ChevronUp, Timer, Target, Zap, Mountain, Home } from 'lucide-react';
 import type { Workout } from '@/lib/db/types';
 
 // Helper function to get workout tag class based on workout type
@@ -28,7 +28,7 @@ export function WorkoutCard({ day, workout, isToday = false, variant = 'card' }:
   const [expanded, setExpanded] = useState(false);
 
   // Check if there's detailed content to show
-  const hasDetails = workout.description || workout.notes;
+  const hasDetails = workout.description || workout.notes || workout.indoor_alternative;
 
   if (variant === 'row') {
     // Table row variant for Dashboard
@@ -173,6 +173,17 @@ export function WorkoutCard({ day, workout, isToday = false, variant = 'card' }:
                 {workout.target_hr}
               </span>
             )}
+            {/* Prescribed climb. Sits with duration and pace rather than in the
+                expanded panel: on a mountain plan it is the number that decides
+                whether a session is what it claims to be, and a target hidden
+                behind a tap is a target that gets missed. Rendered only when the
+                plan prescribed one — absent means "not prescribed", not zero. */}
+            {typeof workout.elevation_gain_m === 'number' && (
+              <span className="flex items-center gap-1">
+                <Mountain className="w-3 h-3" />
+                +{workout.elevation_gain_m}m
+              </span>
+            )}
           </div>
 
           {/* Expanded details */}
@@ -188,6 +199,25 @@ export function WorkoutCard({ day, workout, isToday = false, variant = 'card' }:
                 <div className="bg-muted/50 rounded-lg p-3 border border-border/50">
                   <p className="text-xs font-medium text-muted-foreground mb-1">Notes:</p>
                   <p className="text-sm italic">{workout.notes}</p>
+                </div>
+              )}
+              {/* Collapsed by default — it is the fallback, not the session.
+                  Surfacing it inline would give equal weight to the plan and
+                  its substitute. */}
+              {workout.indoor_alternative && (
+                <div className="bg-muted/50 rounded-lg p-3 border border-border/50">
+                  <p className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                    <Home className="w-3 h-3" />
+                    If you cannot get outside:
+                  </p>
+                  <p className="text-sm leading-relaxed">
+                    <span className="font-medium">{workout.indoor_alternative.type}</span>
+                    {workout.indoor_alternative.equipment ? ` · ${workout.indoor_alternative.equipment}` : ''}
+                    {workout.indoor_alternative.duration ? ` · ${workout.indoor_alternative.duration}` : ''}
+                  </p>
+                  {workout.indoor_alternative.description && (
+                    <p className="text-sm mt-1 text-muted-foreground">{workout.indoor_alternative.description}</p>
+                  )}
                 </div>
               )}
             </div>

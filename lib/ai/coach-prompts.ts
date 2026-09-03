@@ -203,7 +203,11 @@ export function buildCoachSystemPrompt(context: LegacyCoachContext = {}): string
   const maxHr = profile?.max_hr || 185;
   const ltHr = profile?.lactate_threshold_hr || 165;
   const goal = profile?.current_goal || 'Sub-2hr Half Marathon';
-  const trainingDays = profile?.training_days || 'Mon, Wed, Fri, Sun';
+  // No invented fallback. A hardcoded 'Mon, Wed, Fri, Sun' here is a guess
+  // rendered as fact, and it is exactly how a stale training_days went
+  // unnoticed for months — the prompt read plausibly either way.
+  const trainingDays = profile?.training_days
+    || 'NOT SET — ask the athlete rather than assuming a schedule';
 
   return `You are an expert AI running coach for ${name}, trained in multiple methodologies including the RUN ELITE TRIPHASIC MODEL and the NORWEGIAN METHOD. You have deep knowledge of:
 - Exercise physiology and training principles
