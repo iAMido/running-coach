@@ -1,4 +1,5 @@
 import { formatUserContext } from './user-formatter';
+import { buildTrainingState, formatTrainingState } from '@/lib/coach/training-state';
 import { retrieveCoachContext } from './coach-retriever';
 import { retrieveBookContext } from './book-retriever';
 import {
@@ -86,7 +87,7 @@ export async function buildContext(
 
   // Build all three contexts in parallel; thread the already-fetched plan
   // and profile into the user layer so it doesn't re-query them.
-  const [userContext, coachContext, bookContext] = await Promise.all([
+  const [userContext, coachContext, bookContext, trainingState] = await Promise.all([
     formatUserContext(userId, userTokens, { plan, profile: preload.profile }),
     retrieveCoachContext(
       userId,
@@ -100,6 +101,17 @@ export async function buildContext(
       bookTokens,
       userId,
     ),
+    // The shared signal object. Same assembly the weekly proposal and the
+    // macro re-evaluation read, so the coach's answer and the plan's
+    // adjustment can never be reasoning from different numbers — the property
+    // `readinessForUser` already enforces for the GO/EASY/REST verdict.
+    //
+    // Best-effort: it is enrichment, and an outage in one signal must not cost
+    // the whole context.
+    buildTrainingState(userId, { plan, profile: preload.profile ?? null }).catch((err) => {
+      console.error('context-builder: training state unavailable:', err);
+      return null;
+    }),
   ]);
 
   // Combine into final prompt
@@ -107,7 +119,8 @@ export async function buildContext(
     userContext,
     coachContext,
     bookContext,
-    queryType
+    queryType,
+    trainingState ? formatTrainingState(trainingState) : null,
   );
 
   // Calculate total tokens used
@@ -134,7 +147,8 @@ function assembleCombinedPrompt(
   userContext: FormattedUserContext,
   coachContext: FormattedCoachContext,
   bookContext: FormattedBookContext,
-  queryType: QueryType
+  queryType: QueryType,
+  trainingStateText: string | null,
 ): string {
   const sections: string[] = [];
 
@@ -155,6 +169,14 @@ function assembleCombinedPrompt(
         ? `\nCurrent Fatigue: not available — no run feedback logged recently. Do not infer a fatigue level from its absence.`
         : `\nCurrent Fatigue: ${fatigue.toFixed(1)}/10 (${getFatigueLevel(fatigue)})`,
     );
+  }
+
+  // Still Priority 1 — measured athlete data, aggregated into trends rather
+  // than listed per run. Placed AFTER the run list so the model reads the raw
+  // evidence first and the summary second, never the reverse.
+  if (trainingStateText) {
+    sections.push('');
+    sections.push(trainingStateText);
   }
 
   // Priority 2: Old coach patterns
