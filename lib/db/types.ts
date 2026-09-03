@@ -199,7 +199,16 @@ export interface RunFeedback {
   effort_level?: number;
   feeling?: string;
   comment?: string;
-  followed_plan?: boolean | null;
+  /**
+   * Did the athlete run what the plan asked for?
+   *
+   * TEXT — 'yes' | 'no' | 'modified' — matching the column, the form and the
+   * Zod schema. It was typed `boolean` here while every writer stored a
+   * string, so the one place that read it (`=== false`) could never be true
+   * and "deviated from plan" never once reached the coach. The explicit
+   * adherence signal was collected, stored, and silently dropped.
+   */
+  followed_plan?: 'yes' | 'no' | 'modified' | null;
   pre_run_feeling?: string | null;
   created_at?: string;
 }

@@ -171,7 +171,7 @@ All tables have RLS enabled with policies for authenticated users.
 | `run_feedback` | Post-run feedback (rating, effort, notes) with `run_id` FK |
 | `training_plans` | AI-generated training plans |
 | `athlete_profile` | User settings (age, max HR, goals, etc.) |
-| `weekly_feedback` | Weekly wellness data (sleep, stress, feeling) |
+| `weekly_summaries` | Weekly wellness check-in (sleep, stress, feeling). An earlier version of this table called it `weekly_feedback`; no such table exists — same error class as the `book_embeddings` entry above. |
 | `coach_reports` | Saved AI coach analyses (weekly reviews) |
 | `strava_tokens` | Strava OAuth tokens per user |
 | `coaching_books` / `book_instructions` | RAG: running book methodology chunks (7 books, all road/track). An earlier version of this table called these `book_embeddings`; no such table exists. |

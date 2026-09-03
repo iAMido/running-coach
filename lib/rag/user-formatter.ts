@@ -641,8 +641,13 @@ function formatRunFeedback(fb: FeedbackWithRun | undefined): string {
   if (fb.rating != null) bits.push(`rated ${fb.rating}/10`);
   if (fb.effort_level != null) bits.push(`effort ${fb.effort_level}/10`);
   if (fb.feeling) bits.push(`felt "${fb.feeling}"`);
-  const fbAny = fb as RunFeedback & { followed_plan?: boolean | null; pre_run_feeling?: string | null };
-  if (fbAny.followed_plan === false) bits.push('deviated from plan');
+  const fbAny = fb as RunFeedback & { pre_run_feeling?: string | null };
+  // The athlete's own answer to "did you do the session?" — the only explicit
+  // adherence signal in the app. Everything else is inferred from HR zones.
+  // Rendered for 'no' AND 'modified': a modified session is not a missed one,
+  // and the coach should be able to tell them apart.
+  if (fbAny.followed_plan === 'no') bits.push('did NOT follow the plan');
+  else if (fbAny.followed_plan === 'modified') bits.push('modified the planned session');
   if (fbAny.pre_run_feeling) bits.push(`pre-run: "${fbAny.pre_run_feeling}"`);
   const head = bits.length ? `  Feedback: ${bits.join(', ')}` : '';
   const note = fb.comment ? `\n  Note: "${fb.comment}"` : '';
