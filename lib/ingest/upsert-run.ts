@@ -51,6 +51,7 @@ import { calculateTrimp } from '@/lib/utils/trimp';
 import { formatPace, calculatePace } from '@/lib/utils/pace';
 import { computeZonePercentsFromStream, type ZoneBands } from '@/lib/utils/zones';
 import { computeDecoupling } from '@/lib/utils/decoupling';
+import { vertPerKm } from '@/lib/utils/elevation';
 import { generateRunReaction, plannedWorkoutForRunDate } from '@/lib/ai/run-reaction';
 import type { AthleteProfile, TrainingPlan } from '@/lib/db/types';
 
@@ -336,7 +337,12 @@ async function countLaps(runId: string): Promise<number> {
  * Fill-null-only and best-effort: decoupling is derived, so failing to compute
  * it must never cost the import.
  */
-async function applyDecoupling(runId: string, runType: string | null): Promise<void> {
+async function applyDecoupling(
+  runId: string,
+  runType: string | null,
+  /** The run's gradient — raises the pace ceiling for a climbing session. */
+  vertPerKm: number | null,
+): Promise<void> {
   try {
     const { data } = await supabase
       .from('laps')
@@ -350,6 +356,7 @@ async function applyDecoupling(runId: string, runType: string | null): Promise<v
     const result = computeDecoupling(
       laps.map((l) => ({ durationSec: l.duration_sec, avgHr: l.avg_hr, gapPaceMinKm: l.gap_pace_min_km })),
       runType,
+      vertPerKm,
     );
     if (result.decouplingPct === null) return;
 
@@ -513,7 +520,7 @@ async function insertNew(userId: string, run: NormalizedRun, ctx: UpsertContext)
 
   const runId = (inserted as { id: string }).id;
   const lapsWritten = await writeLaps(runId, run);
-  await applyDecoupling(runId, runType);
+  await applyDecoupling(runId, runType, vertPerKm(run.elevationGainM, run.distanceKm));
 
   if (ctx.generateCoachNote !== false) {
     await attachCoachNote(runId, run, runType, zones, avgPaceMinKm, ctx);
@@ -644,7 +651,11 @@ async function enrichExisting(
   }
 
   if (existing.decoupling_pct == null) {
-    await applyDecoupling(existing.id, (patch.run_type as string) ?? existing.run_type);
+    await applyDecoupling(
+      existing.id,
+      (patch.run_type as string) ?? existing.run_type,
+      vertPerKm(existing.elevation_gain_m ?? run.elevationGainM, existing.distance_km ?? run.distanceKm),
+    );
   }
 
   return {

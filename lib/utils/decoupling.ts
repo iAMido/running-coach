@@ -59,6 +59,56 @@ export const MIN_PLAUSIBLE_PACE_MIN_KM = 3;
 export const MAX_PLAUSIBLE_PACE_MIN_KM = 12;
 
 /**
+ * The ceiling for a genuine climbing session, where power-hiking is the
+ * correct way to cover the ground rather than a failure to run.
+ *
+ * A 12 min/km ceiling on a 60 m/km climb throws away the work: power-hiking
+ * sits at 15-20 min/km, so a mountain session would breach
+ * MAX_EXCLUDED_DURATION_FRACTION and return null exactly when the athlete most
+ * needs to know how it went. That is the trap CLAUDE.md recorded with "no real
+ * instance yet"; the mountain build is about to supply many.
+ *
+ * Gated on GRADIENT rather than run type, which the data supports: of 13 laps
+ * in this athlete's history above 12 min/km, the contaminating ones (28.5-88.9
+ * min/km, all 70-85 second fragments covering 21-49 m — standing still on a
+ * stair session) come from runs at 6.7 and 10.1 m/km. Flat runs. They never
+ * qualify for this ceiling. The one legitimate slow lap (15.3 min/km over
+ * 218 s and 204 m) is real movement.
+ *
+ * 22 is provisional and deliberately above the 15-20 power-hiking band rather
+ * than inside it. There is no mountain-session data to calibrate against yet —
+ * re-measure once a real climbing block exists, because a ceiling chosen from
+ * road data is a guess about terrain nobody has run.
+ */
+export const MAX_PLAUSIBLE_PACE_MIN_KM_STEEP = 22;
+
+/**
+ * Gradient at which the steep ceiling applies. Tracks the vert-session
+ * threshold so "what counts as a climbing session" has one definition.
+ */
+import { VERT_SESSION_MIN_M_PER_KM } from '@/lib/utils/elevation';
+export const STEEP_CEILING_MIN_M_PER_KM = VERT_SESSION_MIN_M_PER_KM;
+
+/**
+ * Laps too short to carry an aerobic signal.
+ *
+ * **Applied ONLY when the steep ceiling is in use**, and that restriction is
+ * the whole point. Measured against this athlete's history, 79 laps across 50
+ * runs are shorter than 30 s while sitting inside the normal 3-12 min/km band
+ * — applying this globally would silently restate half of his stored
+ * decoupling values under a rule they were never computed with, which is
+ * exactly what fill-null-only ingestion exists to prevent.
+ *
+ * It is needed on the steep path because the raised ceiling would otherwise
+ * admit the 1-3 second, 3-metre lap fragments that resolve to 13-29 min/km, as
+ * though they were power-hiking.
+ *
+ * (An earlier version of this comment claimed the guard was a no-op on
+ * existing data. It is not. The claim was made before measuring.)
+ */
+export const MIN_LAP_DURATION_SEC = 30;
+
+/**
  * How much of a session may be discarded before the remainder stops
  * representing it. Beyond this, a decoupling figure computed on what is left is
  * worse than no figure — the stair session would reduce to a fragment.
@@ -133,13 +183,32 @@ function summarise(laps: UsableLap[]): HalfStats {
 const efficiencyFactor = (h: HalfStats): number =>
   h.gaDistanceKm / h.durationMin / (h.weightedHr / h.durationMin);
 
-export function computeDecoupling(laps: DecouplingLap[], runType?: string | null): DecouplingResult {
+export function computeDecoupling(
+  laps: DecouplingLap[],
+  runType?: string | null,
+  /**
+   * The run's gradient. Raises the pace ceiling for a genuine climbing
+   * session. Absent or null keeps the road ceiling — an unmeasured gradient is
+   * not a steep one.
+   */
+  vertPerKm?: number | null,
+): DecouplingResult {
   if (runType && EXCLUDED_RUN_TYPES.test(runType)) {
     return { decouplingPct: null, method: null, skippedReason: `not meaningful for ${runType}` };
   }
 
+  // On a genuine climb the pace ceiling rises so power-hiking counts as work
+  // instead of being discarded as a stop. Unmeasured gradient keeps the road
+  // ceiling — absent is not steep.
+  const isSteep =
+    typeof vertPerKm === 'number' && Number.isFinite(vertPerKm) && vertPerKm >= STEEP_CEILING_MIN_M_PER_KM;
+  const ceiling = isSteep ? MAX_PLAUSIBLE_PACE_MIN_KM_STEEP : MAX_PLAUSIBLE_PACE_MIN_KM;
+  // Only the steep path drops short laps — see MIN_LAP_DURATION_SEC for why
+  // applying it everywhere would rewrite history.
+  const minLapSec = isSteep ? MIN_LAP_DURATION_SEC : 0;
+
   const measurable: UsableLap[] = (laps ?? []).flatMap((l) =>
-    typeof l.durationSec === 'number' && l.durationSec > 0 &&
+    typeof l.durationSec === 'number' && l.durationSec > 0 && l.durationSec >= minLapSec &&
     typeof l.avgHr === 'number' && l.avgHr > 0 &&
     typeof l.gapPaceMinKm === 'number' && l.gapPaceMinKm > 0
       ? [{ durationSec: l.durationSec, avgHr: l.avgHr, gapPaceMinKm: l.gapPaceMinKm }]
@@ -148,7 +217,7 @@ export function computeDecoupling(laps: DecouplingLap[], runType?: string | null
 
   // Drop stops, stairs and walking breaks — see MIN_PLAUSIBLE_PACE_MIN_KM.
   const usable = measurable.filter(
-    (l) => l.gapPaceMinKm >= MIN_PLAUSIBLE_PACE_MIN_KM && l.gapPaceMinKm <= MAX_PLAUSIBLE_PACE_MIN_KM,
+    (l) => l.gapPaceMinKm >= MIN_PLAUSIBLE_PACE_MIN_KM && l.gapPaceMinKm <= ceiling,
   );
 
   const measurableSec = measurable.reduce((s, l) => s + l.durationSec, 0);

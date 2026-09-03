@@ -877,20 +877,22 @@ async function getLatestWeeklySummary(userId: string): Promise<WeeklySummary | n
 export async function getEfficiencyRuns(userId: string): Promise<EfRun[]> {
   const { data } = await supabase
     .from('runs')
-    .select('date,run_type,duration_min,avg_hr,gap_pace_min_km')
+    .select('date,run_type,duration_min,avg_hr,gap_pace_min_km,vert_per_km')
     .eq('user_id', userId)
     .not('gap_pace_min_km', 'is', null)
     .order('date', { ascending: true });
 
   return ((data ?? []) as {
     date: string; run_type: string | null; duration_min: number | null;
-    avg_hr: number | null; gap_pace_min_km: number | null;
+    avg_hr: number | null; gap_pace_min_km: number | null; vert_per_km: number | null;
   }[]).map((r) => ({
     date: r.date,
     runType: r.run_type,
     durationMin: r.duration_min,
     avgHr: r.avg_hr,
     gapPaceMinKm: r.gap_pace_min_km,
+    // Lets a power-hiking session count as running instead of being discarded.
+    vertPerKm: r.vert_per_km,
   }));
 }
 

@@ -238,7 +238,7 @@ export async function buildTrainingState(
     // fetched over a longer window than everything else here.
     supabase
       .from('runs')
-      .select('date,run_type,duration_min,avg_hr,gap_pace_min_km')
+      .select('date,run_type,duration_min,avg_hr,gap_pace_min_km,vert_per_km')
       .eq('user_id', userId)
       .gte('date', `${userDateStrDaysAgo(500)}T00:00:00Z`),
     supabase.from('runs').select('decoupling_pct').eq('user_id', userId).not('decoupling_pct', 'is', null),
@@ -311,6 +311,7 @@ export async function buildTrainingState(
     durationMin: (r.duration_min as number) ?? null,
     avgHr: (r.avg_hr as number) ?? null,
     gapPaceMinKm: (r.gap_pace_min_km as number) ?? null,
+    vertPerKm: (r.vert_per_km as number) ?? null,
   }));
   const efficiency = buildEfficiencySummary(efRuns, userDateStr());
   if (!efficiency.current) {

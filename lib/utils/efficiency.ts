@@ -47,11 +47,25 @@
  * manufacture a 10% move.
  */
 
+import { MAX_PLAUSIBLE_PACE_MIN_KM_STEEP, STEEP_CEILING_MIN_M_PER_KM } from '@/lib/utils/decoupling';
+
 /** Minimum session length for EF to describe efficiency rather than HR lag. */
 export const MIN_EF_DURATION_MIN = 30;
 /** Shared with decoupling.ts: outside this, it is not running. */
 export const MIN_EF_PACE_MIN_KM = 3;
 export const MAX_EF_PACE_MIN_KM = 12;
+
+/**
+ * Ceiling for a genuine climbing session. Mirrors decoupling's steep ceiling so
+ * the two metrics agree about what counts as running — they are read side by
+ * side in the scorecard and the weekly loop, and a session that decoupling
+ * measured but efficiency discarded would be an unexplainable disagreement.
+ *
+ * Without this, efficiency goes dark on exactly the sessions the mountain
+ * build is made of, and the Saturday loop loses one of its triggers at the
+ * moment it matters most.
+ */
+export const MAX_EF_PACE_MIN_KM_STEEP = MAX_PLAUSIBLE_PACE_MIN_KM_STEEP;
 /** Structured sessions have no meaningful average. */
 const EXCLUDED_TYPES = /interval|fartlek/i;
 
@@ -69,6 +83,12 @@ export interface EfRun {
   durationMin: number | null;
   avgHr: number | null;
   gapPaceMinKm: number | null;
+  /**
+   * Metres of climb per km. Raises the pace ceiling for a climbing session.
+   * Absent means the gradient was not measured, which is NOT the same as flat
+   * — so the road ceiling applies and the run is judged as it always was.
+   */
+  vertPerKm?: number | null;
 }
 
 export interface EfWindow {
@@ -99,7 +119,12 @@ export function isEfEligible(run: EfRun): boolean {
   if (run.runType && EXCLUDED_TYPES.test(run.runType)) return false;
   if (typeof run.durationMin !== 'number' || run.durationMin < MIN_EF_DURATION_MIN) return false;
   if (typeof run.gapPaceMinKm !== 'number') return false;
-  if (run.gapPaceMinKm < MIN_EF_PACE_MIN_KM || run.gapPaceMinKm > MAX_EF_PACE_MIN_KM) return false;
+  const steep =
+    typeof run.vertPerKm === 'number' &&
+    Number.isFinite(run.vertPerKm) &&
+    run.vertPerKm >= STEEP_CEILING_MIN_M_PER_KM;
+  const ceiling = steep ? MAX_EF_PACE_MIN_KM_STEEP : MAX_EF_PACE_MIN_KM;
+  if (run.gapPaceMinKm < MIN_EF_PACE_MIN_KM || run.gapPaceMinKm > ceiling) return false;
   return efficiencyFactor(run.gapPaceMinKm, run.avgHr) !== null;
 }
 
