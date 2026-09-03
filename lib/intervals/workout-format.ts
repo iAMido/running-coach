@@ -202,6 +202,30 @@ export function planWorkoutToDescription(
     : extraAfterZone(workout.target_hr);
   if (trailing) notes.push(`Plan also says: "${trailing}".`);
 
+  // Elevation travels as a NOTE, never as a workout step.
+  //
+  // intervals.icu's parser understands duration, HR, pace and power — there is
+  // no elevation step, and inventing syntax it does not know risks malforming
+  // the whole workout rather than adding a field to it. A note lands on the
+  // calendar and the watch as text the athlete can actually read mid-session,
+  // which is what a climb target is for.
+  //
+  // Absent stays absent: a plan that never prescribed vert must not push
+  // "0 m", which would read as "deliberately flat".
+  if (typeof workout.elevation_gain_m === 'number') {
+    notes.push(`Target climb: ${workout.elevation_gain_m} m.`);
+  }
+
+  // The indoor fallback rides along for the same reason — it is most useful at
+  // the moment the athlete looks at the workout and the weather has turned.
+  if (workout.indoor_alternative?.type) {
+    const alt = workout.indoor_alternative;
+    notes.push(
+      `If indoors: ${alt.type}${alt.equipment ? ` (${alt.equipment})` : ''}` +
+        `${alt.duration ? `, ${alt.duration}` : ''}${alt.description ? ` — ${alt.description}` : ''}`,
+    );
+  }
+
   const steps: WorkoutStep[] = [
     {
       kind: 'steady',

@@ -142,8 +142,13 @@ export function previewWeek(
     }
 
     const pct = /- \d+m ([\d.]+-[\d.]+% HR)/.exec(translated.description)?.[1] ?? null;
+    // Climb in the event NAME as well as the body: on a calendar the name is
+    // all the athlete sees without opening the event, and on a mountain plan
+    // the vert is the number that says what the session actually is.
+    const climbSuffix =
+      typeof workout.elevation_gain_m === 'number' ? ` +${workout.elevation_gain_m}m` : '';
     rows.push({
-      day, date, workoutName: workout.type,
+      day, date, workoutName: `${workout.type}${climbSuffix}`,
       description: translated.description,
       minutes: translated.minutes,
       bpmLow: translated.bpmLow,
