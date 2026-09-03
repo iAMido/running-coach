@@ -59,7 +59,7 @@ async function main() {
   const parsed = JSON.parse(res.content.slice(f, l + 1));
 
   console.log(`\nphases returned: ${parsed.phases.length}`);
-  console.log(`weeks sum: ${parsed.phases.reduce((s: number, p: any) => s + p.weeks, 0)} (asked for ${horizonWeeks})`);
+  console.log(`weeks sum: ${parsed.phases.reduce((s: number, p: { weeks: number }) => s + p.weeks, 0)} (asked for ${horizonWeeks})`);
   console.log(`rationale: ${parsed.rationale}\n`);
   for (const p of parsed.phases) {
     console.log(`Phase ${p.phase_number}: ${p.name} (${p.weeks}w)`);
