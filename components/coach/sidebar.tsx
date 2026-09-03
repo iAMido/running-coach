@@ -17,7 +17,6 @@ import {
   LogOut,
   UtensilsCrossed,
   BookOpen,
-  Activity,
 } from 'lucide-react';
 import { signOut } from 'next-auth/react';
 
@@ -37,13 +36,19 @@ const navItems = [
 // Secondary nav: things we built that aren't in the user's primary order
 // but still need a reachable link. Rendered below a visual divider.
 //
-// Strava sits here rather than in the primary nav: intervals.icu has taken
-// over as the training-data provider and its crons are disabled, but the page
-// stays reachable until the cutover is confirmed.
+// Strava was removed from here on 2026-09-03 at the athlete's request. The
+// cutover to intervals.icu is confirmed: its crons are gone from vercel.json,
+// `strava_tokens` is empty, and all 117 formerly-Strava runs now carry `icu_`
+// filenames. A nav entry to a deliberately dead integration is worse than no
+// entry — it invites a click that can only disappoint.
+//
+// The PAGE and every Strava route remain in the codebase and reachable by URL
+// (/coach/strava). Removing the link is a navigation decision, not a deletion:
+// the refresh token is preserved in runcoach._bak_20260806_strava_tokens and
+// the connection can be restored without a fresh OAuth round-trip.
 const secondaryNavItems = [
   { href: '/coach/resources', label: 'Coach Library', icon: BookOpen },
   { href: '/coach/reports', label: 'Coach Reports', icon: FileText },
-  { href: '/coach/strava', label: 'Sync Strava (legacy)', icon: Activity },
 ];
 
 export function CoachSidebar() {

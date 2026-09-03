@@ -314,6 +314,12 @@ Unmeasured gradient always keeps the road ceiling. Absent is not steep.
 
 **The scorecard has a `climb` row (2026-09-03).** Coloured only when there is something to judge against — the plan's own per-day `elevation_gain_m` first, else the active macro phase's `weekly_vert_range_m`. With neither it reports the number and withholds a verdict, exactly as the aerobic-control row does. An unmeasured week renders "Not measured", never 0 m scored red. A week mixing measured and unmeasured runs says its total is a floor. `formatScorecard` and the UI both iterate rows generically, so the row reaches the weekly review prompt and the page with no further wiring.
 
+**📄 Start here: `docs/app-state-2026-09-03.md`** — what the app is, what it does now, every change from the 2026-09-03 session (23 commits, 66 files), the bugs found, the mistakes made and corrected, and what is still open. Written for both the athlete and a fresh session.
+
+**Strava's nav link was removed 2026-09-03** at the athlete's request; the cutover to intervals.icu is confirmed. The page and all routes remain reachable at `/coach/strava`, and `runcoach._bak_20260806_strava_tokens` still holds a working refresh token. Removing the link was a navigation decision, not a deletion.
+
+⚠️ **`run_feedback.followed_plan` is TEXT — `'yes' | 'no' | 'modified'` — not a boolean.** It was typed `boolean` in `lib/db/types.ts` while the column, the form and the Zod schema all used strings, and the single consumer tested `=== false`. That can never be true, so the app's only EXPLICIT plan-adherence signal never once reached the coach; everything else about adherence is inferred from HR zones. Fixed 2026-09-03, with `'modified'` rendered distinctly from `'no'`.
+
 **Adaptation runs as THREE loops on three clocks (2026-09-03).** Do not collapse them into one mechanism.
 
 | loop | cadence | scope | entry point |
