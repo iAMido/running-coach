@@ -109,6 +109,24 @@ export const planGenerationSchema = z.object({
   limitations: safeText.max(1000).optional(),
 });
 
+/**
+ * Season-level plan request.
+ *
+ * `horizonWeeks` spans a single block up to two years. The athlete has said he
+ * will ask for 11 months, then 6, then 4 — so nothing here may assume a
+ * particular length, and the phase model scales by proportion rather than by
+ * special case (see suggestedPhaseCount).
+ */
+export const macroPlanGenerationSchema = z.object({
+  goalName: safeString.min(1).max(200),
+  raceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  horizonWeeks: z.number().int().min(4).max(104),
+  runsPerWeek: z.number().int().min(1).max(14).optional(),
+  raceDistanceKm: z.number().positive().max(500).optional(),
+  raceElevationGainM: z.number().int().min(0).max(30000).optional(),
+  terrainAccess: safeText.max(600).optional(),
+});
+
 export const planSaveSchema = z.object({
   plan_type: safeString.max(100),
   plan_json: z.record(z.string(), z.unknown()),
