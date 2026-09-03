@@ -3,6 +3,39 @@ import { generateEmbedding } from './embeddings';
 import { retrieveUserResources } from './user-resource-retriever';
 import type { FormattedBookContext, InstructionSearchResult } from './types';
 
+/**
+ * Cosine-similarity floor for book retrieval.
+ *
+ * **Measured, not chosen.** The previous value was 0.7, which returned ZERO
+ * results for every query ever made — the book layer has been silently empty
+ * for the life of this feature, independently of the search_path bug fixed in
+ * 20260903_fix_vector_search_path.sql.
+ *
+ * Distribution over the real 1,452-chunk corpus (text-embedding-3-small),
+ * query "Create a 12-week trail plan for a 21K with 1300m of climbing":
+ *
+ *   0.70 ->    0 chunks (0.0%)   <- the old threshold
+ *   0.65 ->    0 chunks (0.0%)
+ *   0.55 ->    1 chunk  (0.1%)
+ *   0.50 ->   20 chunks (1.4%)
+ *   0.45 ->   72 chunks (5.0%)   <- here
+ *   0.40 ->  173 chunks (11.9%)
+ *   0.30 ->  703 chunks (48.4%)
+ *
+ * Across four representative queries the single best match in the whole corpus
+ * ranged 0.518-0.672. Nothing reaches 0.7, so that threshold could only ever
+ * return nothing.
+ *
+ * 0.45 keeps roughly the top 5% and still returns results for the weakest
+ * query measured ("threshold intervals pacing", best match 0.518). 0.5 would
+ * leave that query with 3 chunks; 0.4 admits an eighth of the corpus and stops
+ * discriminating.
+ *
+ * Re-measure if the embedding model or the corpus changes — this number is a
+ * property of both, not a universal.
+ */
+export const BOOK_MATCH_THRESHOLD = 0.45;
+
 // Approximate tokens per character
 const CHARS_PER_TOKEN = 4;
 
@@ -95,7 +128,7 @@ async function searchInstructionsFiltered(
     'search_instructions_filtered',
     {
       query_embedding: embedding,
-      match_threshold: 0.7,
+      match_threshold: BOOK_MATCH_THRESHOLD,
       match_count: limit,
       filter_phase: filters.phase || null,
       filter_workout_type: filters.workoutType || null,
@@ -121,7 +154,7 @@ async function searchInstructionsBasic(
 ): Promise<InstructionSearchResult[]> {
   const { data, error } = await supabase.rpc('match_instructions', {
     query_embedding: embedding,
-    match_threshold: 0.7,
+    match_threshold: BOOK_MATCH_THRESHOLD,
     match_count: limit,
   });
 

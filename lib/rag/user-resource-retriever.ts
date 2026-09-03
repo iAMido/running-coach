@@ -13,6 +13,9 @@ import { supabase } from '@/lib/db/supabase';
 import { generateEmbedding } from './embeddings';
 import type { InstructionSearchResult } from './types';
 
+/** 0.05 below BOOK_MATCH_THRESHOLD so personal notes win ties. */
+export const USER_RESOURCE_MATCH_THRESHOLD = 0.40;
+
 interface UserResourceMatch {
   id: string;
   resource_id: string;
@@ -56,7 +59,12 @@ export async function retrieveUserResources(
   const { data, error } = await supabase.rpc('match_user_resources', {
     query_embedding: embedding,
     match_user_id: userId,
-    match_threshold: 0.65, // slightly lower than books so personal notes win ties
+    // Kept 0.05 below the book floor so an athlete's own uploaded material
+    // wins ties against a book chunk. See BOOK_MATCH_THRESHOLD for the
+    // measurement behind the absolute value — 0.65 was above the observed
+    // maximum similarity of the book corpus and could only return nothing.
+    // Unverifiable against real data here: user_resources is empty.
+    match_threshold: USER_RESOURCE_MATCH_THRESHOLD,
     match_count: limit,
     match_tags: tagFilter,
   });
@@ -68,7 +76,7 @@ export async function retrieveUserResources(
     const fallback = await supabase.rpc('match_user_resources', {
       query_embedding: embedding,
       match_user_id: userId,
-      match_threshold: 0.65,
+      match_threshold: USER_RESOURCE_MATCH_THRESHOLD,
       match_count: limit,
       match_tags: null,
     });

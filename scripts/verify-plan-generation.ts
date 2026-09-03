@@ -25,14 +25,14 @@ const envIdx = argv.indexOf('--env');
 dotenv.config({ path: envIdx >= 0 ? argv[envIdx + 1] : '.env.local' });
 
 async function main() {
-  const { buildEnhancedPlanGenerationPrompt, COACH_STATIC_BLOCK } = await import('./lib/ai/coach-prompts');
-  const { buildContext } = await import('./lib/rag/context-builder');
-  const { buildPlanGenerationContext } = await import('./lib/rag/plan-generation-context');
-  const { getAthleteProfile } = await import('./lib/db/profile');
-  const { getClimbBaseline } = await import('./lib/db/runs');
-  const { callOpenRouter } = await import('./lib/ai/openrouter');
-  const { MODEL_FOR } = await import('./lib/ai/model-registry');
-  const { supabase } = await import('./lib/db/supabase');
+  const { buildEnhancedPlanGenerationPrompt, COACH_STATIC_BLOCK } = await import('../lib/ai/coach-prompts');
+  const { buildContext } = await import('../lib/rag/context-builder');
+  const { buildPlanGenerationContext } = await import('../lib/rag/plan-generation-context');
+  const { getAthleteProfile } = await import('../lib/db/profile');
+  const { getClimbBaseline } = await import('../lib/db/runs');
+  const { callOpenRouter } = await import('../lib/ai/openrouter');
+  const { MODEL_FOR } = await import('../lib/ai/model-registry');
+  const { supabase } = await import('../lib/db/supabase');
 
   const { data: prof } = await supabase.from('athlete_profile').select('user_id').limit(1).maybeSingle();
   const userId = (prof as { user_id: string }).user_id;
