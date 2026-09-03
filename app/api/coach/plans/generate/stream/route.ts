@@ -26,6 +26,7 @@ import { buildEnhancedPlanGenerationPrompt, COACH_STATIC_BLOCK } from '@/lib/ai/
 import { buildContext, getContextStats } from '@/lib/rag/context-builder';
 import { getAthleteProfile } from '@/lib/db/profile';
 import { getClimbBaseline } from '@/lib/db/runs';
+import { getActiveMacroPlan, phaseForWeek, formatMacroPlan } from '@/lib/coach/macro-plan';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { planGenerationSchema, validateInput } from '@/lib/validation/schemas';
 import {
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest) {
   const {
     planType, durationWeeks, runsPerWeek, targetRace, notes,
     trainingDays: requestedDays, trainingDayNotes,
+    macroPlanId, blockNumber,
     raceDistanceKm, raceElevationGainM, terrainAccess,
     raceDate, targetTime, recentRaceResult, currentWeeklyKm, addressesWhat, limitations,
   } = validation.data;
@@ -90,6 +92,8 @@ export async function POST(request: NextRequest) {
     ? await getClimbBaseline(userId)
     : undefined;
 
+    const macroContext = await resolveMacroContext(userId, macroPlanId, blockNumber);
+
 
   const preflight = supervisorValidate({ context, queryType: 'plan_generation' });
 
@@ -102,6 +106,7 @@ export async function POST(request: NextRequest) {
     trainingDays: resolveTrainingDays(requestedDays, profile?.training_days, trainingDayNotes),
     // Race profile + his OWN measured climbing. Without the second
     // half the model has no anchor and invents a starting point.
+    macroContext: macroContext.text,
     raceDemand: {
       distanceKm: raceDistanceKm,
       elevationGainM: raceElevationGainM,
@@ -191,6 +196,11 @@ export async function POST(request: NextRequest) {
           start_date: new Date().toISOString().split('T')[0],
           current_week_num: 1,
           status: 'active',
+          // Which season this block serves, and which phase of it. Null for a
+          // standalone plan — those stay valid and are not retro-fitted.
+          macro_plan_id: macroContext.macroPlanId,
+          block_number: blockNumber ?? null,
+          macro_phase: macroContext.phaseName,
         })
         .select()
         .single();
@@ -272,4 +282,36 @@ function resolveTrainingDays(
     return dayNotes ? `${requested.join(', ')} (${dayNotes})` : requested.join(', ');
   }
   return profileDays || undefined;
+}
+
+/**
+ * Season context for a block: which phase it serves, and that phase's targets.
+ *
+ * Falls back to no context rather than to a guessed phase — a block generated
+ * without season context is a valid standalone plan, whereas a block told it
+ * serves the wrong phase would build the wrong thing confidently.
+ */
+async function resolveMacroContext(
+  userId: string,
+  macroPlanId: string | undefined,
+  blockNumber: number | undefined,
+): Promise<{ text: string; phaseName: string | null; macroPlanId: string | null }> {
+  if (!macroPlanId) return { text: '', phaseName: null, macroPlanId: null };
+  const macro = await getActiveMacroPlan(userId);
+  if (!macro || macro.id !== macroPlanId) {
+    // The referenced season is not this athlete's active one. Silently
+    // generating a standalone block is the safe outcome; silently generating
+    // against someone else's season is not.
+    return { text: '', phaseName: null, macroPlanId: null };
+  }
+  // Approximate the season week from the block index when one is supplied.
+  // Blocks are the unit the athlete thinks in, so block 3 of 12-week blocks
+  // starts around season week 25.
+  const seasonWeek = blockNumber ? (blockNumber - 1) * 12 + 1 : 1;
+  const phase = phaseForWeek(macro, seasonWeek);
+  return {
+    text: formatMacroPlan(macro, seasonWeek),
+    phaseName: phase?.name ?? null,
+    macroPlanId: macro.id,
+  };
 }

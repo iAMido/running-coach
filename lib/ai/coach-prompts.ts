@@ -577,13 +577,18 @@ export function buildEnhancedPlanGenerationPrompt(
     trainingDays?: string;
     /** Race profile + the athlete's own climbing baseline. See buildRaceDemandBlock. */
     raceDemand?: RaceDemand;
+    /**
+     * Rendered season context — which phase this block serves, its targets and
+     * its exit criteria. Empty for a standalone plan, which stays valid.
+     */
+    macroContext?: string;
     /** Rendered intake block from buildPlanGenerationContext (90-day stats,
      *  PRs, prior plan outcomes, athlete intake form fields). Wider window
      *  than the default 14-day RAG context — plan-gen needs the runway. */
     intakeBlock?: string;
   }
 ): string {
-  const { planType, durationWeeks, runsPerWeek, targetRace, notes, trainingDays, raceDemand, intakeBlock } = params;
+  const { planType, durationWeeks, runsPerWeek, targetRace, notes, trainingDays, raceDemand, macroContext, intakeBlock } = params;
   const raceDemandBlock = buildRaceDemandBlock(raceDemand);
 
   // Calculate phase distribution
@@ -615,6 +620,10 @@ ${intakeBlock || ''}
 - Notes: ${notes || 'None'}
 ${dayBudgetNote(runsPerWeek, trainingDays)}
 ${raceDemandBlock}
+${macroContext ? `${macroContext}
+
+**This block serves the phase marked CURRENT above.** Write it to satisfy that phase's exit criteria — its weekly km and vert ranges are the band you work inside, not suggestions. Do NOT restate the whole season; generate only these ${durationWeeks} weeks.
+` : ''}
 ### SUGGESTED PHASE DISTRIBUTION
 - Base Phase: Weeks 1-${baseWeeks} (${baseWeeks} weeks)
 - Support/Build Phase: Weeks ${baseWeeks + 1}-${baseWeeks + supportWeeks} (${supportWeeks} weeks)

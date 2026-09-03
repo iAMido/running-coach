@@ -79,6 +79,14 @@ export const planGenerationSchema = z.object({
   /** Free-text note on which day carries which session, e.g. "Monday quality". */
   trainingDayNotes: safeString.max(300).optional(),
 
+  /**
+   * The season this block serves. When present the generator is told which
+   * phase it is writing for, its targets and its exit criteria, so a block
+   * knows what it is FOR rather than restating a generic build.
+   */
+  macroPlanId: z.string().uuid().optional(),
+  blockNumber: z.number().int().min(1).max(20).optional(),
+
   // ---- Race profile. What the plan must actually prepare the athlete FOR. ----
   /**
    * Race distance in km. Distinct from `planType`: the type shapes the phase
