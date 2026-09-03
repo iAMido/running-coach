@@ -12,6 +12,7 @@
 
 import { formatPace } from '@/lib/utils/pace';
 import { utcFromUserLocal } from '@/lib/utils/user-time';
+import { indoorAwareGain } from '@/lib/utils/elevation';
 import type { IntervalsClient } from '@/lib/intervals/client';
 import type { IntervalsActivity, IntervalsInterval, IntervalsWellness } from '@/lib/intervals/types';
 import type { NormalizedLap, NormalizedRun } from '@/lib/ingest/upsert-run';
@@ -134,8 +135,21 @@ export function toNormalizedRun(activity: IntervalsActivity, client: IntervalsCl
     // build turns on (his median run is 8.8 m/km against a 61.9 m/km race);
     // loss is stored separately because eccentric descent loading is its own
     // stressor and a point-to-point route does not balance the two.
-    elevationGainM: toMetres(activity.total_elevation_gain),
-    elevationLossM: toMetres(activity.total_elevation_loss),
+    // Indoor-aware: a treadmill reporting 0 m is almost always a treadmill
+    // that never told the watch its incline, not a flat session. Storing the
+    // zero would make a 700 m vertical workout read as a flat one — red
+    // scorecard, and the weekly loop firing vert_below_phase on a week the
+    // athlete executed perfectly. See indoorAwareGain.
+    elevationGainM: indoorAwareGain(
+      toMetres(activity.total_elevation_gain),
+      activity.name,
+      activity.type,
+    ),
+    elevationLossM: indoorAwareGain(
+      toMetres(activity.total_elevation_loss),
+      activity.name,
+      activity.type,
+    ),
     // Zones are ALWAYS derived from the stream against the athlete's own bands.
     // `icu_hr_zone_times` is on the summary and tempting, but intervals.icu
     // disagrees with athlete_profile about where the zones are — using it would

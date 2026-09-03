@@ -185,3 +185,36 @@ test('the static block does not hardcode a multiple that drifts', () => {
   expect(COACH_STATIC_BLOCK).not.toContain('about 3x his steepest');
   expect(COACH_STATIC_BLOCK).toContain('cite THAT number rather than one you remember');
 });
+
+test('the race block reasons about the event, not just its numbers', () => {
+  // The athlete asked for a coach that UNDERSTANDS the race: that 1300 m over
+  // 21 km is a different event from a hilly half, that power-hiking is the
+  // primary technique rather than a failure state, and that flat coastal
+  // terrain cannot produce the load.
+  const block = buildRaceDemandBlock({
+    distanceKm: 21,
+    elevationGainM: 1300,
+    terrainAccess: 'Flat coastal plain; gym treadmill',
+    climb: { measuredRuns: 58, medianVertPerKm: 9.1, maxVertPerKm: 12.7, maxGainM: 160, avgWeeklyGainM: 197 },
+  });
+
+  expect(block).toContain('average grade of 6.2%');
+  expect(block).toContain('not a hilly half marathon');
+  expect(block).toContain('does not transfer');
+  expect(block).toContain('PRIMARY technique');
+  expect(block).toContain('past aerobic threshold');
+  expect(block).toContain('concentric');
+  expect(block).toContain('eccentric');
+  // Indoor vert must be prescribable, with the arithmetic supplied.
+  expect(block).toContain('12% at 5 km/h');
+  expect(block).toContain('600 m/hour');
+  expect(block).toContain('do not report incline to the watch');
+});
+
+test('a shallow race does not get the power-hiking directive', () => {
+  // 250 m over 21 km is 1.2% — a rolling road half. Telling that athlete to
+  // power-hike would be nonsense, so the directive is gated on grade.
+  const shallow = buildRaceDemandBlock({ distanceKm: 21, elevationGainM: 250 });
+  expect(shallow).toContain('average grade of 1.2%');
+  expect(shallow).not.toContain('PRIMARY technique');
+});

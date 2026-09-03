@@ -10,6 +10,7 @@ import type { AthleteProfile, Lap, Run, TrainingPlan } from '@/lib/db/types';
 import type { EnhancedContext, QueryType } from '@/lib/rag/types';
 import { formatRunLaps, formatPlannedWeek } from '@/lib/rag/user-formatter';
 import { formatGoalPaceBlock, goalPace } from '@/lib/utils/goal-pace';
+import { TREADMILL_VERT_TABLE } from '@/lib/utils/elevation';
 
 // Legacy interface for backwards compatibility
 interface LegacyCoachContext {
@@ -522,7 +523,26 @@ export function buildRaceDemandBlock(demand?: RaceDemand): string {
   lines.push(`- Target race climb: **${gain} m**${km ? ` over ${km} km` : ''}.`);
 
   if (raceVertPerKm !== null) {
-    lines.push(`- Race gradient: **${raceVertPerKm.toFixed(1)} m/km**. This, not the distance, is what the plan has to build.`);
+    const gradePct = raceVertPerKm / 10;
+    lines.push(
+      `- Race gradient: **${raceVertPerKm.toFixed(1)} m/km — an average grade of ${gradePct.toFixed(1)}%**, ` +
+        'with long sections materially steeper than the average. This, not the distance, is what the plan has to build.',
+    );
+    lines.push(
+      '- **This is not a hilly half marathon. It is a different event that happens to be 21 km long.** ' +
+        'Say so plainly in the plan rationale. Flat-road fitness — including a marathon PB — does not transfer ' +
+        'to sustained climbing at this grade, and a plan that treats the race as "a half with some elevation" ' +
+        'will produce an athlete who is aerobically ready and structurally unprepared.',
+    );
+    if (gradePct >= 5) {
+      lines.push(
+        `- **Power-hiking is the PRIMARY technique at ${gradePct.toFixed(1)}%, not a fallback.** ` +
+          'Holding a running stride on sustained grades this steep drives heart rate past aerobic threshold ' +
+          'within minutes and destroys the legs for the descent. Aggressive, efficient hiking is both faster ' +
+          'and metabolically cheaper than a slow uphill jog here. Prescribe it as a trained skill with its own ' +
+          'sessions and its own technique cues — never as what he does when running fails.',
+      );
+    }
   }
 
   if (c && c.measuredRuns > 0) {
@@ -553,10 +573,35 @@ export function buildRaceDemandBlock(demand?: RaceDemand): string {
     lines.push('  Prescribe only what this terrain supports. A session needing a hill he does not have will not be run — if the terrain cannot deliver the gradient, say so and use repeats of what he has.');
   }
 
+  // Local terrain cannot produce this load, so the plan has to say what the
+  // vertical target IS on the equipment he actually has. A weekly metre target
+  // with no way to hit it is not a prescription.
+  lines.push('');
+  lines.push('**Accumulating vertical indoors — the athlete lives on flat coastal terrain.**');
+  lines.push(
+    'Local hills top out far below race grade, so a meaningful share of the climbing has to come from ' +
+      'an inclined treadmill. Prescribe indoor vertical in GRADE + TIME, and state the metres it yields:',
+  );
+  for (const row of TREADMILL_VERT_TABLE) {
+    lines.push(
+      `  - ${row.gradePercent}% at ${row.speedKmh} km/h ≈ **${row.vertPerHour} m/hour** ` +
+        `(${Math.round(row.vertPerHour / 2)} m in 30 min)`,
+    );
+  }
+  lines.push(
+    '  Speeds above are hiking to slow-jog pace, which is what these grades actually permit — that is the point, not a compromise.',
+  );
+  lines.push(
+    '⚠️ **Most treadmills do not report incline to the watch**, so an indoor session that climbed 700 m is ' +
+      'commonly recorded as 0 m and is stored by this app as UNMEASURED rather than flat. Tell the athlete to ' +
+      'record grade and duration for indoor sessions so the weekly vertical total stays honest, and never read ' +
+      'a missing indoor elevation figure as a missed session.',
+  );
+
   lines.push('');
   lines.push('**Requirements for an elevation-targeted plan:**');
   lines.push('1. Give every week a `total_elevation_gain_m` and progress it deliberately. Cap weekly growth the way you would cap volume, and cut vert BEFORE km in a down week — climbing is the newer stress and the one carrying the injury risk.');
-  lines.push('2. Treat **descent as its own stressor**, not the free half of a climb. Eccentric quad and calf loading is what wrecks people late in a long descent, it is trained separately, and it must be built gradually rather than discovered on race day. This athlete has a **plantar fasciitis history** — state how the descent progression respects it.');
+  lines.push('2. Train the two directions as different capacities: **concentric** strength and sustained aerobic power for the ascent, **eccentric** strength for the descent. Treat descent as its own stressor, not the free half of a climb. Eccentric quad and calf loading is what wrecks people late in a long descent, it is trained separately, and it must be built gradually rather than discovered on race day. This athlete has a **plantar fasciitis history** — state how the descent progression respects it.');
   lines.push('3. Prescribe long climbing sessions as **time on feet plus a vert target**, not pace. Pace targets are close to meaningless on steep grade and will be missed by anyone following them honestly.');
   lines.push('4. Treat **power-hiking as a trainable skill**, not a failure state. Above roughly 40 m/km hiking is faster and cheaper than running for most athletes — prescribe it deliberately and practise it.');
   lines.push('5. If poles are appropriate, say which week they enter. Race gear is trained with, never met for the first time on race day.');

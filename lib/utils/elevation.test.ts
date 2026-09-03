@@ -11,7 +11,12 @@ import { expect, test } from 'bun:test';
 import {
   CLIMB_BANDS,
   TARGET_RACE,
+  TREADMILL_VERT_TABLE,
   VERT_SESSION_MIN_M_PER_KM,
+  gradePercent,
+  indoorAwareGain,
+  looksIndoor,
+  treadmillVertPerHour,
   climbCategory,
   climbCategoryIsUnprecedented,
   formatVert,
@@ -104,4 +109,53 @@ test('a weekly total reports how many runs actually carried a reading', () => {
   // "of the runs we can see", not present 200 m as the week's total climb.
   expect(sumVert(week)).toEqual({ totalM: 200, measured: 2, total: 3 });
   expect(sumVert([])).toEqual({ totalM: 0, measured: 0, total: 0 });
+});
+
+test('grade percent is the actionable unit alongside m/km', () => {
+  // A treadmill console shows percent, not m/km. 1300 m over 21 km is 6.2%.
+  expect(gradePercent(1300, 21)).toBeCloseTo(6.19, 2);
+  expect(gradePercent(null, 21)).toBeNull();
+  expect(gradePercent(1300, 0)).toBeNull();
+});
+
+test('treadmill vert maths is what makes an indoor prescription executable', () => {
+  // At grade G%, a km climbs 10*G m, so an hour at S km/h climbs 10*G*S.
+  expect(treadmillVertPerHour(12, 5)).toBe(600);
+  expect(treadmillVertPerHour(10, 5.5)).toBeCloseTo(550, 0);
+  // Nonsense in, zero out — never a negative or NaN reaching a prompt.
+  expect(treadmillVertPerHour(0, 5)).toBe(0);
+  expect(treadmillVertPerHour(12, 0)).toBe(0);
+  expect(treadmillVertPerHour(NaN, 5)).toBe(0);
+
+  // The table the prompt prescribes from must be internally consistent.
+  for (const row of TREADMILL_VERT_TABLE) {
+    expect(row.vertPerHour).toBe(Math.round(treadmillVertPerHour(row.gradePercent, row.speedKmh)));
+  }
+});
+
+test('an indoor session reporting 0 m is UNMEASURED, not flat', () => {
+  // Most treadmills never tell the watch their incline. Storing that 0 would
+  // make a 700 m vertical workout read as a flat one: red climb row, and the
+  // weekly loop firing vert_below_phase on a week executed perfectly.
+  expect(indoorAwareGain(0, 'Treadmill Running')).toBeNull();
+  expect(indoorAwareGain(0, 'Indoor Run')).toBeNull();
+  expect(indoorAwareGain(0, 'ריצה על הליכון')).toBeNull();
+  expect(indoorAwareGain(0, 'Evening Run', 'VirtualRun')).toBeNull();
+
+  // Outdoors, 0 m IS a measurement — a genuinely flat run.
+  expect(indoorAwareGain(0, 'Evening Run')).toBe(0);
+
+  // A treadmill that DOES report incline is believed.
+  expect(indoorAwareGain(420, 'Treadmill Running')).toBe(420);
+
+  // Absent stays absent regardless.
+  expect(indoorAwareGain(null, 'Treadmill Running')).toBeNull();
+});
+
+test('looksIndoor covers the equipment vocabulary the coach prescribes', () => {
+  for (const name of ['Treadmill Running', 'Indoor Run', 'הליכון', 'StairMaster session', 'Gym vertical']) {
+    expect(looksIndoor(name)).toBe(true);
+  }
+  expect(looksIndoor('Evening Run')).toBe(false);
+  expect(looksIndoor(null)).toBe(false);
 });

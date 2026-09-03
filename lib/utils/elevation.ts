@@ -194,3 +194,87 @@ export function sumVert(runs: { elevation_gain_m?: number | null }[]): {
     total: runs.length,
   };
 }
+
+/**
+ * Average gradient as a PERCENT grade.
+ *
+ * The same number as m/km divided by ten, and worth carrying separately
+ * because percent is the unit the athlete can act on: it is what a treadmill
+ * console shows, what a trail sign shows, and what makes "6%" immediately
+ * comparable to "set the treadmill to 12%". m/km is the better unit for
+ * comparing runs to each other; percent is the better unit for prescribing.
+ */
+export function gradePercent(gainM: number | null | undefined, distanceKm: number | null | undefined): number | null {
+  const vpk = vertPerKm(gainM, distanceKm);
+  return vpk === null ? null : vpk / 10;
+}
+
+/**
+ * Vertical metres per hour on a treadmill at a given grade and speed.
+ *
+ * At grade G%, every 100 m of belt travel climbs G metres — so a km climbs
+ * 10·G metres, and an hour at S km/h climbs 10·G·S.
+ *
+ * This exists because the athlete's home terrain cannot produce the race's
+ * vertical load: the local hills top out around 12.7 m/km against a 61.9 m/km
+ * race, so the climbing has to be accumulated indoors. A plan that says "600 m
+ * of vert this week" without saying what that IS on a treadmill is a plan he
+ * cannot execute on the equipment he actually has.
+ */
+export function treadmillVertPerHour(gradePercent: number, speedKmh: number): number {
+  if (!Number.isFinite(gradePercent) || !Number.isFinite(speedKmh)) return 0;
+  if (gradePercent <= 0 || speedKmh <= 0) return 0;
+  return 10 * gradePercent * speedKmh;
+}
+
+/**
+ * A small table of realistic treadmill settings and what they yield per hour,
+ * for a prompt to prescribe against.
+ *
+ * Speeds are power-hiking to slow-jog pace, because that is what these grades
+ * actually permit: at 12-15% a run stride pushes heart rate past threshold
+ * within minutes, which is the whole reason hiking is the correct technique
+ * rather than a concession.
+ */
+export const TREADMILL_VERT_TABLE: { gradePercent: number; speedKmh: number; vertPerHour: number }[] =
+  [
+    { gradePercent: 8, speedKmh: 6.0 },
+    { gradePercent: 10, speedKmh: 5.5 },
+    { gradePercent: 12, speedKmh: 5.0 },
+    { gradePercent: 15, speedKmh: 4.5 },
+  ].map((r) => ({ ...r, vertPerHour: Math.round(treadmillVertPerHour(r.gradePercent, r.speedKmh)) }));
+
+/**
+ * Names that mean "this session happened indoors".
+ *
+ * Load-bearing for elevation: most treadmills do not transmit incline to the
+ * watch, so an indoor session that climbed 700 m is commonly recorded as 0 m.
+ * Storing that 0 would make a hard vertical week read as a flat one — the
+ * scorecard would score it red and the weekly loop would fire
+ * `vert_below_phase` on a week the athlete executed perfectly.
+ */
+const INDOOR_NAME = /treadmill|indoor|הליכון|stair ?master|stairmaster|gym/i;
+
+export function looksIndoor(workoutName: string | null | undefined, activityType?: string | null): boolean {
+  if (activityType === 'VirtualRun') return true;
+  return !!workoutName && INDOOR_NAME.test(workoutName);
+}
+
+/**
+ * Elevation for an indoor run: 0 becomes **null**, i.e. unmeasured.
+ *
+ * Outdoors, 0 m of gain is a real measurement — a flat run. Indoors it almost
+ * always means the treadmill never told the watch its incline, and this app's
+ * standing rule is that an unmeasured value must never be stored as a measured
+ * zero. A genuine positive reading is kept: some treadmills do report incline,
+ * and that number is real.
+ */
+export function indoorAwareGain(
+  gainM: number | null | undefined,
+  workoutName: string | null | undefined,
+  activityType?: string | null,
+): number | null {
+  if (typeof gainM !== 'number') return null;
+  if (gainM === 0 && looksIndoor(workoutName, activityType)) return null;
+  return gainM;
+}
