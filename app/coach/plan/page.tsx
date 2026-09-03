@@ -8,6 +8,7 @@ import { isWorkoutToday, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
 import { StrengthWorkout } from '@/components/coach/strength-workout';
 import { WorkoutCard, getWorkoutTagClass } from '@/components/coach/workout-card';
 import { PushToWatch } from '@/components/coach/push-to-watch';
+import { PlanProposalCard } from '@/components/coach/plan-proposal-card';
 
 const planTypes = [
   { value: 'half-marathon', label: 'Half Marathon' },
@@ -432,6 +433,13 @@ export default function TrainingPlanPage() {
                 </div>
 
                 <div className="p-6">
+                  {/* Saturday's proposal, when there is one awaiting a decision.
+                      Renders nothing on a quiet week beyond a single line, so a
+                      card never becomes something to click past unread. */}
+                  <div className="mb-5">
+                    <PlanProposalCard onApplied={() => window.location.reload()} />
+                  </div>
+
                   {weekData?.focus && (
                     <p
                       className="text-sm text-center mb-5 py-2.5 px-4 rounded-xl"

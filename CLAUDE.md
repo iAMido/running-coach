@@ -300,6 +300,30 @@ Verified after: book layer **0 → 26,040 tokens** across 20 chunks from 4 books
 
 Measured result of the 2026-09-03 verification run — 12-week trail plan, 4 days, 21K/1300 m: 12/12 weeks carried `total_elevation_gain_m`, 48/48 workouts carried `elevation_gain_m` and `indoor_alternative`, **zero sessions scheduled outside the four selected days**, and the down weeks cut vert harder than km (week 3→4: vert −45%, km −20%), which is what the prompt asks for and the thing most likely to be quietly ignored.
 
+**Adaptation runs as THREE loops on three clocks (2026-09-03).** Do not collapse them into one mechanism.
+
+| loop | cadence | scope | entry point |
+|---|---|---|---|
+| Readiness | daily | today only; never rewrites the plan | `readinessForUser` |
+| Micro | Saturday 18:00 UTC cron | re-shape the next 1–3 weeks inside the current block | `/api/cron/weekly-proposal` |
+| Macro | per block, or on trigger | phase targets + remaining season shape | `runcoach.macro_plans` |
+
+**`lib/coach/training-state.ts` is the single assembly point all three read**, plus Ask Coach via `context-builder`. Weekly volume/vert buckets, adherence against stated training days, efficiency, decoupling percentile, CTL/ATL form, readiness, climbing baseline. Same discipline as `readinessForUser`: assembled once so the coach's answer and the plan's adjustment cannot reason from different numbers.
+
+Its `gaps[]` array is load-bearing — it renders in prompts under *"WHAT COULD NOT BE MEASURED — treat these as unknown, never as fine"*. A reader must be able to tell "training is going well" from "we cannot see how training is going".
+
+⚠️ **A partial week is not a data point.** The in-progress week is kept in `weeks[]` (it is real) and excluded from every trend via `isPartial`. Counting it made volume read "falling 52%" on an ordinary Thursday — the trend was measuring the calendar. The 10% `TREND_DEADBAND` is wide on purpose: one missed 8 km run out of 30 km is 27% on its own.
+
+**Macro plans hold NO workouts.** Measured at **~623 output tokens per plan-week**, 48 weeks is ~30k against a 16k ceiling — but the real objection is that a prescribed session 11 months out is fiction. Phases carry ranges, a `capability`, and **`exit_criteria`**: a phase advances when its criteria hold, not when its weeks elapse, so a slow adapter extends base instead of being marched into a build phase. Criteria must be checkable against `TrainingState`; the prompt forbids absolute decoupling bands for the usual reason. `suggestedPhaseCount` scales by proportion (1 phase under 8 weeks, 5 over 40) so 11-month, 6-month and 4-month requests share one model. Revisions are new rows; one active macro per user via a partial unique index.
+
+⚠️ **The weekly loop PROPOSES, it never applies.** `plan_proposals` rows are accepted by the athlete through `/api/coach/proposals`; the cron never writes to `training_plans`. **`status='no_change'` rows are written deliberately** — without one, a quiet week is indistinguishable from a broken cron.
+
+**Hysteresis in `lib/coach/proposal-triggers.ts`, and "no change" is the expected weekly outcome.** An urgent trigger (ramp >30%, collapse <−30%) stands alone; any soft signal needs a second to agree. If this proposes most weeks the thresholds are wrong, not the athlete — `proposal-triggers.test.ts` pins an ordinary week producing nothing. Unmeasured vert never fires the phase-floor trigger, and a null adherence rate (unset `training_days`) is a gap, never 0%.
+
+**Saturday, not Sunday.** The training week runs Sunday–Saturday, so the proposal lands after the week closes and *before* Sunday's session — the only moment it can change anything. `0 18 * * 6` = 21:00 Israel in summer. ⚠️ This is the **4th** Vercel cron on a Hobby project; 3 were known to register fine, 4 is unverified. If it is rejected, fold it into `weekly-health-audit` and move that to Saturday.
+
+Verification scripts, all read-only unless flagged: `scripts/show-training-state.ts`, `scripts/verify-macro-plan.ts` (`--commit` to save), `scripts/verify-weekly-proposal.ts`, `scripts/verify-plan-generation.ts`, `scripts/measure-rag-thresholds.ts`.
+
 **Plan generation is elevation-aware as of 2026-09-03 (Chunks 4 + 5).** The app DOES generate the mountain plan — an earlier note here said track-and-advise only; that was a misunderstanding, corrected by the athlete.
 
 `buildRaceDemandBlock()` (`lib/ai/coach-prompts.ts`, pure, tested in `lib/ai/race-demand.test.ts`) renders a RACE DEMAND section into the plan prompt whenever `raceElevationGainM` is supplied. It computes the race's gradient rather than leaving the model to divide, and states the gap against the athlete's **own measured climbing** from `getClimbBaseline()` (`lib/db/runs.ts`, 120-day window). For this race it renders: *61.9 m/km, 3.1× his steepest run ever, 7.0× his median* — then instructs that gradient is the limiter and distance largely in hand. With no measured history it says so and starts conservatively instead of inventing a ramp.
