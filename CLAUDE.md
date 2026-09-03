@@ -280,6 +280,22 @@ Two lessons worth keeping:
 
 Fix: `supabase/migrations/20260903_fix_vector_search_path.sql` adds `extensions` to each path, still pinned. **Any future function doing vector work in `runcoach` needs `extensions` on its search_path.**
 
+⚠️ **And that was only HALF the bug. `BOOK_MATCH_THRESHOLD` was 0.7, above the corpus maximum.** Fixing the search_path made the operator resolve; the book layer stayed empty, because nothing in the corpus ever scores 0.7. Measured against the real 1,452 chunks with `text-embedding-3-small`:
+
+| threshold | chunks matched | |
+|---|---|---|
+| 0.70 | **0 (0.0%)** | the shipped book value |
+| 0.65 | **0 (0.0%)** | the shipped user-resource value |
+| 0.50 | 20 (1.4%) | |
+| **0.45** | **72 (5.0%)** | now |
+| 0.40 | 173 (11.9%) | too loose — stops discriminating |
+
+Across four representative queries the single best match anywhere in the corpus ranged **0.518–0.672**. Both shipped thresholds were unreachable, so **the book layer returned nothing for the entire life of the feature**, independently of the search_path bug. Two unrelated faults, identical symptom, because an empty RAG layer is silent.
+
+Verified after: book layer **0 → 26,040 tokens** across 20 chunks from 4 books; plan-gen system prompt **20,703 → 122,742 chars**; Ask Coach now retrieves *The Norwegian Method* for a double-threshold question and *Run Elite* / *Endure* for a mountain long-run question. `scripts/measure-rag-thresholds.ts` re-runs the measurement — **the right threshold is a property of the embedding model and the corpus, so re-measure if either changes; never pick it by intuition.**
+
+**A near-miss worth recording.** After the search_path fix the regenerated plan cited "80/20" and "Norwegian Method", and that was briefly taken as proof retrieval worked. It was not: both are named in `COACH_STATIC_BLOCK`, so the model could produce them with an empty book layer. **A plausible citation is not evidence of retrieval** — check `bookContext.tokenCount` and `.sources`, which is what actually settled it.
+
 **Verifying prompt changes end to end:** `scripts/verify-plan-generation.ts` runs the real plan-generation path (one Opus call) and writes nothing to the database. Unit tests cannot answer whether the model actually emits the fields a prompt asked for; this can. Its first run caught both the RAG breakage above and the fact that the new elevation/indoor fields had no UI to render them.
 
 Measured result of the 2026-09-03 verification run — 12-week trail plan, 4 days, 21K/1300 m: 12/12 weeks carried `total_elevation_gain_m`, 48/48 workouts carried `elevation_gain_m` and `indoor_alternative`, **zero sessions scheduled outside the four selected days**, and the down weeks cut vert harder than km (week 3→4: vert −45%, km −20%), which is what the prompt asks for and the thing most likely to be quietly ignored.
