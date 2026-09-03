@@ -604,7 +604,19 @@ export function buildRaceDemandBlock(demand?: RaceDemand): string {
   lines.push('2. Train the two directions as different capacities: **concentric** strength and sustained aerobic power for the ascent, **eccentric** strength for the descent. Treat descent as its own stressor, not the free half of a climb. Eccentric quad and calf loading is what wrecks people late in a long descent, it is trained separately, and it must be built gradually rather than discovered on race day. This athlete has a **plantar fasciitis history** — state how the descent progression respects it.');
   lines.push('3. Prescribe long climbing sessions as **time on feet plus a vert target**, not pace. Pace targets are close to meaningless on steep grade and will be missed by anyone following them honestly.');
   lines.push('4. Treat **power-hiking as a trainable skill**, not a failure state. Above roughly 40 m/km hiking is faster and cheaper than running for most athletes — prescribe it deliberately and practise it.');
-  lines.push('5. If poles are appropriate, say which week they enter. Race gear is trained with, never met for the first time on race day.');
+  // Gear is a SEASON decision, and this block is read by both layers — so it
+  // has to name the owner. "If poles are appropriate" was answerable only at
+  // season level, and at block level the model correctly ignored it, which
+  // looked identical to forgetting. An unstated decision and a decision made
+  // against are different outcomes; only one of them is recoverable later.
+  lines.push(
+    '5. **Poles are a SEASON-level decision and must never be left unstated.** ' +
+      'If you are designing the season: decide yes or no, say which phase they enter and why, ' +
+      'and make "trained with poles" an exit criterion of that phase — race gear is trained with, ' +
+      'never met for the first time on race day. If you are writing a block inside an existing ' +
+      'season: follow what that season decided, and introduce poles only if the current phase ' +
+      'calls for them. Do not silently skip the question in either case.',
+  );
   lines.push('');
 
   return lines.join('\n');

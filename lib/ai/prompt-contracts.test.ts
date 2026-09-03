@@ -218,3 +218,15 @@ test('a shallow race does not get the power-hiking directive', () => {
   expect(shallow).toContain('average grade of 1.2%');
   expect(shallow).not.toContain('PRIMARY technique');
 });
+
+test('gear decisions name their owner instead of being conditional', () => {
+  // "If poles are appropriate, say which week they enter" was unanswerable at
+  // block level — a 12-week Base block that is weeks 1-12 of 43 cannot
+  // schedule week 30 — so the model correctly ignored it, which looked
+  // identical to forgetting. An unstated decision and a decision made against
+  // are different outcomes, and only one is recoverable later.
+  const block = buildRaceDemandBlock({ distanceKm: 21, elevationGainM: 1300 });
+  expect(block).toContain('SEASON-level decision and must never be left unstated');
+  expect(block).toContain('exit criterion');
+  expect(block).not.toContain('If poles are appropriate');
+});
