@@ -157,6 +157,28 @@ Client components may use bare `new Date()` — the browser is already in the us
 
 ---
 
+## Status — updated 2026-09-03
+
+Two of the four open decisions at the foot of this doc are now settled, and one chunk is built.
+
+**Decision 1 (plan ownership): track + advise.** The athlete builds the mountain plan externally; the app tracks it and advises around it. **Chunks 4 and 6 are therefore out of scope** — no trail plan type, no `buildTrailPlanSection()`, no plan-form UI. Chunks 3 (RAG methodology) and 5 (indoor alternative) stay worth doing, since both improve Ask Coach regardless of where the plan lives.
+
+**Chunk 1 (elevation capture): done**, commits `b12571b` and `e62720a` on `claude/mountain-race-handoff-a93e56`.
+
+What landed: `runs.elevation_gain_m` / `elevation_loss_m`, generated `runs.vert_per_km`, `laps.elevation_gain_m`; provider mapping in `lib/ingest/intervals.ts`; writes through `upsertRun`; a new pure `lib/utils/elevation.ts` with tests; per-run and weekly rendering in `lib/rag/user-formatter.ts`; a reading guide in `COACH_STATIC_BLOCK`; two new `RunType` values; and dashboard / log / review UI.
+
+Three findings from the pre-write probe that change what a later chunk should do:
+
+- **Lap gain does not sum to run gain** — 130.4 m across laps against 210.9 m on the activity (i172836000), because intervals.icu laps are detected segments that do not tile the run. Lap elevation says *which segment* climbed and can never derive a run total. There is no per-lap loss field at all (0/191 sampled).
+- **VAM is unusable** — `average_vertical_speed` is on 9/130 activities. No vertical TRIMP, no climb-rate metric. This is the 1d deferral, now measured rather than assumed.
+- The 1e classification work was **smaller than scoped and 1c needed no new script**: `--rerun` on the existing backfill fills the new columns through ordinary fill-null-only enrichment. Its acceptance check did need fixing — it hardcoded a row count of 680 against a table that grows daily.
+
+⚠️ **The migration is written but NOT applied.** `supabase/migrations/20260903_elevation.sql` must land before this branch reaches `master`, or every sync insert fails on unknown columns. Supabase was unreachable for the whole session (repeated connection timeouts on both `apply_migration` and `execute_sql`). The backfill (`bunx tsx scripts/backfill-intervals.ts --rerun --commit --snapshot <fresh table>`) also still needs running once the migration is in — until then every `elevation_gain_m` is null and every surface correctly renders "not measured".
+
+**Chunk 2 is now the live risk**, not a hypothetical: the 3–12 min/km pace-band gates in `decoupling.ts` and `efficiency.ts` will blank both metrics on power-hiking sessions. It stays blocked on real mountain data existing to calibrate against, which is what Chunk 1 now makes possible.
+
+---
+
 ## Part B — Implementation plan
 
 Dependency order: **0 gates everything** (a mountain plan judged against a road plan, or generated from a stale profile, produces garbage). **1 gates 2** (a trail plan is worthless if the app can't see the vert actually run). **3** should land before or alongside 2 (generating a trail plan from road-only RAG methodology produces a road plan with hills sprinkled on). **2's pace-band decision blocks nothing but must be made before 1's data starts flowing through the existing metrics**, or decoupling/efficiency start silently going dark on every mountain session.
