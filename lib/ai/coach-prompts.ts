@@ -102,7 +102,7 @@ generating a plan. **Use those. Do not assume a default weekly shape.**
 - If a request supplies days, they override anything you remember or infer.
 - If no days are supplied, say so and ask, rather than inventing a schedule.
 - Never move a session to a day the athlete has not offered.
-- Israeli working week: Sunday is a workday, Friday-Saturday is the weekend.
+- Israeli working week: Sunday is a WORKDAY, Friday-Saturday is the weekend.
   Do not treat Sunday as a rest day or Saturday as the default long-run day
   unless the supplied days say so.
 
@@ -137,8 +137,8 @@ Reading the numbers you are given:
   - A **NEGATIVE** value means the second half was MORE efficient than the first. That is a hot start or a negative split — the run got stronger, not weaker. Do not read it as "ran too hard"; the fix for a hot start (start slower) is the opposite of the fix for a fade (build endurance).
   - **Absent** decoupling means the session was gated out — intervals or fartlek, too few laps carrying both pace and HR, halves that did not divide evenly, or too much time at non-running pace. Absence is NOT a good result and NOT a clean run. Say it was not computable if it matters.
 - **Elevation**: each run carries [+340m / -380m, 34.0 m/km — Hilly]. The m/km figure is the one that matters; total climb without distance beside it says nothing about how steep anything was. [vert n/a] means no elevation was recorded for that run — it is NOT a flat run, and roughly 4 runs in 5 across the full history predate elevation capture entirely. Climb and descent are reported separately and both as positive numbers, because descent is its own stressor: eccentric quad and calf loading, a different injury risk, and not something climbing fitness covers.
-  - The bands (Flat <5, Rolling 5-12, Hilly 12-25, Mountain 25+ m/km) are quantiles of THIS athlete's own 128 measured runs, not general trail categories. His median run is 8.8 m/km and his steepest ever recorded is 20.2. **Mountain has no member in his history at all.**
-  - His target race is 61.9 m/km — about 3x his steepest single run and 7x his typical one. When a weekly-vert or steepest-run figure is supplied, cite it; do not describe his climbing as adequate or inadequate without that number, and never imply he has run at race gradient when nothing in the data says he has.
+  - The bands (Flat <5, Rolling 5-15, Hilly 15-25, Mountain 25+ m/km) are quantiles of THIS athlete's own 128 measured runs, not general trail categories. His median run is 8.8 m/km, his p95 is 12.0, and his steepest ever recorded is 20.2. **Mountain has no member in his history at all.**
+  - His target race is 61.9 m/km, several times steeper than anything he has run. When a block supplies the multiple against his own history, cite THAT number rather than one you remember — it is computed from a rolling window and moves. Do not describe his climbing as adequate or inadequate without a supplied figure, and never imply he has run at race gradient when nothing in the data says he has.
   - A weekly vert total is a FLOOR whenever the block says it came from fewer runs than the week contains. Say so rather than presenting it as the week's climbing.
 - **Recovery**: HRV is only meaningful against the athlete's own baseline, which is supplied. A missing HRV reading is missing data, never a bad reading — do not treat "no reading" as poor recovery.
 - **Aerobic efficiency**: grade-adjusted speed per heartbeat, as a 42-day rolling MEDIAN — never a single run, which is dominated by heat, sleep and terrain. It answers "is the training working", which Fitness (CTL) cannot: CTL rises whenever volume rises and says nothing about whether the body is adapting to it. Rising load with flat efficiency means the work is going in and the aerobic system is not responding — a different problem from not training enough, with a different fix.
@@ -197,13 +197,19 @@ export function buildCoachSystemPrompt(context: LegacyCoachContext = {}): string
   const { profile } = context;
 
   // Default values from athlete profile
+  // No invented defaults below. A profile value rendered from a fallback reads
+  // as measured fact in the prompt, which is how a stale training_days and a
+  // frozen 5:40/km race pace both survived for months. The 185 max HR and its
+  // zone bands are worse than generic: they are this athlete's SUPERSEDED
+  // definition, replaced by 191 in 2026-08, so a fallback would assert a
+  // retired zone model as current.
   const name = profile?.name || 'Athlete';
-  const age = profile?.age || 30;
-  const weight = profile?.weight_kg || 70;
-  const restingHr = profile?.resting_hr || 60;
-  const maxHr = profile?.max_hr || 185;
-  const ltHr = profile?.lactate_threshold_hr || 165;
-  const goal = profile?.current_goal || 'Sub-2hr Half Marathon';
+  const age = profile?.age ?? 'not set';
+  const weight = profile?.weight_kg ?? 'not set';
+  const restingHr = profile?.resting_hr ?? 'not set';
+  const maxHr = profile?.max_hr ?? 'not set';
+  const ltHr = profile?.lactate_threshold_hr ?? 'not set';
+  const goal = profile?.current_goal || 'not set — do not assume one';
   // No invented fallback. A hardcoded 'Mon, Wed, Fri, Sun' here is a guess
   // rendered as fact, and it is exactly how a stale training_days went
   // unnoticed for months — the prompt read plausibly either way.
@@ -229,12 +235,13 @@ export function buildCoachSystemPrompt(context: LegacyCoachContext = {}): string
 - Training Days: ${trainingDays}
 
 ## HR ZONES
-- Z1 (Recovery): ${profile?.hr_zone_z1 || '0-120'} bpm - Very easy
-- Z2 (Easy/Aerobic): ${profile?.hr_zone_z2 || '120-140'} bpm - Conversational
-- Z3 (Moderate/Tempo): ${profile?.hr_zone_z3 || '140-155'} bpm - Steady state
-- Z4 (Threshold): ${profile?.hr_zone_z4 || '155-170'} bpm - Comfortably hard
-- Z5 (VO2max): ${profile?.hr_zone_z5 || '170-185'} bpm - Hard intervals
-- Z6 (Anaerobic): ${profile?.hr_zone_z6 || '185+'} bpm - Sprint/max
+- Z1 (Recovery): ${profile?.hr_zone_z1 ?? 'not set'} bpm - Very easy
+- Z2 (Easy/Aerobic): ${profile?.hr_zone_z2 ?? 'not set'} bpm - Conversational
+- Z3 (Moderate/Tempo): ${profile?.hr_zone_z3 ?? 'not set'} bpm - Steady state
+- Z4 (Threshold): ${profile?.hr_zone_z4 ?? 'not set'} bpm - Comfortably hard
+- Z5 (VO2max): ${profile?.hr_zone_z5 ?? 'not set'} bpm - Hard intervals
+- Z6 (Anaerobic): ${profile?.hr_zone_z6 ?? 'not set'} bpm - Sprint/max
+${profile?.hr_zone_z2 ? '' : 'Zones are NOT SET. Do not prescribe bpm targets; use effort, and say the zones are missing.'}
 
 ${formatGoalPaceBlock(goalPace(profile?.current_goal, profile?.long_term_goal))}
 
@@ -929,6 +936,19 @@ IMPORTANT:
 }
 
 /**
+ * How many weeks forward an adjustment may rewrite.
+ *
+ * The prompt previously asked for "ALL remaining weeks from week N to the end",
+ * which at week 1 of a 16-week plan is ~10k output tokens against a 8k cap —
+ * the response truncates, `adjusted_weeks` comes back short, and the merge
+ * writes a partially-rewritten plan without anything reporting a problem.
+ *
+ * Four weeks also matches what an adjustment is FOR. A request to move a long
+ * run should not silently redesign next March.
+ */
+export const ADJUSTMENT_WINDOW_WEEKS = 4;
+
+/**
  * Build prompt for plan adjustment based on feedback (legacy version)
  */
 export function buildPlanAdjustmentPrompt(params: {
@@ -943,8 +963,18 @@ export function buildPlanAdjustmentPrompt(params: {
   recentRuns?: unknown[];
   userRequest?: string;
   adjustmentType: 'weekly_review' | 'user_request' | 'injury' | 'performance';
+  /** The days the athlete actually trains. Without this an adjustment reschedules onto days he does not run. */
+  trainingDays?: string | null;
+  /** Rendered TrainingState, so an adjustment sees the same evidence generation does. */
+  stateText?: string | null;
+  /** How many weeks forward may be rewritten. See ADJUSTMENT_WINDOW_WEEKS. */
+  windowWeeks?: number;
 }): string {
-  const { currentPlan, currentWeek, weeklyFeedback, recentRuns, userRequest, adjustmentType } = params;
+  const {
+    currentPlan, currentWeek, weeklyFeedback, recentRuns, userRequest, adjustmentType,
+    trainingDays, stateText, windowWeeks = ADJUSTMENT_WINDOW_WEEKS,
+  } = params;
+  const lastWeek = currentWeek + windowWeeks - 1;
 
   return `You are adjusting an existing training plan based on athlete feedback and data.
 
@@ -964,14 +994,27 @@ ${recentRuns ? JSON.stringify(recentRuns, null, 2) : 'No recent runs data'}
 - Stress level: ${weeklyFeedback?.stressLevel || 'N/A'}/10
 - Injury notes: ${weeklyFeedback?.injuryNotes || 'None'}
 
+## TRAINING DAYS — HARD CONSTRAINT
+${trainingDays || 'NOT SET — say so and do not invent a schedule.'}
+Schedule ONLY on these days. Moving a session to a day the athlete does not
+train produces a plan he cannot follow and then reads as a missed session. If
+he is explicitly asking to change which days he trains, say that his profile
+should be updated too — otherwise every future plan reverts to the old days.
+
+${stateText ?? ''}
+
 ## USER REQUEST
 ${userRequest || 'No specific request - adjust based on feedback data'}
 
 ## YOUR TASK
-Analyze the current plan and athlete feedback, then provide adjusted workouts for the REMAINING weeks (Week ${currentWeek} onwards).
+Analyze the current plan and athlete feedback, then adjust weeks ${currentWeek} to ${lastWeek} ONLY.
+
+Make the SMALLEST change that satisfies the request. An unrelated rewrite is
+worse than no change: it spends the trust every future adjustment depends on.
+Leave everything the request does not touch exactly as it is.
 
 You can:
-1. **Reorder workouts** - Move hard sessions to different days
+1. **Reorder workouts** - Move sessions between the athlete's OWN training days
 2. **Adjust paces** - Make workouts easier/harder based on performance
 3. **Change distances** - Increase/decrease based on how athlete is coping
 4. **Add recovery** - Insert extra easy days if needed
@@ -997,7 +1040,9 @@ Return a JSON object with this structure:
           "distance": "X km",
           "target_hr": "Zone",
           "target_pace": "Pace range",
-          "description": "Full workout description"
+          "description": "Full workout description",
+          "elevation_gain_m": 120,
+          "indoor_alternative": { "type": "...", "equipment": "...", "duration": "...", "description": "..." }
         }
       }
     }
@@ -1006,8 +1051,12 @@ Return a JSON object with this structure:
 
 IMPORTANT:
 - Always start the week on SUNDAY
-- Maintain the Triphasic Model principles
-- Keep 80/20 intensity distribution
+- Follow the methodology the athlete's loaded books prescribe; the Triphasic
+  structure is the default, not an override of them
+- Keep the intensity distribution the plan was built on
 - Be conservative with injured athletes
-- Generate workouts for ALL remaining weeks from week ${currentWeek} to the end of the plan`;
+- Adjust ONLY weeks ${currentWeek} to ${lastWeek}. Do not rewrite the rest of the plan
+- PRESERVE every field each workout already carries, including
+  elevation_gain_m, indoor_alternative and the week's total_elevation_gain_m.
+  Omitting a field silently deletes a target the athlete is training toward`;
 }

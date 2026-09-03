@@ -3,7 +3,9 @@ export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { callOpenRouter } from '@/lib/ai/openrouter';
-import { buildCoachSystemPrompt, buildPlanAdjustmentPrompt } from '@/lib/ai/coach-prompts';
+import { buildCoachSystemPrompt, buildPlanAdjustmentPrompt, COACH_STATIC_BLOCK } from '@/lib/ai/coach-prompts';
+import { buildTrainingState, formatTrainingState } from '@/lib/coach/training-state';
+import { MODEL_FOR } from '@/lib/ai/model-registry';
 import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { planAdjustmentSchema, validateInput } from '@/lib/validation/schemas';
@@ -73,6 +75,14 @@ export async function POST(request: NextRequest) {
       .gte('date', twoWeeksAgo.toISOString())
       .order('date', { ascending: false });
 
+    // The same evidence generation reasons over. Without it an adjustment is
+    // made from the plan text alone, blind to adherence, vert and efficiency.
+    // Best-effort: an outage here must not block a requested change.
+    const state = await buildTrainingState(userId, { profile, plan }).catch((err) => {
+      console.error('adjust: training state unavailable:', err);
+      return null;
+    });
+
     // Build prompts
     const systemPrompt = buildCoachSystemPrompt({ profile });
     const userPrompt = buildPlanAdjustmentPrompt({
@@ -82,15 +92,26 @@ export async function POST(request: NextRequest) {
       recentRuns: recentRuns || [],
       userRequest,
       adjustmentType,
+      trainingDays: profile?.training_days ?? null,
+      stateText: state ? formatTrainingState(state) : null,
     });
 
-    // Call OpenRouter
+    // COACH_STATIC_BLOCK travels as the cacheable prefix so an adjustment obeys
+    // the same standing rules generation does — the indoor-alternative rule,
+    // the day-anchor deference, and the reading guides for GAP, decoupling,
+    // elevation and HRV. Without it this path was running on an older, smaller
+    // rule set and could undo what generation had just been told to do.
     const response = await callOpenRouter(
       [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      { apiKey, maxTokens: 8000 }
+      {
+        apiKey,
+        model: MODEL_FOR.plan_adjust,
+        maxTokens: 8000,
+        cacheableSystemPrefix: COACH_STATIC_BLOCK,
+      }
     );
 
     if (response.error) {

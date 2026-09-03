@@ -158,9 +158,10 @@ export function buildGrockySystemPrompt(context: LegacyGrockyContext = {}): stri
   const { profile } = context;
 
   const name = profile?.name || 'Athlete';
-  const maxHr = profile?.max_hr || 185;
+  // See the note in coach-prompts.ts: 185 is this athlete's superseded max.
+  const maxHr = profile?.max_hr ?? 'not set';
   const ltHr = profile?.lactate_threshold_hr || 165;
-  const goal = profile?.current_goal || 'Sub-2hr Half Marathon';
+  const goal = profile?.current_goal || 'not set — do not assume one';
 
   return `You are GROCKY, an analytical AI running coach who provides evidence-based second opinions. You challenge conventional wisdom and offer alternative perspectives grounded in sports science.
 

@@ -29,6 +29,11 @@ export const MODEL_FOR = {
    * cost is still <$10.
    */
   plan_generation:      'anthropic/claude-opus-4.7',
+  // Adjustment is a smaller, bounded task than generation — at most a 4-week
+  // window against an existing plan. Named here rather than left to
+  // callOpenRouter's default, so the choice is visible and deliberate instead
+  // of being whatever the library happens to fall back to.
+  plan_adjust:          'anthropic/claude-sonnet-4.6',
 
   /**
    * Weekly review — substantial reasoning over the week's runs,
