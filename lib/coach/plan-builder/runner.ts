@@ -16,24 +16,22 @@
  */
 
 import { supabase } from '@/lib/db/supabase';
-import { callOpenRouter, type OpenRouterResponse } from '@/lib/ai/openrouter';
-import { COACH_STATIC_BLOCK } from '@/lib/ai/coach-prompts';
-import { MODEL_FOR, REASONING_FOR, type ModelTaskKey } from '@/lib/ai/model-registry';
+import { MODEL_FOR } from '@/lib/ai/model-registry';
 import { getAthleteProfile } from '@/lib/db/profile';
 import { parseZonesFromProfile } from '@/lib/utils/zones';
 import { extractJson, planOutputTokenBudget } from '@/lib/coach/plan-output';
-import { logCoachCall } from '@/lib/supervisor';
 import type { PlanWeek } from '@/lib/db/types';
 import { prepare } from './prepare';
+import { ask, Meter } from './llm';
 import { buildOutlinePrompt, buildReviewPrompt, buildStrengthPrompt, buildWriterPrompt, type WriteChunk } from './prompts';
 import { assemblePlan, chunksFor, mergeStrength, mergeWeeks, narrowChunks, normalizeOutline, parseWriterWeeks } from './assemble';
 import { checkCoherence, checkPlan, type CheckContext } from './checks';
 import { STAGE_LABELS } from './view';
+import { runSeasonStage } from './season';
 import type {
-  BuildReport, BuildRequest, BuildStage, CheckReport, CoherenceIssue, CoherenceReview, PlanBuildRow, PlanOutline,
+  BuildKind, BuildReport, BuildRequest, BuildStage, CheckReport, CoherenceIssue, CoherenceReview, PlanBuildRow, PlanOutline, SeasonRequest,
 } from './types';
 
-const ROUTE = '/api/coach/plans/build';
 /** A claimed stage is abandoned after this — longer than any stage can run. */
 const CLAIM_MS = 290_000;
 /** Review → fix rounds. "At most twice" so a disagreement cannot loop. */
@@ -48,9 +46,11 @@ export { STAGE_LABELS } from './view';
 // Persistence
 // ---------------------------------------------------------------------------
 
-export async function createBuild(userId: string, request: BuildRequest, opts: { dryRun?: boolean } = {}): Promise<PlanBuildRow> {
+export async function createBuild(
+  userId: string, request: BuildRequest | SeasonRequest, opts: { dryRun?: boolean; kind?: BuildKind } = {},
+): Promise<PlanBuildRow> {
   const { data, error } = await supabase.from('plan_builds')
-    .insert({ user_id: userId, request, dry_run: !!opts.dryRun })
+    .insert({ user_id: userId, request, dry_run: !!opts.dryRun, kind: opts.kind ?? 'block' })
     .select().single();
   if (error) throw new Error(`could not start build: ${error.message}`);
   return data as PlanBuildRow;
@@ -61,10 +61,10 @@ export async function getBuild(userId: string, id: string): Promise<PlanBuildRow
   return (data as PlanBuildRow) ?? null;
 }
 
-/** The athlete's unfinished build from the last hour, for resuming after a page reload. */
-export async function latestOpenBuild(userId: string): Promise<PlanBuildRow | null> {
+/** The athlete's unfinished build of this kind from the last hour, for resuming after a page reload. */
+export async function latestOpenBuild(userId: string, kind: BuildKind = 'block'): Promise<PlanBuildRow | null> {
   const { data } = await supabase.from('plan_builds').select('*')
-    .eq('user_id', userId).eq('dry_run', false)
+    .eq('user_id', userId).eq('dry_run', false).eq('kind', kind)
     .not('stage', 'in', '(done,failed)')
     .gte('updated_at', new Date(Date.now() - 3_600_000).toISOString())
     .order('created_at', { ascending: false }).limit(1).maybeSingle();
@@ -92,51 +92,6 @@ async function commit(row: PlanBuildRow, patch: Partial<PlanBuildRow>): Promise<
 // ---------------------------------------------------------------------------
 // Model calls
 // ---------------------------------------------------------------------------
-
-/** Accumulates what a stage's model calls actually cost (OpenRouter usage accounting). */
-class Meter {
-  cost = 0;
-  prompt = 0;
-  cached = 0;
-  add(r: OpenRouterResponse) {
-    this.cost += r.costUsd ?? 0;
-    this.prompt += r.promptTokens ?? 0;
-    this.cached += r.cachedTokens ?? 0;
-  }
-  get summary() {
-    return { cost: Math.round(this.cost * 1000) / 1000, prompt: this.prompt, cached: this.cached };
-  }
-}
-
-async function ask(
-  userId: string, task: ModelTaskKey, system: string, user: string, maxTokens: number,
-  meter: Meter, sharedPrefix?: string,
-): Promise<OpenRouterResponse & { ms: number }> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error('OpenRouter API key not configured');
-  const t = Date.now();
-  const r = await callOpenRouter(
-    [{ role: 'system', content: system }, { role: 'user', content: user }],
-    {
-      apiKey, model: MODEL_FOR[task], maxTokens, reasoningTokens: REASONING_FOR[task],
-      // The cached prefix is the byte-stable part: the coach persona, plus —
-      // for writers — everything every writer in this build shares.
-      cacheableSystemPrefix: sharedPrefix ? `${COACH_STATIC_BLOCK}\n\n${sharedPrefix}` : COACH_STATIC_BLOCK,
-    },
-  );
-  meter.add(r);
-  const ms = Date.now() - t;
-  // Best-effort telemetry: one coach_calls row per model call, same table the
-  // supervisor's weekly health audit already reads.
-  logCoachCall({
-    user_id: userId, route: ROUTE, query_type: 'plan_generation', model: MODEL_FOR[task],
-    context_tokens: r.promptTokens ?? Math.round((system.length + (sharedPrefix?.length ?? 0)) / 4), context_budget: null, ceiling_hit: false,
-    cache_used: (r.cachedTokens ?? 0) > 0, preflight_ok: true, preflight_warnings: [`builder:${task}`], preflight_augmented: false,
-    latency_ms: ms, status: r.error ? 'error' : r.finishReason === 'length' ? 'partial' : 'ok',
-    error_message: r.error ?? null, plan_modified: false,
-  }).catch(() => {});
-  return { ...r, ms };
-}
 
 // ---------------------------------------------------------------------------
 // Stages
@@ -273,6 +228,7 @@ async function checkAndRepair(
 }
 
 async function runStage(row: PlanBuildRow): Promise<StageResult> {
+  if (row.kind === 'season') return runSeasonStage(row);
   const t = Date.now();
   const timings = { ...row.timings };
   const attempts = { ...(row.attempts ?? {}) };

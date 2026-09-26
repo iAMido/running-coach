@@ -1,7 +1,9 @@
 /**
  * Staged plan builder API. See lib/coach/plan-builder/runner.ts.
  *
- *   POST { ...plan request }  → start a build and run its first stage
+ *   POST { ...plan request }  → start a training-block build and run its first stage
+ *   POST { kind: 'season', ...season request } → start a season build
+ *   GET  ?kind=season         → the athlete's unfinished season build, if any
  *   POST { buildId }          → run the build's next stage
  *   GET  ?id=<buildId>        → a build's current state
  *   GET                       → the athlete's unfinished build, if any (resume)
@@ -19,10 +21,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { supabase } from '@/lib/db/supabase';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
-import { planGenerationSchema, validateInput } from '@/lib/validation/schemas';
+import { macroPlanGenerationSchema, planGenerationSchema, validateInput } from '@/lib/validation/schemas';
 import { advance, createBuild, getBuild, latestOpenBuild } from '@/lib/coach/plan-builder/runner';
 import { toView } from '@/lib/coach/plan-builder/view';
 import type { PlanBuildRow } from '@/lib/coach/plan-builder/types';
+
+class ValidationError extends Error {}
 
 async function view(row: PlanBuildRow, busy = false) {
   let plan = null;
@@ -30,14 +34,20 @@ async function view(row: PlanBuildRow, busy = false) {
     const { data } = await supabase.from('training_plans').select('*').eq('id', row.plan_id).maybeSingle();
     plan = data;
   }
-  return toView(row, busy, plan);
+  let season = null;
+  if (row.stage === 'done' && row.macro_plan_id) {
+    const { data } = await supabase.from('macro_plans').select('*').eq('id', row.macro_plan_id).maybeSingle();
+    season = data;
+  }
+  return toView(row, busy, plan, season);
 }
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthenticatedUser();
   if (!auth.authenticated || !auth.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const id = request.nextUrl.searchParams.get('id');
-  const row = id ? await getBuild(auth.userId, id) : await latestOpenBuild(auth.userId);
+  const kind = request.nextUrl.searchParams.get('kind') === 'season' ? 'season' : 'block';
+  const row = id ? await getBuild(auth.userId, id) : await latestOpenBuild(auth.userId, kind);
   return NextResponse.json({ build: row ? await view(row) : null });
 }
 
@@ -57,12 +67,24 @@ export async function POST(request: NextRequest) {
       const { row, busy } = await advance(auth.userId, next.data.buildId);
       return NextResponse.json({ build: await view(row, busy) });
     }
-    const validation = validateInput(planGenerationSchema, body);
-    if (!validation.success) return NextResponse.json({ error: validation.error }, { status: 400 });
-    const created = await createBuild(auth.userId, validation.data);
+    // { kind: 'season', ...season fields } starts a season build; anything
+    // else is a training-block request.
+    const { kind, ...fields } = body as { kind?: string } & Record<string, unknown>;
+    const created = kind === 'season'
+      ? await (async () => {
+          const v = validateInput(macroPlanGenerationSchema, fields);
+          if (!v.success) throw new ValidationError(v.error);
+          return createBuild(auth.userId!, v.data, { kind: 'season' });
+        })()
+      : await (async () => {
+          const v = validateInput(planGenerationSchema, fields);
+          if (!v.success) throw new ValidationError(v.error);
+          return createBuild(auth.userId!, v.data);
+        })();
     const { row, busy } = await advance(auth.userId, created.id);
     return NextResponse.json({ build: await view(row, busy) });
   } catch (err) {
+    if (err instanceof ValidationError) return NextResponse.json({ error: err.message }, { status: 400 });
     console.error('plan build failed:', err);
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Plan build failed' }, { status: 500 });
   }

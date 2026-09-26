@@ -3,7 +3,10 @@
  * it. Writes ONE macro_plans row (superseding any active one), which is the
  * real behaviour being tested. One Opus call.
  *
- * Usage: bunx tsx scripts/verify-macro-plan.ts --env "<path>" [--commit]
+ * Usage: bunx tsx scripts/verify-macro-plan.ts --env "<path>" [--commit] [--horizon 40] [--out season.json]
+ *
+ * --out writes the parsed season so scripts/verify-season-builder.ts --score
+ * can judge it with the same rules as the staged builder's season.
  */
 import * as dotenv from 'dotenv';
 const argv = process.argv.slice(2);
@@ -26,7 +29,8 @@ async function main() {
   const { data } = await supabase.from('athlete_profile').select('user_id').limit(1).maybeSingle();
   const userId = (data as { user_id: string }).user_id;
 
-  const horizonWeeks = 43;
+  const hIdx = argv.indexOf('--horizon');
+  const horizonWeeks = hIdx >= 0 ? Number(argv[hIdx + 1]) : 43;
   console.log(`horizon ${horizonWeeks}w -> suggested phases: ${suggestedPhaseCount(horizonWeeks)}`);
   for (const h of [6, 12, 18, 26, 43, 52]) console.log(`   ${h}w -> ${suggestedPhaseCount(h)} phases`);
 
@@ -66,6 +70,9 @@ async function main() {
   if (res.error) { console.error(res.error); process.exit(1); }
   const f = res.content.indexOf('{'), l = res.content.lastIndexOf('}');
   const parsed = JSON.parse(res.content.slice(f, l + 1));
+  console.log(`cost (billed): $${(res.costUsd ?? 0).toFixed(3)} · ${res.completionTokens} output tokens`);
+  const oIdx = argv.indexOf('--out');
+  if (oIdx >= 0) (await import('fs')).writeFileSync(argv[oIdx + 1], JSON.stringify(parsed, null, 2));
 
   console.log(`\nphases returned: ${parsed.phases.length}`);
   console.log(`weeks sum: ${parsed.phases.reduce((s: number, p: { weeks: number }) => s + p.weeks, 0)} (asked for ${horizonWeeks})`);

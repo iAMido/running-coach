@@ -4,10 +4,24 @@
  */
 
 import type { z } from 'zod';
-import type { planGenerationSchema } from '@/lib/validation/schemas';
+import type { macroPlanGenerationSchema, planGenerationSchema } from '@/lib/validation/schemas';
 import type { PlanWeek, PlannedStrength } from '@/lib/db/types';
+import type { MacroPhase } from '@/lib/coach/macro-plan';
 
 export type BuildRequest = z.infer<typeof planGenerationSchema>;
+export type SeasonRequest = z.infer<typeof macroPlanGenerationSchema>;
+
+/** A training block (saved to training_plans) or a season (saved to macro_plans). */
+export type BuildKind = 'block' | 'season';
+
+/** The season between stages: the macro_plans shape plus stated decisions. */
+export interface SeasonDraft {
+  goal_name: string;
+  rationale: string;
+  phases: MacroPhase[];
+  /** Season-level decisions (poles, fuelling, altitude) stated, not implied. */
+  decisions: string[];
+}
 
 export type BuildStage =
   | 'created' | 'prepared' | 'outlined' | 'written' | 'checked'
@@ -140,6 +154,7 @@ export interface CheckReport {
 /** Step 7 — does it all fit. */
 export interface CoherenceIssue {
   severity: 'must_fix' | 'note';
+  /** Week numbers for a block; PHASE numbers for a season. */
   weeks: number[];
   problem: string;
   fix: string;
@@ -172,8 +187,12 @@ export interface BuildReport {
 export interface PlanBuildRow {
   id: string;
   user_id: string;
+  kind: BuildKind;
   stage: BuildStage;
+  /** A SeasonRequest when kind is 'season'. */
   request: BuildRequest;
+  season: SeasonDraft | null;
+  macro_plan_id: string | null;
   prepared: PreparedStage | null;
   outline: PlanOutline | null;
   weeks: PlanWeek[] | null;

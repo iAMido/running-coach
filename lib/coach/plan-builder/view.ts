@@ -4,7 +4,8 @@
  */
 
 import type { TrainingPlan } from '@/lib/db/types';
-import type { BuildStage, PlanBuildRow } from './types';
+import type { MacroPlan } from '@/lib/coach/macro-plan';
+import type { BuildKind, BuildStage, PlanBuildRow } from './types';
 
 /** Stage labels. Kept here (not in runner.ts) so the client can import them without server code. */
 export const STAGE_LABELS: Record<BuildStage, string> = {
@@ -19,6 +20,30 @@ export const STAGE_LABELS: Record<BuildStage, string> = {
   failed: 'Failed',
 };
 
+/** A season has no phase writers: design, then checks run on the design itself. */
+export const SEASON_STAGE_LABELS: Record<BuildStage, string> = {
+  ...STAGE_LABELS_BASE(),
+  prepared: 'Head coach designing the season',
+  outlined: 'Checking every rule',
+};
+function STAGE_LABELS_BASE(): Record<BuildStage, string> {
+  return {
+    created: 'Assessing athlete, race and research', prepared: '', outlined: '', written: '',
+    checked: 'Head coach reviewing the whole season', coherence_fix: 'Fixing what did not fit',
+    reviewed: 'Saving the season', done: 'Done', failed: 'Failed',
+  };
+}
+
+export const SEASON_VIEW_STEPS: { stage: BuildStage; title: string }[] = [
+  { stage: 'created', title: 'Assess athlete, race & research' },
+  { stage: 'prepared', title: 'Season design — phases, ranges, exit criteria' },
+  { stage: 'outlined', title: 'Rule checks & repairs' },
+  { stage: 'checked', title: 'Does it all fit?' },
+  { stage: 'reviewed', title: 'Save' },
+];
+
+export const stepsFor = (kind: BuildKind) => (kind === 'season' ? SEASON_VIEW_STEPS : VIEW_STEPS);
+
 /** The visible steps, in order. coherence_fix is shown as part of the review step. */
 export const VIEW_STEPS: { stage: BuildStage; title: string }[] = [
   { stage: 'created', title: 'Assess athlete, race & research' },
@@ -31,6 +56,7 @@ export const VIEW_STEPS: { stage: BuildStage; title: string }[] = [
 
 export interface PlanBuildView {
   id: string;
+  kind: BuildKind;
   stage: BuildStage;
   label: string;
   /** Index into VIEW_STEPS of the step now running (VIEW_STEPS.length when done). */
@@ -45,16 +71,20 @@ export interface PlanBuildView {
   reviews: { round: number; verdict: string; summary: string; mustFix: number }[];
   seconds: number;
   plan: TrainingPlan | null;
+  /** The saved season, once a season build is done. */
+  season: MacroPlan | null;
 }
 
-export function toView(row: PlanBuildRow, busy: boolean, plan: TrainingPlan | null): PlanBuildView {
+export function toView(row: PlanBuildRow, busy: boolean, plan: TrainingPlan | null, season: MacroPlan | null = null): PlanBuildView {
+  const steps = stepsFor(row.kind ?? 'block');
   const stage = row.stage === 'coherence_fix' ? 'checked' : row.stage;
-  const idx = VIEW_STEPS.findIndex((s) => s.stage === stage);
+  const idx = steps.findIndex((s) => s.stage === stage);
   return {
     id: row.id,
+    kind: row.kind ?? 'block',
     stage: row.stage,
-    label: STAGE_LABELS[row.stage],
-    stepIndex: row.stage === 'done' ? VIEW_STEPS.length : idx,
+    label: (row.kind === 'season' ? SEASON_STAGE_LABELS : STAGE_LABELS)[row.stage],
+    stepIndex: row.stage === 'done' ? steps.length : idx,
     busy,
     error: row.error,
     reviewRound: row.review_rounds,
@@ -67,6 +97,10 @@ export function toView(row: PlanBuildRow, busy: boolean, plan: TrainingPlan | nu
       planName: row.outline.plan_name,
       rationale: row.outline.rationale,
       phases: row.outline.phases.map((p) => ({ name: p.name, weeks: `${p.start_week}-${p.end_week}`, purpose: p.purpose })),
+    } : row.season ? {
+      planName: row.season.goal_name,
+      rationale: row.season.rationale,
+      phases: row.season.phases.map((p) => ({ name: p.name, weeks: `${p.weeks} wk`, purpose: p.capability || p.focus })),
     } : null,
     checks: row.checks ? {
       errors: row.checks.errors, warnings: row.checks.warnings,
@@ -78,5 +112,6 @@ export function toView(row: PlanBuildRow, busy: boolean, plan: TrainingPlan | nu
     })),
     seconds: Math.round(Object.values(row.timings ?? {}).reduce((a, x) => a + x.ms, 0) / 1000),
     plan,
+    season,
   };
 }

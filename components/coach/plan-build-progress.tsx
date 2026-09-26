@@ -8,7 +8,7 @@
  */
 
 import { CheckCircle2, Circle, Loader2, AlertTriangle } from 'lucide-react';
-import { VIEW_STEPS, type PlanBuildView } from '@/lib/coach/plan-builder/view';
+import { stepsFor, type PlanBuildView } from '@/lib/coach/plan-builder/view';
 
 export function PlanBuildProgress({ build }: { build: PlanBuildView }) {
   const failed = build.stage === 'failed';
@@ -20,7 +20,7 @@ export function PlanBuildProgress({ build }: { build: PlanBuildView }) {
       </div>
 
       <ol className="space-y-2.5">
-        {VIEW_STEPS.map((step, i) => {
+        {stepsFor(build.kind).map((step, i) => {
           const state = i < build.stepIndex ? 'done' : i === build.stepIndex && !failed ? 'active' : i === build.stepIndex && failed ? 'failed' : 'pending';
           return (
             <li key={step.stage} className="flex gap-2.5">
@@ -53,9 +53,11 @@ export function PlanBuildProgress({ build }: { build: PlanBuildView }) {
   );
 }
 
-function StepDetail({ build, stage, state }: { build: PlanBuildView; stage: string; state: string }) {
+function StepDetail({ build, stage: rawStage, state }: { build: PlanBuildView; stage: string; state: string }) {
   const muted = { color: 'var(--rc-ink-3)' };
   if (state === 'pending') return null;
+  // A season has no phase writers: its checks run on the design ('outlined').
+  const stage = build.kind === 'season' && rawStage === 'outlined' ? 'written' : rawStage;
   switch (stage) {
     case 'created':
       if (!build.research) return <p className="text-[12px]" style={muted}>Measuring recent load, climbing and run days; searching the books need by need…</p>;
@@ -69,7 +71,9 @@ function StepDetail({ build, stage, state }: { build: PlanBuildView; stage: stri
         </div>
       );
     case 'prepared':
-      if (!build.outline) return <p className="text-[12px]" style={muted}>Deciding phases, weekly targets and the strength programme. The longest step (1-3 min).</p>;
+      if (!build.outline) return <p className="text-[12px]" style={muted}>{build.kind === 'season'
+        ? 'Deciding phases, weekly ranges, exit criteria and season decisions (1-3 min).'
+        : 'Deciding phases, weekly targets and the strength programme. The longest step (1-3 min).'}</p>;
       return (
         <div className="text-[12px] space-y-1" style={muted}>
           <div className="font-medium" style={{ color: 'var(--rc-ink-2)' }}>{build.outline.planName}</div>
@@ -82,16 +86,20 @@ function StepDetail({ build, stage, state }: { build: PlanBuildView; stage: stri
         ? <p className="text-[12px]" style={muted}>Each phase written by its own coach against the outline, at the same time.</p>
         : null;
     case 'written':
-      if (!build.checks) return <p className="text-[12px]" style={muted}>Ramp rates, training days, strength placement, recovery weeks, taper, targets…</p>;
+      if (!build.checks) return <p className="text-[12px]" style={muted}>{build.kind === 'season'
+        ? 'Covers the season, ends on race week, starts from your load, no leaps, reaches the race demand…'
+        : 'Ramp rates, training days, strength placement, recovery weeks, taper, targets…'}</p>;
       return (
         <p className="text-[12px]" style={muted}>
           {build.checks.errors === 0 ? 'All rules pass' : `${build.checks.errors} rule problem(s) left`}
-          {build.checks.repairedWeeks.length > 0 && ` · rewrote week ${build.checks.repairedWeeks.join(', ')} to fix breaks`}
+          {build.checks.repairedWeeks.length > 0 && ` · rewrote ${build.kind === 'season' ? 'phase' : 'week'} ${build.checks.repairedWeeks.join(', ')} to fix breaks`}
           {build.checks.warnings > 0 && ` · ${build.checks.warnings} note(s)`}
         </p>
       );
     case 'checked':
-      if (build.reviews.length === 0) return <p className="text-[12px]" style={muted}>Phase joins, recovery alignment, weeks vs outline, plan vs race.</p>;
+      if (build.reviews.length === 0) return <p className="text-[12px]" style={muted}>{build.kind === 'season'
+        ? 'Phase joins, separate tracks for km / climbing / descent, reachable exit criteria, season vs race.'
+        : 'Phase joins, recovery alignment, weeks vs outline, plan vs race.'}</p>;
       return (
         <div className="text-[12px] space-y-1" style={muted}>
           {build.reviews.map((r) => (
@@ -99,7 +107,7 @@ function StepDetail({ build, stage, state }: { build: PlanBuildView; stage: stri
               Round {r.round}: {r.mustFix > 0 ? `${r.mustFix} thing(s) to fix` : 'fits together'} — {r.summary}
             </div>
           ))}
-          {build.stage === 'coherence_fix' && <div>Rewriting the affected weeks…</div>}
+          {build.stage === 'coherence_fix' && <div>Rewriting the affected {build.kind === 'season' ? 'phases' : 'weeks'}…</div>}
         </div>
       );
     default:

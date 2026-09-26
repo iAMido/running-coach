@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Mountain, Flag, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
+import { PlanBuildProgress } from '@/components/coach/plan-build-progress';
+import { PlanBuildReport } from '@/components/coach/plan-build-report';
+import type { PlanBuildView } from '@/lib/coach/plan-builder/view';
+import type { BuildReport } from '@/lib/coach/plan-builder/types';
 
 interface Phase {
   phase_number: number;
@@ -26,6 +30,8 @@ export interface SeasonPlan {
   phases: Phase[];
   rationale: string | null;
   revision: number;
+  /** How the staged builder designed and checked it. Absent on older seasons. */
+  build_report?: BuildReport | null;
 }
 
 /**
@@ -42,6 +48,7 @@ export function SeasonPlanPanel({ onLoaded }: { onLoaded?: (plan: SeasonPlan | n
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [build, setBuild] = useState<PlanBuildView | null>(null);
 
   const [goalName, setGoalName] = useState('');
   const [raceDate, setRaceDate] = useState('');
@@ -76,14 +83,63 @@ export function SeasonPlanPanel({ onLoaded }: { onLoaded?: (plan: SeasonPlan | n
     if (weeks > 0) setHorizonWeeks(String(weeks));
   }, [raceDate, horizonWeeks]);
 
+  /**
+   * Drive a staged season build (lib/coach/plan-builder/season.ts) one stage
+   * per request, the same way the block builder does.
+   */
+  async function runBuild(initial: PlanBuildView) {
+    let current = initial;
+    setBuild(current);
+    while (current.stage !== 'done' && current.stage !== 'failed') {
+      const res = current.busy
+        ? await new Promise((r) => setTimeout(r, 5000)).then(() => fetch(`/api/coach/plans/build?id=${current.id}`))
+        : await fetch('/api/coach/plans/build', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ buildId: current.id }),
+          });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.build) throw new Error(data.error || `Season build step failed (${res.status})`);
+      current = data.build as PlanBuildView;
+      setBuild(current);
+    }
+    if (current.stage === 'failed') throw new Error(current.error || 'The season build failed. Your current season is unchanged.');
+    if (!current.season) throw new Error('The build finished without a season');
+    const saved = current.season as unknown as SeasonPlan;
+    setPlan(saved);
+    onLoaded?.(saved);
+    setShowForm(false);
+  }
+
+  // Resume a season build left running by a reload or a closed tab.
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/coach/plans/build?kind=season');
+        if (!res.ok) return;
+        const { build: open } = await res.json();
+        if (!open) return;
+        setGenerating(true);
+        await runBuild(open);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Could not resume the season build.');
+      } finally {
+        setGenerating(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function generate() {
     setGenerating(true);
     setError(null);
+    setBuild(null);
     try {
-      const res = await fetch('/api/coach/macro-plan', {
+      const res = await fetch('/api/coach/plans/build', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          kind: 'season',
           goalName,
           horizonWeeks: parseInt(horizonWeeks, 10),
           ...(raceDate ? { raceDate } : {}),
@@ -92,16 +148,11 @@ export function SeasonPlanPanel({ onLoaded }: { onLoaded?: (plan: SeasonPlan | n
           ...(terrainAccess ? { terrainAccess } : {}),
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? 'Could not design the season.');
-        return;
-      }
-      setPlan(data.macroPlan);
-      onLoaded?.(data.macroPlan);
-      setShowForm(false);
-    } catch {
-      setError('Could not reach the server.');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.build) throw new Error(data.error ?? 'Could not start designing the season.');
+      await runBuild(data.build as PlanBuildView);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not design the season.');
     } finally {
       setGenerating(false);
     }
@@ -208,7 +259,11 @@ export function SeasonPlanPanel({ onLoaded }: { onLoaded?: (plan: SeasonPlan | n
           </div>
         )}
 
-        {!showForm && (
+        {plan?.build_report && <div className="mb-4"><PlanBuildReport report={plan.build_report} unit="Phase" /></div>}
+
+        {build && (generating || build.stage === 'failed') && <div className="mb-4"><PlanBuildProgress build={build} /></div>}
+
+        {!showForm && !generating && (
           <button
             type="button"
             onClick={() => setShowForm(true)}
@@ -258,7 +313,7 @@ export function SeasonPlanPanel({ onLoaded }: { onLoaded?: (plan: SeasonPlan | n
                 style={{ background: 'var(--rc-blue)', color: 'white' }}
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                {generating ? 'Designing…' : 'Design season'}
+                {generating ? (build?.label ? `${build.label}…` : 'Starting…') : 'Design season'}
               </button>
               <button
                 type="button"
