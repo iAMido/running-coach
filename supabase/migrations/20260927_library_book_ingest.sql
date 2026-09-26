@@ -52,3 +52,9 @@ LANGUAGE sql STABLE SET search_path = runcoach, public AS $$
   SELECT bi.book_id, count(*) FROM runcoach.book_instructions bi GROUP BY bi.book_id;
 $$;
 REVOKE ALL ON FUNCTION runcoach.book_section_counts() FROM anon, authenticated;
+
+-- Replace an existing book (e.g. a short summary by the full book). The old
+-- book is removed only AFTER the new one is fully embedded and has passed its
+-- retrieval check; a snapshot of the old row and its sections is kept here.
+ALTER TABLE runcoach.library_ingests ADD COLUMN IF NOT EXISTS replace_book_id uuid;
+ALTER TABLE runcoach.library_ingests ADD COLUMN IF NOT EXISTS replaced jsonb;

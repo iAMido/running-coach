@@ -22,6 +22,7 @@ interface IngestView {
   chunksDone: number;
   check: { question: string; found: boolean }[] | null;
   error: string | null;
+  replacedTitle?: string | null;
 }
 
 const STEPS: { stage: IngestView['stage']; title: string }[] = [
@@ -33,12 +34,14 @@ const STEPS: { stage: IngestView['stage']; title: string }[] = [
 ];
 const ORDER = ['uploaded', 'extracted', 'analyzed', 'chunked', 'embedded', 'done'];
 
-export function BookUpload({ onAdded }: { onAdded: () => void }) {
+export function BookUpload({ onAdded, books = [] }: { onAdded: () => void; books?: { id: string; title: string }[] }) {
   const [file, setFile] = useState<File | null>(null);
   const [uploadPct, setUploadPct] = useState<number | null>(null);
   const [ingest, setIngest] = useState<IngestView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
+  // An existing book this upload replaces — removed only after the new one is fully in.
+  const [replaceId, setReplaceId] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function drive(start: IngestView) {
@@ -82,7 +85,7 @@ export function BookUpload({ onAdded }: { onAdded: () => void }) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open('PUT', url);
-      xhr.setRequestHeader('Content-Type', 'application/pdf');
+      xhr.setRequestHeader('Content-Type', body.type || (/\.txt$/i.test(body.name) ? 'text/plain' : 'application/pdf'));
       xhr.upload.onprogress = (e) => { if (e.lengthComputable) setUploadPct(Math.round((100 * e.loaded) / e.total)); };
       xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (${xhr.status})`)));
       xhr.onerror = () => reject(new Error('Upload failed — check your connection'));
@@ -105,12 +108,13 @@ export function BookUpload({ onAdded }: { onAdded: () => void }) {
       await putWithProgress(ud.signedUrl, file);
       setUploadPct(null);
       const s = await fetch('/api/coach/library/ingest', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: ud.path, filename: file.name }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: ud.path, filename: file.name, ...(replaceId ? { replaceBookId: replaceId } : {}) }),
       });
       const sd = await s.json().catch(() => ({}));
       if (!s.ok || !sd.ingest) throw new Error(sd.error || 'Could not start processing');
       await drive(sd.ingest as IngestView);
       setFile(null);
+      setReplaceId('');
       if (inputRef.current) inputRef.current.value = '';
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed');
@@ -135,13 +139,14 @@ export function BookUpload({ onAdded }: { onAdded: () => void }) {
       </div>
       <div className="p-6 space-y-4">
       <p className="text-[13px] leading-relaxed" style={{ color: 'var(--rc-ink-3)' }}>
-        Upload a book PDF (up to 50 MB, with selectable text). The app reads it, writes its description, methodology and tags,
-        splits it into chapters and sections, and adds it to the library the coaches search — then checks they can find it.
+        Upload a book PDF (up to 50 MB, with selectable text) or a .txt of its text. The app reads it, writes its description,
+        methodology and tags, splits it into chapters and sections, and adds it to the library the coaches search — then checks
+        they can find it. To swap a book for a better version, choose it under &ldquo;Replaces&rdquo;.
       </p>
 
       <div className="flex flex-wrap items-center gap-3">
         {/* The native file input is hidden; the label is the styled button. */}
-        <input ref={inputRef} id="book-pdf" type="file" accept="application/pdf,.pdf" disabled={working}
+        <input ref={inputRef} id="book-pdf" type="file" accept="application/pdf,.pdf,text/plain,.txt" disabled={working}
           onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="sr-only" />
         <label htmlFor="book-pdf"
           className={`px-4 py-2 rounded-xl text-[13px] font-medium ${working ? 'opacity-40 pointer-events-none' : 'cursor-pointer'}`}
@@ -157,6 +162,17 @@ export function BookUpload({ onAdded }: { onAdded: () => void }) {
         </button>
         {file && !working && <span className="rc-mono text-[11px]" style={{ color: 'var(--rc-ink-4)' }}>{(file.size / 1e6).toFixed(1)} MB</span>}
       </div>
+
+      {books.length > 0 && (
+        <label className="flex flex-wrap items-center gap-2 text-[13px]" style={{ color: 'var(--rc-ink-2)' }}>
+          Replaces
+          <select value={replaceId} onChange={(e) => setReplaceId(e.target.value)} disabled={working}
+            className="px-3 py-2 rounded-xl text-[13px] max-w-full" style={{ background: 'var(--rc-surface-2)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink)' }}>
+            <option value="">Nothing — this is a new book</option>
+            {books.map((b) => <option key={b.id} value={b.id}>{b.title}</option>)}
+          </select>
+        </label>
+      )}
 
       {uploadPct !== null && (
         <div>
@@ -191,6 +207,7 @@ export function BookUpload({ onAdded }: { onAdded: () => void }) {
       {ingest?.stage === 'done' && ingest.meta && (
         <div className="rounded-xl p-4 space-y-2 text-[13px]" style={{ background: 'var(--rc-surface-2)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink-2)' }}>
           <div className="font-semibold" style={{ color: 'var(--rc-ink)' }}>{ingest.meta.title}</div>
+          {ingest.replacedTitle && <div className="text-[12px]" style={{ color: 'oklch(0.50 0.13 150)' }}>Replaced &ldquo;{ingest.replacedTitle}&rdquo;.</div>}
           <div style={{ color: 'var(--rc-ink-3)' }}>{ingest.meta.author}{ingest.meta.year ? ` · ${ingest.meta.year}` : ''} · methodology “{ingest.meta.methodology}” · {ingest.meta.level}</div>
           <p>{ingest.meta.description}</p>
           <div className="flex flex-wrap gap-1.5">{ingest.meta.tags.map((t) => <span key={t} className="rc-mono text-[10.5px] px-2 py-0.5 rounded-md" style={{ background: 'var(--rc-surface)', border: '1px solid var(--rc-line)' }}>{t}</span>)}</div>

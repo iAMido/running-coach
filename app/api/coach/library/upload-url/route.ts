@@ -25,9 +25,10 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'A PDF up to 50 MB is required.' }, { status: 400 });
   }
-  if (!/\.pdf$/i.test(parsed.data.filename)) return NextResponse.json({ error: 'Only PDF books are supported.' }, { status: 400 });
+  const ext = parsed.data.filename.match(/\.(pdf|txt)$/i)?.[1]?.toLowerCase();
+  if (!ext) return NextResponse.json({ error: 'Upload a PDF, or a .txt file of the book text.' }, { status: 400 });
 
-  const path = `${userFolder(auth.userId)}/${randomUUID()}.pdf`;
+  const path = `${userFolder(auth.userId)}/${randomUUID()}.${ext}`;
   const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(path);
   if (error || !data) return NextResponse.json({ error: `Could not prepare the upload: ${error?.message}` }, { status: 500 });
   return NextResponse.json({ path, signedUrl: data.signedUrl });

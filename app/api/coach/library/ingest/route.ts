@@ -28,10 +28,16 @@ function view(row: IngestRow, busy = false) {
     chunksDone: row.chunks_done,
     check: row.check_result,
     error: row.error,
+    replacedTitle: (row.replaced as { book?: { title?: string } } | null)?.book?.title ?? null,
   };
 }
 
-const startSchema = z.object({ path: z.string().min(1).max(300), filename: z.string().min(1).max(300) });
+const startSchema = z.object({
+  path: z.string().min(1).max(300),
+  filename: z.string().min(1).max(300),
+  /** An existing book this upload replaces; removed only after the new one is in. */
+  replaceBookId: z.string().uuid().optional(),
+});
 const nextSchema = z.object({ ingestId: z.string().uuid() });
 
 export async function GET(request: NextRequest) {
@@ -58,7 +64,7 @@ export async function POST(request: NextRequest) {
     if (!start.data.path.startsWith(`${userFolder(auth.userId)}/`)) {
       return NextResponse.json({ error: 'That upload does not belong to you.' }, { status: 403 });
     }
-    const created = await createIngest(auth.userId, start.data.filename, start.data.path);
+    const created = await createIngest(auth.userId, start.data.filename, start.data.path, start.data.replaceBookId);
     const { row, busy } = await advanceIngest(auth.userId, created.id);
     return NextResponse.json({ ingest: view(row, busy) });
   } catch (err) {

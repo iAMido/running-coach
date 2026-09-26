@@ -153,7 +153,7 @@ export default function ResourcesPage() {
         </p>
       </div>
 
-      <BookUpload onAdded={fetchBooks} />
+      <BookUpload onAdded={fetchBooks} books={books.map((b) => ({ id: b.id, title: b.title }))} />
       <LibraryBooks books={books} loading={booksLoading} />
 
       {/* Upload card */}

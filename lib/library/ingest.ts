@@ -49,6 +49,10 @@ export interface IngestRow {
   chunks_done: number;
   book_id: string | null;
   check_result: { question: string; found: boolean }[] | null;
+  /** The existing book this upload replaces (e.g. a summary by the full book). */
+  replace_book_id: string | null;
+  /** Snapshot of the replaced book and its sections, taken just before it was removed. */
+  replaced: Record<string, unknown> | null;
   error: string | null;
   timings: Record<string, number>;
   running_until: string | null;
@@ -78,9 +82,9 @@ const chunksPath = (id: string) => `chunks/${id}.json`;
 // Persistence
 // ---------------------------------------------------------------------------
 
-export async function createIngest(userId: string, filename: string, storagePath: string): Promise<IngestRow> {
+export async function createIngest(userId: string, filename: string, storagePath: string, replaceBookId?: string | null): Promise<IngestRow> {
   const { data, error } = await supabase.from('library_ingests')
-    .insert({ user_id: userId, filename, storage_path: storagePath }).select().single();
+    .insert({ user_id: userId, filename, storage_path: storagePath, replace_book_id: replaceBookId ?? null }).select().single();
   if (error) throw new Error(`could not start the upload: ${error.message}`);
   return data as IngestRow;
 }
@@ -148,7 +152,16 @@ async function runStage(row: IngestRow): Promise<Partial<IngestRow>> {
     case 'uploaded': {
       const { data: file, error } = await supabase.storage.from(BUCKET).download(row.storage_path);
       if (error || !file) throw new Error(`the uploaded PDF could not be read (${error?.message ?? 'missing'})`);
-      if (file.size > MAX_BOOK_BYTES) throw new Error('the PDF is larger than 50 MB');
+      if (file.size > MAX_BOOK_BYTES) throw new Error('the file is larger than 50 MB');
+      // A text file (an article compilation, or OCR text of a scanned book)
+      // needs no parsing.
+      if (/\.txt$/i.test(row.filename)) {
+        const plain = (await file.text()).trim();
+        if (plain.length < MIN_TEXT_CHARS) throw new Error(`the text file has only ${plain.length} characters`);
+        await writeText(textPath(row.id), plain, 'text/plain');
+        took('extract');
+        return { stage: 'extracted', pages: null, text_chars: plain.length, timings };
+      }
       // Imported here, never at module load: pdfjs needs DOMMatrix, which
       // Node on Vercel lacks — see app/api/coach/resources/route.ts.
       const { CanvasFactory } = await import('pdf-parse/worker');
@@ -182,12 +195,14 @@ async function runStage(row: IngestRow): Promise<Partial<IngestRow>> {
       if (r.error) throw new Error(`the AI could not read the book (${r.error})`);
       const meta = parseBookMeta(extractJson(r.content), row.filename);
       // Same book twice would double every passage the coaches retrieve.
-      const { data: all } = await supabase.from('coaching_books').select('title');
-      const duplicate = findDuplicateTitle(meta.title, (all ?? []).map((b: { title: string }) => b.title));
+      // The book being replaced is not a duplicate — it is the point.
+      const { data: all } = await supabase.from('coaching_books').select('id, title');
+      const others = (all ?? []).filter((b: { id: string }) => b.id !== row.replace_book_id);
+      const duplicate = findDuplicateTitle(meta.title, others.map((b: { title: string }) => b.title));
       // LIBRARY_INGEST_ALLOW_DUPLICATES is for scripts/verify-library-ingest.ts
       // only, which loads an existing book again and then deletes it.
       if (duplicate && process.env.LIBRARY_INGEST_ALLOW_DUPLICATES !== '1') {
-        throw new Error(`"${duplicate}" is already in the library`);
+        throw new Error(`"${duplicate}" is already in the library — to swap it for this file, choose it under "Replaces"`);
       }
       took('analyze');
       return { stage: 'analyzed', meta, timings };
@@ -254,9 +269,22 @@ async function runStage(row: IngestRow): Promise<Partial<IngestRow>> {
         const ctx = await retrieveBookContext(question, {}, 1500).catch(() => null);
         return { question, found: !!ctx?.sources.some((s) => s.bookTitle === meta.title) };
       }));
+      // Only now, with the new book fully in and checked, is the old one
+      // removed — a snapshot of it is kept on this ingest row.
+      let replaced: Record<string, unknown> | null = null;
+      if (row.replace_book_id) {
+        const [{ data: oldBook }, { data: oldSections }] = await Promise.all([
+          supabase.from('coaching_books').select('*').eq('id', row.replace_book_id).maybeSingle(),
+          supabase.from('book_instructions').select('chapter_number, chapter_title, content').eq('book_id', row.replace_book_id),
+        ]);
+        if (oldBook) {
+          replaced = { book: oldBook, sections: oldSections ?? [] };
+          await removeBook(row.replace_book_id);
+        }
+      }
       took('check');
       await removeFiles(row);
-      return { stage: 'done', check_result: check, timings };
+      return { stage: 'done', check_result: check, replaced, timings };
     }
 
     default:
