@@ -3,7 +3,12 @@
  * every stage runs for real, the save stage refuses to touch macro_plans.
  *
  * Usage:
- *   bunx tsx scripts/verify-season-builder.ts --env .env.local [--score <season.json>]...
+ *   bunx tsx scripts/verify-season-builder.ts --env .env.local [--score <season.json>]... [--phase1]
+ *
+ * --phase1 then builds phase 1 from the season's brief, DRY RUN, against a
+ * TEMPORARY season row saved as 'superseded' (so the athlete's real season is
+ * never replaced), scores it against the phase's ranges and KPIs, evaluates the
+ * phase KPIs on his real data, and deletes the temporary row.
  *
  * Also scores, with the same season rules: the athlete's ACTIVE season (made
  * by the single-call route) and any --score file (e.g. a fresh single-call
@@ -88,5 +93,60 @@ const REQUEST = {
     if (argv[i] !== '--score') continue;
     const raw = JSON.parse(fs.readFileSync(argv[i + 1], 'utf8'));
     report(`SINGLE-CALL season (${argv[i + 1]})`, normalizeSeason(raw, REQUEST.goalName).season);
+  }
+
+  if (!argv.includes('--phase1')) return;
+
+  // --- phase 1 from the brief -------------------------------------------------
+  const { phaseKpiStatuses } = await import('../lib/coach/season-status');
+  const { checkPlan } = await import('../lib/coach/plan-builder/checks');
+  const { planStartSunday } = await import('../lib/coach/plan-builder/dates');
+  const { userDateStr } = await import('../lib/utils/user-time');
+  const { parseTrainingDays } = await import('../lib/coach/training-state');
+  const { data: profile } = await supabase.from('athlete_profile').select('training_days').eq('user_id', userId).maybeSingle();
+  const { data: temp, error } = await supabase.from('macro_plans').insert({
+    user_id: userId, goal_name: s.goal_name, race_date: REQUEST.raceDate, race_distance_km: REQUEST.raceDistanceKm,
+    race_elevation_gain_m: REQUEST.raceElevationGainM, terrain_access: REQUEST.terrainAccess, horizon_weeks: REQUEST.horizonWeeks,
+    phases: s.phases, rationale: s.rationale, status: 'superseded', revision: 0,
+    start_date: planStartSunday(userDateStr()),
+  }).select('id').single();
+  if (error || !temp) { console.error('could not create the temporary season:', error?.message); return; }
+  console.log(`
+=== PHASE 1 (temporary season ${temp.id}, status superseded) ===`);
+  try {
+    const p1 = s.phases[0];
+    const days = parseTrainingDays(profile?.training_days) ?? ['Sunday', 'Monday', 'Wednesday', 'Friday'];
+    let b = await createBuild(userId, {
+      planType: 'Trail / Mountain', durationWeeks: p1.weeks, runsPerWeek: days.length, trainingDays: days,
+      macroPlanId: temp.id, phaseNumber: 1, targetRace: s.goal_name, raceDate: REQUEST.raceDate,
+      raceDistanceKm: REQUEST.raceDistanceKm, raceElevationGainM: REQUEST.raceElevationGainM, terrainAccess: REQUEST.terrainAccess,
+    } as never, { dryRun: true });
+    const t1 = Date.now();
+    while (b.stage !== 'done' && b.stage !== 'failed') {
+      const from = b.stage; const st = Date.now();
+      ({ row: b } = await advance(userId, b.id));
+      console.log(`  ${from.padEnd(14)} ${((Date.now() - st) / 1000).toFixed(0).padStart(4)} s → ${b.stage}${b.error ? `  (${b.error})` : ''}`);
+    }
+    console.log(`phase 1 build: ${((Date.now() - t1) / 1000).toFixed(0)} s · ${b.stage}`);
+    const brief = b.prepared?.research.macroText.includes("HEAD COACH'S BRIEF FOR PHASE 1");
+    console.log(`brief reached the builder: ${brief} · phase ranges: ${JSON.stringify(b.prepared?.research.phaseRanges)}`);
+    if (b.weeks) {
+      const v = checkPlan(b.weeks, { expectedWeeks: p1.weeks, allowedDays: days, runsPerWeek: days.length, hasElevation: true, hasRace: false, phaseRanges: b.prepared!.research.phaseRanges });
+      console.log(`phase-range / rule errors in the final phase plan: ${v.filter((x) => x.severity === 'error').length}`, JSON.stringify(scoreViolations(v).byRule));
+      console.log('weeks:', b.weeks.map((w) => `${w.week_number}:${w.total_km}km/${w.total_elevation_gain_m ?? '-'}m`).join(' '));
+    }
+    for (const r of b.reviews) console.log(`review ${r.round}: ${r.verdict} — ${r.summary.slice(0, 300)}`);
+    const pc = Object.values(b.timings).reduce((a, t) => a + (t.cost ?? 0), 0);
+    console.log(`phase 1 cost (billed): $${pc.toFixed(2)}`);
+
+    // KPI evaluator on his REAL data (last 8 weeks as if the phase had started then).
+    const since = new Date(Date.now() - 56 * 86_400_000).toISOString().slice(0, 10);
+    const st = await phaseKpiStatuses(userId, p1, since);
+    console.log(`
+KPI evaluator on real data since ${since}:`);
+    for (const k of st) console.log(`  ${k.met ? '✓' : k.current === null ? '?' : '✗'} ${k.kpi.label}: ${k.current ?? 'not measured'} (target ${k.kpi.comparator === 'gte' ? '≥' : '≤'} ${k.kpi.target}) — ${k.detail}`);
+  } finally {
+    await supabase.from('macro_plans').delete().eq('id', temp.id).eq('status', 'superseded');
+    console.log(`temporary season ${temp.id} deleted`);
   }
 })();

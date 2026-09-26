@@ -103,4 +103,6 @@ test('normalize: renumbers phases, refuses a season with no usable phases', () =
   expect(season!.phases.map((p) => [p.phase_number, p.weeks])).toEqual([[1, 4], [2, 6]]);
   expect(season!.goal_name).toBe('G');
   expect(normalizeSeason({ phases: [] }, 'G').season).toBeNull();
+  const obj = normalizeSeason({ phases: [{ name: 'A', weeks: 4 }], decisions: [{ topic: 'Poles', decision: 'yes, from phase 3' }] }, 'G');
+  expect(obj.season!.decisions).toEqual(['Poles: yes, from phase 3']);
 });

@@ -21,7 +21,7 @@ import { retrieveBookContext } from '@/lib/rag/book-retriever';
 import { buildPlanGenerationContext } from '@/lib/rag/plan-generation-context';
 import { buildCoachDynamicBlock, buildRaceDemandBlock } from '@/lib/ai/coach-prompts';
 import { exemplarsForRequest } from '@/lib/coach/plan-exemplars-db';
-import { getActiveMacroPlan, phaseForWeek, formatMacroPlan } from '@/lib/coach/macro-plan';
+import { getActiveMacroPlan, getMacroPlanById, phaseForWeek, formatMacroPlan } from '@/lib/coach/macro-plan';
 import { timelineOf } from '@/lib/coach/season-progress';
 import { formatPhaseBrief, phaseKpiStatuses } from '@/lib/coach/season-status';
 import { daysBetweenDateStr, userDateStr, userDateStrDaysAgo } from '@/lib/utils/user-time';
@@ -236,7 +236,10 @@ async function resolveMacroContext(
 ): Promise<Pick<Research, 'macroText' | 'macroPlanId' | 'macroPhase' | 'phaseNumber' | 'phaseRanges' | 'phaseRules'>> {
   const none = { macroText: '', macroPlanId: null, macroPhase: null, phaseNumber: null, phaseRanges: null, phaseRules: '' };
   if (!req.macroPlanId) return none;
-  const macro = await getActiveMacroPlan(userId);
+  // By id: the route only lets an athlete build phases of his ACTIVE season;
+  // here the id is already authorised, and a dry-run test can build a phase
+  // of a season that is not active without replacing his real one.
+  const macro = req.phaseNumber ? await getMacroPlanById(userId, req.macroPlanId) : await getActiveMacroPlan(userId);
   if (!macro || macro.id !== req.macroPlanId) return none;
 
   if (req.phaseNumber) {

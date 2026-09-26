@@ -6,6 +6,7 @@ import { PlanBuildProgress } from '@/components/coach/plan-build-progress';
 import { PlanBuildReport } from '@/components/coach/plan-build-report';
 import type { PlanBuildView } from '@/lib/coach/plan-builder/view';
 import type { BuildReport } from '@/lib/coach/plan-builder/types';
+import { SeasonPhaseStatus, type SeasonStatusView } from '@/components/coach/season-phase-status';
 
 interface Phase {
   phase_number: number;
@@ -18,6 +19,14 @@ interface Phase {
   capability: string;
   exit_criteria: string[];
   key_sessions: string[];
+  // The season head coach's brief (absent on seasons designed before briefs).
+  goal?: string;
+  why_this_length?: string;
+  must_haves?: string[];
+  avoid?: string[];
+  watch_for?: string[];
+  handoff?: string;
+  kpis?: { id: string; label: string; metric: string; comparator: 'gte' | 'lte'; target: number; consecutive_weeks?: number }[];
 }
 
 export interface SeasonPlan {
@@ -41,7 +50,11 @@ export interface SeasonPlan {
  * pass `macroPlanId` — a block that does not know its phase is a standalone
  * plan, which is valid but is not what someone with a season wants.
  */
-export function SeasonPlanPanel({ onLoaded }: { onLoaded?: (plan: SeasonPlan | null) => void }) {
+export function SeasonPlanPanel({ onLoaded, onPlanBuilt }: {
+  onLoaded?: (plan: SeasonPlan | null) => void;
+  /** A phase's training plan was built — the page reloads the active plan. */
+  onPlanBuilt?: () => void;
+}) {
   const [plan, setPlan] = useState<SeasonPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -49,6 +62,14 @@ export function SeasonPlanPanel({ onLoaded }: { onLoaded?: (plan: SeasonPlan | n
   const [showForm, setShowForm] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [build, setBuild] = useState<PlanBuildView | null>(null);
+  const [status, setStatus] = useState<SeasonStatusView | null>(null);
+
+  const loadStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/coach/season/status');
+      if (res.ok) setStatus((await res.json()).status ?? null);
+    } catch { /* the status card simply stays hidden */ }
+  }, []);
 
   const [goalName, setGoalName] = useState('');
   const [raceDate, setRaceDate] = useState('');
@@ -71,7 +92,8 @@ export function SeasonPlanPanel({ onLoaded }: { onLoaded?: (plan: SeasonPlan | n
 
   useEffect(() => {
     load();
-  }, [load]);
+    loadStatus();
+  }, [load, loadStatus]);
 
   /**
    * Weeks between today and the race, so the horizon is not typed by hand and
@@ -87,7 +109,8 @@ export function SeasonPlanPanel({ onLoaded }: { onLoaded?: (plan: SeasonPlan | n
    * Drive a staged season build (lib/coach/plan-builder/season.ts) one stage
    * per request, the same way the block builder does.
    */
-  async function runBuild(initial: PlanBuildView) {
+  /** Run a staged build to its end, one stage per request. */
+  async function drive(initial: PlanBuildView): Promise<PlanBuildView> {
     let current = initial;
     setBuild(current);
     while (current.stage !== 'done' && current.stage !== 'failed') {
@@ -99,16 +122,47 @@ export function SeasonPlanPanel({ onLoaded }: { onLoaded?: (plan: SeasonPlan | n
             body: JSON.stringify({ buildId: current.id }),
           });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.build) throw new Error(data.error || `Season build step failed (${res.status})`);
+      if (!res.ok || !data.build) throw new Error(data.error || `Build step failed (${res.status})`);
       current = data.build as PlanBuildView;
       setBuild(current);
     }
-    if (current.stage === 'failed') throw new Error(current.error || 'The season build failed. Your current season is unchanged.');
-    if (!current.season) throw new Error('The build finished without a season');
-    const saved = current.season as unknown as SeasonPlan;
+    if (current.stage === 'failed') throw new Error(current.error || 'The build failed. Nothing was changed.');
+    return current;
+  }
+
+  /** A season build finished: show it, then build phase 1 straight away. */
+  async function runBuild(initial: PlanBuildView) {
+    const done = await drive(initial);
+    if (!done.season) throw new Error('The build finished without a season');
+    const saved = done.season as unknown as SeasonPlan;
     setPlan(saved);
     onLoaded?.(saved);
     setShowForm(false);
+    await loadStatus();
+    await buildPhase(saved.id, 1);
+  }
+
+  /** Build one season phase (or extend the current one) as a training plan. */
+  async function buildPhase(macroPlanId: string, phaseNumber: number, extensionWeeks?: number) {
+    setGenerating(true);
+    setError(null);
+    setBuild(null);
+    try {
+      const res = await fetch('/api/coach/plans/build', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'phase', macroPlanId, phaseNumber, ...(extensionWeeks ? { extensionWeeks } : {}) }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.build) throw new Error(data.error ?? 'Could not start building the phase.');
+      await drive(data.build as PlanBuildView);
+      onPlanBuilt?.();
+      await Promise.all([load(), loadStatus()]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not build the phase.');
+    } finally {
+      setGenerating(false);
+    }
   }
 
   // Resume a season build left running by a reload or a closed tab.
@@ -194,6 +248,15 @@ export function SeasonPlanPanel({ onLoaded }: { onLoaded?: (plan: SeasonPlan | n
           </p>
         )}
 
+        {plan && status && (
+          <SeasonPhaseStatus
+            status={status}
+            busy={generating}
+            phaseCount={plan.phases.length}
+            onBuild={(n, ext) => buildPhase(plan.id, n, ext)}
+          />
+        )}
+
         {plan && (
           <div className="space-y-2 mb-4">
             {plan.phases.map((p) => {
@@ -211,6 +274,7 @@ export function SeasonPlanPanel({ onLoaded }: { onLoaded?: (plan: SeasonPlan | n
                         <span className="rc-mono font-normal text-[11px] ml-2" style={{ color: 'var(--rc-ink-4)' }}>
                           {p.weeks}w
                         </span>
+                        <PhaseChip status={status} phaseNumber={p.phase_number} />
                       </div>
                       <div className="text-[12px] truncate" style={{ color: 'var(--rc-ink-3)' }}>{p.focus}</div>
                     </div>
@@ -227,7 +291,13 @@ export function SeasonPlanPanel({ onLoaded }: { onLoaded?: (plan: SeasonPlan | n
 
                   {open && (
                     <div className="px-4 pb-4 space-y-2.5 text-[12.5px]" style={{ color: 'var(--rc-ink-2)' }}>
+                      {p.goal && <p><strong>Goal:</strong> {p.goal}{p.why_this_length ? <span style={{ color: 'var(--rc-ink-3)' }}> — {p.why_this_length}</span> : null}</p>}
                       <p><strong>Building:</strong> {p.capability}</p>
+                      <BriefList title="KPIs" items={p.kpis?.map((k) => k.label)} />
+                      <BriefList title="Must-haves" items={p.must_haves} />
+                      <BriefList title="Don&apos;ts" items={p.avoid} />
+                      <BriefList title="Watch for" items={p.watch_for} />
+                      {p.handoff && <p><strong>Hands over:</strong> {p.handoff}</p>}
                       {p.weekly_km_range && <p className="rc-mono text-[11.5px]" style={{ color: 'var(--rc-ink-3)' }}>
                         {p.weekly_km_range[0]}–{p.weekly_km_range[1]} km/wk
                         {p.long_run_vert_ceiling_m ? ` · long-run vert ceiling ${p.long_run_vert_ceiling_m} m` : ''}
@@ -344,6 +414,30 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
         {label}
       </label>
       {children}
+    </div>
+  );
+}
+
+function PhaseChip({ status, phaseNumber }: { status: SeasonStatusView | null; phaseNumber: number }) {
+  const t = status?.timeline.find((x) => x.phaseNumber === phaseNumber);
+  if (!t) return null;
+  const active = t.status === 'active';
+  return (
+    <span
+      className="rc-mono font-normal text-[10px] ml-2 px-1.5 py-0.5 rounded"
+      style={{ background: active ? 'var(--rc-blue-soft)' : 'var(--rc-surface)', color: active ? 'var(--rc-blue-deep)' : 'var(--rc-ink-4)' }}
+    >
+      {t.status.toUpperCase()} · {t.projected ? '~' : ''}{t.start.slice(5)} → {t.end.slice(5)}{t.extensionWeeks ? ` (+${t.extensionWeeks} wk)` : ''}
+    </span>
+  );
+}
+
+function BriefList({ title, items }: { title: string; items?: string[] }) {
+  if (!items?.length) return null;
+  return (
+    <div>
+      <p className="rc-mono text-[10.5px] uppercase mb-1" style={{ color: 'var(--rc-ink-4)', letterSpacing: '0.08em' }}>{title}</p>
+      <ul className="space-y-0.5">{items.map((m, i) => <li key={i}>· {m}</li>)}</ul>
     </div>
   );
 }

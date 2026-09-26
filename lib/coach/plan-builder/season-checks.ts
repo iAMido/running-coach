@@ -107,7 +107,12 @@ export function normalizeSeason(raw: unknown, goalName: string): { season: Seaso
       goal_name: String(o.goal_name ?? goalName),
       rationale: String(o.rationale ?? ''),
       phases,
-      decisions: Array.isArray(o.decisions) ? o.decisions.map(String) : [],
+      // The model sometimes writes a decision as { topic, decision } rather than
+      // a sentence; String() of that is "[object Object]", which the reviewer
+      // then read back as a broken field. Flatten objects to their text.
+      decisions: Array.isArray(o.decisions)
+        ? o.decisions.map((d) => (d && typeof d === 'object' ? Object.values(d as Record<string, unknown>).map(String).join(': ') : String(d)))
+        : [],
     },
     fatal,
   };

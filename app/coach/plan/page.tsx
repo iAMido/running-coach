@@ -86,7 +86,8 @@ export default function TrainingPlanPage() {
   // The season this block will serve, when one exists. useCallback-stable so
   // the panel's effect does not re-fire on every render.
   const [season, setSeason] = useState<SeasonPlan | null>(null);
-  const [blockNumber, setBlockNumber] = useState('1');
+  // Which season phase this plan builds ('' = a standalone plan).
+  const [phaseNumber, setPhaseNumber] = useState('');
   const handleSeasonLoaded = useCallback((p: SeasonPlan | null) => setSeason(p), []);
   const [recentRaceResult, setRecentRaceResult] = useState('');
   const [currentWeeklyKm, setCurrentWeeklyKm] = useState('');
@@ -208,7 +209,7 @@ export default function TrainingPlanPage() {
           // Ties the block to the season so the generator is told which phase
           // it is writing for. Omitted when there is no season — the block is
           // then a valid standalone plan.
-          ...(season ? { macroPlanId: season.id, blockNumber: parseInt(blockNumber, 10) } : {}),
+          ...(season && phaseNumber ? { macroPlanId: season.id, phaseNumber: parseInt(phaseNumber, 10) } : {}),
           notes,
           // Rich intake. Each field is optional; omit empty strings so Zod accepts them.
           ...(raceDate ? { raceDate } : {}),
@@ -562,7 +563,7 @@ export default function TrainingPlanPage() {
       {/* Generate Tab */}
       {activeTab === 'generate' && (
         <>
-        <SeasonPlanPanel onLoaded={handleSeasonLoaded} />
+        <SeasonPlanPanel onLoaded={handleSeasonLoaded} onPlanBuilt={fetchPlan} />
         <div className="rc-card p-0 overflow-hidden">
           <div className="flex items-center justify-between px-6 pt-5 pb-3.5" style={{ borderBottom: '1px solid var(--rc-line)' }}>
             <div>
@@ -698,26 +699,32 @@ export default function TrainingPlanPage() {
               )}
             </div>
 
-            {/* Which block of the season this is. Only shown when a season
-                exists — without one there are no phases to serve and the
-                control would be asking about something that does not exist. */}
+            {/* Which season phase this plan builds. One plan per phase: the
+                phase's brief (goal, KPIs, ranges, must-haves, don'ts) becomes
+                the builder's contract and its length sets the plan length.
+                Usually built from the Season panel when the phase is due. */}
             {season && (
               <div className="space-y-2">
                 <label className="rc-mono text-[11px] font-medium uppercase" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.08em' }}>
-                  Season block
+                  Season phase
                 </label>
                 <select
-                  value={blockNumber}
-                  onChange={(e) => setBlockNumber(e.target.value)}
+                  value={phaseNumber}
+                  onChange={(e) => {
+                    setPhaseNumber(e.target.value);
+                    const ph = season.phases.find((p) => String(p.phase_number) === e.target.value);
+                    if (ph) setDuration(String(ph.weeks));
+                  }}
                   className="w-full px-4 py-2.5 rounded-xl text-sm appearance-none focus:outline-none focus:ring-2"
                   style={{ background: 'var(--rc-surface-2)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink)' }}
                 >
-                  {[1, 2, 3, 4, 5, 6].map((n) => (
-                    <option key={n} value={String(n)}>Block {n}</option>
+                  <option value="">Standalone plan (not part of the season)</option>
+                  {season.phases.map((p) => (
+                    <option key={p.phase_number} value={String(p.phase_number)}>Phase {p.phase_number}: {p.name} ({p.weeks} wk)</option>
                   ))}
                 </select>
                 <p className="text-[11px]" style={{ color: 'var(--rc-ink-4)' }}>
-                  This block will be written against the matching phase of &ldquo;{season.goal_name}&rdquo; and its exit criteria.
+                  A phase plan is built from the season head coach&apos;s brief for that phase and stays inside its ranges. You can also build it from the Season panel above when it is due.
                 </p>
               </div>
             )}

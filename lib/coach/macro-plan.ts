@@ -147,6 +147,12 @@ export async function getActiveMacroPlan(userId: string): Promise<MacroPlan | nu
   return (data as MacroPlan) ?? null;
 }
 
+/** A season by id, active or not, scoped to its owner. */
+export async function getMacroPlanById(userId: string, id: string): Promise<MacroPlan | null> {
+  const { data } = await supabase.from('macro_plans').select('*').eq('id', id).eq('user_id', userId).maybeSingle();
+  return (data as MacroPlan) ?? null;
+}
+
 /**
  * Store a new macro plan, superseding any active one.
  *
