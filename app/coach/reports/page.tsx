@@ -188,7 +188,7 @@ export default function CoachReportsPage() {
                 letterSpacing: '0.06em',
               }}
             >
-              {t === 'coach' ? `COACH · ${reports.filter((r) => !isSystem(r)).length}` : `SYSTEM · ${reports.filter(isSystem).length}`}
+              {t === 'coach' ? `COACH REVIEWS · ${reports.filter((r) => !isSystem(r)).length}` : `SYSTEM HEALTH · ${reports.filter(isSystem).length}`}
             </button>
           ))}
         </div>
