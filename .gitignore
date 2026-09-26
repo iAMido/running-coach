@@ -69,3 +69,4 @@ New folder/
 test-plan-output.json
 test-plan-raw.txt
 .env*
+!.env.example
