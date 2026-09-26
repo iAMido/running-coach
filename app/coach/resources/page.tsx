@@ -8,6 +8,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BookOpen, Trash2, Plus, CheckCircle, AlertTriangle, FileUp } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
+import { BookUpload } from '@/components/coach/book-upload';
+import { LibraryBooks, type LibraryBook } from '@/components/coach/library-books';
 
 interface Resource {
   id: string;
@@ -32,15 +34,29 @@ export default function ResourcesPage() {
   const [tags, setTags] = useState('');
   const [content, setContent] = useState('');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [books, setBooks] = useState<LibraryBook[]>([]);
+  const [booksLoading, setBooksLoading] = useState(true);
+
+  const fetchBooks = useCallback(async () => {
+    try {
+      const r = await fetch('/api/coach/library/books');
+      if (r.ok) setBooks((await r.json()).books || []);
+    } finally {
+      setBooksLoading(false);
+    }
+  }, []);
 
   const fetchResources = useCallback(async () => {
     setLoading(true);
     try {
       const r = await fetch('/api/coach/resources');
-      const data = await r.json();
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `server error ${r.status}`);
       setResources(data.resources || []);
-    } catch {
-      setStatusMessage({ kind: 'err', text: 'Failed to load resources' });
+    } catch (e) {
+      // Say what failed — "Failed to load resources" alone hid a server crash
+      // for as long as PDF support existed.
+      setStatusMessage({ kind: 'err', text: `Failed to load your notes: ${e instanceof Error ? e.message : 'unknown error'}` });
     } finally {
       setLoading(false);
     }
@@ -48,7 +64,8 @@ export default function ResourcesPage() {
 
   useEffect(() => {
     fetchResources();
-  }, [fetchResources]);
+    fetchBooks();
+  }, [fetchResources, fetchBooks]);
 
   const handleSubmitText = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,20 +148,24 @@ export default function ResourcesPage() {
           Coach Library
         </h1>
         <p className="text-sm mt-1" style={{ color: 'var(--rc-ink-3)' }}>
-          Add your own coach material — old training plans, physiology notes, articles you trust. The AI coach
-          retrieves these alongside the methodology books when answering you.
+          The books and notes the AI coaches read. Add a whole book below, or short material — old training plans,
+          physiology notes, articles you trust — further down.
         </p>
       </div>
+
+      <BookUpload onAdded={fetchBooks} />
+      <LibraryBooks books={books} loading={booksLoading} />
 
       {/* Upload card */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Plus className="w-5 h-5" />
-            Add resource
+            Add notes or an article
           </CardTitle>
           <CardDescription>
-            Upload a PDF or paste raw text. The coach retrieves chunks of this material whenever it answers you.
+            Paste text or upload a short PDF (under 4 MB — use &ldquo;Add a book&rdquo; above for books). The coach retrieves
+            it alongside the books whenever it answers you.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -279,7 +300,7 @@ export default function ResourcesPage() {
       {/* Library */}
       <Card>
         <CardHeader>
-          <CardTitle>Your library ({resources.length})</CardTitle>
+          <CardTitle>Your notes &amp; articles ({resources.length})</CardTitle>
           <CardDescription>
             Active resources are searched semantically by the AI on every coach response.
           </CardDescription>
