@@ -1,14 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ShieldCheck, ShieldAlert, TrendingUp, ChevronRight } from 'lucide-react';
-import Link from 'next/link';
+import { ShieldCheck, ShieldAlert, TrendingUp } from 'lucide-react';
 
 interface HealthData {
   totalCalls: number;
   errors: number;
   ceilingHits: number;
   avgLatencyMs: number;
+  planBuildCalls?: number;
   preflightWarnings: number;
   topWarnings: { code: string; count: number }[];
   criticCount: number;
@@ -16,10 +16,28 @@ interface HealthData {
 }
 
 /**
- * Lives on the coach dashboard. Pulls /api/coach/health which aggregates
- * the last 7 days of supervisor telemetry — average critic score, top
- * preflight warning codes, ceiling-hit count. Gracefully hides itself
- * when there's no data yet.
+ * Plain-language meaning of each pre-flight warning code (lib/supervisor/
+ * preflight.ts). A warning is the supervisor noting that the coach answered
+ * with something missing from its context — not an error in the app.
+ */
+const WARNING_MEANING: Record<string, string> = {
+  no_planned_today: 'You asked the coach something on a day with no planned workout — usually no active plan, or a rest day.',
+  no_book_sources: "The book search found nothing for the question. Normal for short follow-ups (\"2. Don't know\"); a problem only on real training questions.",
+  no_planned_week: 'A weekly review ran with no active plan covering that week, so planned-vs-actual was limited.',
+  review_no_runs: 'A weekly review ran for a week with no runs logged.',
+  no_recent_runs: 'No runs in the last 14 days reached the coach.',
+  no_coach_workouts: "Your previous coach's familiar sessions were not found for a plan.",
+  no_wellness_data: 'No recovery data (HRV, sleep, resting HR) has been synced.',
+  stale_wellness_data: 'The newest recovery data is several days old.',
+  user_context_too_small: 'Very little of your profile or recent activity reached the coach.',
+  no_active_plan_for_modification: 'A plan change was requested in chat but there is no active plan to change.',
+};
+
+/**
+ * Lives on the System tab of Coach Reports (moved off the dashboard
+ * 2026-09-27 — it describes the app, not the training). Pulls
+ * /api/coach/health, which aggregates the last 7 days of supervisor
+ * telemetry. Gracefully hides itself when there's no data yet.
  */
 export function CoachHealthWidget() {
   const [data, setData] = useState<HealthData | null>(null);
@@ -50,13 +68,9 @@ export function CoachHealthWidget() {
           )}
           <div className="rc-kicker">Coach Health · last 7d</div>
         </div>
-        <Link
-          href="/coach/reports"
-          className="rc-mono text-[10.5px] flex items-center gap-1"
-          style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.08em' }}
-        >
-          REPORTS <ChevronRight className="w-3 h-3" />
-        </Link>
+        <span className="rc-mono text-[10.5px]" style={{ color: 'var(--rc-ink-4)', letterSpacing: '0.08em' }}>
+          ALL AI CALLS THE APP MADE
+        </span>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -82,7 +96,7 @@ export function CoachHealthWidget() {
         <Stat
           label="Ceiling hits"
           value={data.ceilingHits.toString()}
-          sub={`avg ${data.avgLatencyMs}ms`}
+          sub={`chat & reviews avg ${(data.avgLatencyMs / 1000).toFixed(1)} s${data.planBuildCalls ? ` · ${data.planBuildCalls} plan-build calls` : ''}`}
           subAccent="neutral"
           icon={TrendingUp}
         />
@@ -106,6 +120,11 @@ export function CoachHealthWidget() {
               </span>
             ))}
           </div>
+          <ul className="mt-3 space-y-1 text-[12px]" style={{ color: 'var(--rc-ink-3)' }}>
+            {data.topWarnings.filter((w) => WARNING_MEANING[w.code]).map((w) => (
+              <li key={w.code}><span className="rc-mono" style={{ color: 'var(--rc-ink-2)' }}>{w.code}</span> — {WARNING_MEANING[w.code]}</li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

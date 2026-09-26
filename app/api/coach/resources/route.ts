@@ -19,7 +19,6 @@ import { supabase } from '@/lib/db/supabase';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { generateEmbeddingsBatch, formatEmbeddingForStorage } from '@/lib/rag/embeddings';
 import { chunkText } from '@/lib/rag/chunker';
-import { PDFParse } from 'pdf-parse';
 
 const MAX_BODY_CHARS = 250_000; // ~62k tokens, plenty for a coach handbook
 const MAX_PDF_BYTES = 15 * 1024 * 1024; // 15MB
@@ -101,7 +100,18 @@ async function parseFormBody(request: NextRequest): Promise<PostFields | { error
   let extractedText: string;
   try {
     const buf = new Uint8Array(await file.arrayBuffer());
-    const parser = new PDFParse({ data: buf });
+    // Loaded HERE, not at the top of the file. pdf-parse's pdfjs needs
+    // DOMMatrix, which Node on Vercel lacks; imported at module load it
+    // crashed the whole route — the library list and pasted-text uploads
+    // included — with "DOMMatrix is not defined" (found 2026-09-27; the Coach
+    // Library had shown "Failed to load resources" in production).
+    // CanvasFactory from 'pdf-parse/worker' installs the @napi-rs/canvas
+    // polyfills first, per pdf-parse's Next.js + Vercel guidance; both
+    // packages are serverExternalPackages in next.config.ts so the native
+    // binary ships with the function.
+    const { CanvasFactory } = await import('pdf-parse/worker');
+    const { PDFParse } = await import('pdf-parse');
+    const parser = new PDFParse({ data: buf, CanvasFactory });
     try {
       const result = await parser.getText();
       extractedText = (result.text || '').trim();

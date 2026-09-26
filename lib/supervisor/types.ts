@@ -68,4 +68,6 @@ export interface CoachCallRow {
   status: 'ok' | 'error' | 'partial';
   error_message: string | null;
   plan_modified: boolean;
+  /** Step of a multi-call feature, e.g. plan_outline / plan_writer. Optional. */
+  task?: string | null;
 }

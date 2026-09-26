@@ -50,7 +50,10 @@ export async function ask(
     // day is visible in coach_calls rather than looking like a normal one.
     user_id: userId, route: ROUTE, query_type: 'plan_generation', model: r.provider === 'nanogpt' ? `${MODEL_FOR[task]} (nanogpt)` : MODEL_FOR[task],
     context_tokens: r.promptTokens ?? Math.round((system.length + (sharedPrefix?.length ?? 0)) / 4), context_budget: null, ceiling_hit: false,
-    cache_used: (r.cachedTokens ?? 0) > 0, preflight_ok: true, preflight_warnings: [`builder:${task}`], preflight_augmented: false,
+    cache_used: (r.cachedTokens ?? 0) > 0, preflight_ok: true, preflight_warnings: null, preflight_augmented: false,
+    // Which builder step this was — its own column, NOT a warning (it once was,
+    // and the Coach Health widget counted every build call as a problem).
+    task,
     latency_ms: ms, status: r.error ? 'error' : r.finishReason === 'length' ? 'partial' : 'ok',
     error_message: r.error ?? null, plan_modified: false,
   }).catch(() => {});

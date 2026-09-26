@@ -4,6 +4,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { FileText, Calendar, ArrowLeft, Activity, Brain } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { CoachHealthWidget } from '@/components/coach/coach-health-widget';
 import remarkGfm from 'remark-gfm';
 
 interface Report {
@@ -28,10 +29,18 @@ export default function CoachReportsPage() {
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingReport, setLoadingReport] = useState(false);
+  // Coach = your weekly reviews and analyses. System = how the app itself is
+  // running: the 7-day health panel (moved off the dashboard) and the weekly
+  // system-health reports, which used to crowd out the coach's reviews here.
+  const [tab, setTab] = useState<'coach' | 'system'>('coach');
 
   useEffect(() => {
     fetchReports();
+    if (new URLSearchParams(window.location.search).get('tab') === 'system') setTab('system');
   }, []);
+
+  const isSystem = (r: Report) => r.report_type === 'system_health';
+  const shown = reports.filter((r) => (tab === 'system' ? isSystem(r) : !isSystem(r)));
 
   const fetchReports = async () => {
     try {
@@ -160,16 +169,39 @@ export default function CoachReportsPage() {
           </span>
         </h1>
         <p className="mt-2 text-sm" style={{ color: 'var(--rc-ink-3)' }}>
-          All your weekly reviews and coach analyses in one place.
+          {tab === 'coach'
+            ? 'All your weekly reviews and coach analyses in one place.'
+            : 'How the app itself is running: AI calls, quality checks and weekly system reports.'}
         </p>
+
+        <div className="flex gap-1.5 mt-5">
+          {(['coach', 'system'] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className="rc-mono px-[13px] py-[7px] rounded-full text-[11px] font-medium transition-colors"
+              style={{
+                background: tab === t ? 'var(--rc-ink)' : 'transparent',
+                color: tab === t ? '#fff' : 'var(--rc-ink-3)',
+                border: '1px solid var(--rc-line)',
+                letterSpacing: '0.06em',
+              }}
+            >
+              {t === 'coach' ? `COACH · ${reports.filter((r) => !isSystem(r)).length}` : `SYSTEM · ${reports.filter(isSystem).length}`}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {tab === 'system' && <CoachHealthWidget />}
 
       {/* Reports list */}
       <div className="rc-card p-0 overflow-hidden">
         <div className="flex items-center justify-between px-6 pt-5 pb-3.5" style={{ borderBottom: '1px solid var(--rc-line)' }}>
           <div>
             <div className="rc-kicker mb-1">History</div>
-            <h3 className="text-[18px] font-bold" style={{ letterSpacing: '-0.015em', color: 'var(--rc-ink)' }}>Weekly reviews</h3>
+            <h3 className="text-[18px] font-bold" style={{ letterSpacing: '-0.015em', color: 'var(--rc-ink)' }}>{tab === 'coach' ? 'Weekly reviews' : 'System health reports'}</h3>
           </div>
           <div className="p-2.5 rounded-xl" style={{ background: 'var(--rc-blue-soft)', color: 'var(--rc-blue-deep)' }}>
             <FileText className="w-4 h-4" />
@@ -182,9 +214,9 @@ export default function CoachReportsPage() {
               <Skeleton key={i} className="h-20 w-full" style={{ background: 'rgba(14,15,12,0.06)' }} />
             ))}
           </div>
-        ) : reports.length > 0 ? (
+        ) : shown.length > 0 ? (
           <div>
-            {reports.map((report) => (
+            {shown.map((report) => (
               <div
                 key={report.id}
                 onClick={() => openReport(report.id)}
@@ -230,8 +262,10 @@ export default function CoachReportsPage() {
         ) : (
           <div className="flex flex-col items-center justify-center py-16" style={{ color: 'var(--rc-ink-3)' }}>
             <FileText className="w-10 h-10 mb-3" style={{ color: 'var(--rc-ink-4)' }} />
-            <p className="text-sm font-medium">No reports yet</p>
-            <p className="text-xs mt-1">Run a Weekly Review analysis to generate your first report.</p>
+            <p className="text-sm font-medium">{tab === 'coach' ? 'No coach reports yet' : 'No system reports yet'}</p>
+            <p className="text-xs mt-1">{tab === 'coach'
+              ? 'Run a Weekly Review analysis to generate your first report.'
+              : 'A system health report is written every Sunday night.'}</p>
           </div>
         )}
       </div>

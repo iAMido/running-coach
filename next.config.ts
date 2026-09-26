@@ -45,6 +45,10 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Shipped as-is rather than bundled: pdf-parse loads pdfjs workers and the
+  // @napi-rs/canvas native binary at runtime, which bundling dropped — PDF
+  // parsing then crashed on Vercel with "DOMMatrix is not defined".
+  serverExternalPackages: ['pdf-parse', '@napi-rs/canvas'],
   images: {
     remotePatterns: [
       {

@@ -8,7 +8,6 @@ import Link from 'next/link';
 import type { DashboardStats, Run, TrainingPlan, PlanWeek, Workout } from '@/lib/db/types';
 import { climbCategory, TARGET_RACE } from '@/lib/utils/elevation';
 import { isWorkoutToday, getTodayDayName, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
-import { CoachHealthWidget } from '@/components/coach/coach-health-widget';
 import { useSyncOnOpen } from '@/lib/hooks/use-sync-on-open';
 
 export default function CoachDashboard() {
@@ -553,8 +552,8 @@ export default function CoachDashboard() {
         })}
       </div>
 
-      {/* Supervisor: 7-day coach health */}
-      <CoachHealthWidget />
+      {/* The 7-day coach health panel lives on Coach Reports → System
+          (moved 2026-09-27: it describes the app, not the training). */}
 
       {/* Main Grid: Recent Runs + This Week */}
       <div className="grid gap-5 lg:grid-cols-[2fr_1fr]">

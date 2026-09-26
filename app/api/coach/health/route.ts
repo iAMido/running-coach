@@ -17,6 +17,7 @@ interface CallRow {
   status: string | null;
   ceiling_hit: boolean | null;
   preflight_warnings: string[] | null;
+  route: string | null;
   latency_ms: number | null;
 }
 interface AuditRow {
@@ -35,7 +36,7 @@ export async function GET() {
   const [{ data: callsRaw }, { data: auditsRaw }] = await Promise.all([
     supabase
       .from('coach_calls')
-      .select('status, ceiling_hit, preflight_warnings, latency_ms')
+      .select('status, ceiling_hit, preflight_warnings, latency_ms, route')
       .eq('user_id', auth.userId)
       .gte('created_at', since),
     supabase
@@ -52,8 +53,14 @@ export async function GET() {
   const totalCalls = calls.length;
   const errors = calls.filter(c => c.status === 'error').length;
   const ceilingHits = calls.filter(c => c.ceiling_hit).length;
-  const avgLatencyMs = totalCalls
-    ? Math.round(calls.reduce((s, c) => s + (c.latency_ms || 0), 0) / totalCalls)
+  // Latency of INTERACTIVE calls only. A plan-builder step legitimately takes
+  // 1-2 minutes and ran ~90 times on a test day, which dragged this average to
+  // 42 s — a number that described the builder, not how fast the chat felt.
+  const BUILDER = '/api/coach/plans/build';
+  const interactive = calls.filter(c => c.route !== BUILDER);
+  const planBuildCalls = totalCalls - interactive.length;
+  const avgLatencyMs = interactive.length
+    ? Math.round(interactive.reduce((s, c) => s + (c.latency_ms || 0), 0) / interactive.length)
     : 0;
 
   const warningCounts: Record<string, number> = {};
@@ -82,6 +89,7 @@ export async function GET() {
     errors,
     ceilingHits,
     avgLatencyMs,
+    planBuildCalls,
     preflightWarnings,
     topWarnings,
     criticCount,
