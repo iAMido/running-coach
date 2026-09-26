@@ -70,11 +70,14 @@ const modelsIdx = argv.indexOf('--models');
     ? calculateCurrentWeek(activePlan.start_date, activePlan.duration_weeks, sunday).currentWeek
     : undefined;
 
+  // Mirrors the route: the season phase's measured KPIs follow the review prompt.
+  const { kpiBlockFor } = await import('../lib/coach/season-status');
+  const kpiBlock = await kpiBlockFor(userId);
   const userPrompt = buildEnhancedWeeklyAnalysisPrompt(context, {
     runs: runsWithLaps, feedback: feedback || [], overallFeeling: undefined, sleepQuality: undefined,
     stressLevel: undefined, injuryNotes: undefined, achievements: undefined,
     plan: activePlan, weekNumber, efficiency, scorecard,
-  } as Parameters<typeof buildEnhancedWeeklyAnalysisPrompt>[1]);
+  } as Parameters<typeof buildEnhancedWeeklyAnalysisPrompt>[1]) + (kpiBlock ? `\n\n${kpiBlock}` : '');
 
   console.log(`week of ${shiftedDateStr(sunday)} · ${runRows.length} runs · plan week ${weekNumber ?? '-'}`);
 

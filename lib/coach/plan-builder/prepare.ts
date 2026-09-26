@@ -22,6 +22,8 @@ import { buildPlanGenerationContext } from '@/lib/rag/plan-generation-context';
 import { buildCoachDynamicBlock, buildRaceDemandBlock } from '@/lib/ai/coach-prompts';
 import { exemplarsForRequest } from '@/lib/coach/plan-exemplars-db';
 import { getActiveMacroPlan, phaseForWeek, formatMacroPlan } from '@/lib/coach/macro-plan';
+import { timelineOf } from '@/lib/coach/season-progress';
+import { formatPhaseBrief, phaseKpiStatuses } from '@/lib/coach/season-status';
 import { daysBetweenDateStr, userDateStr, userDateStrDaysAgo } from '@/lib/utils/user-time';
 import type { AthleteProfile } from '@/lib/db/types';
 import type { AthleteBrief, BuildRequest, PreparedStage, RaceBrief, Research } from './types';
@@ -184,7 +186,7 @@ async function research(
       goalText: [req.targetRace, req.notes, profile?.current_goal].filter(Boolean).join(' '),
       age: profile?.age ?? null,
     }).catch(() => ({ structureNames: [] as string[], strengthName: null, text: '' })),
-    resolveMacroContext(userId, req.macroPlanId, req.blockNumber),
+    resolveMacroContext(userId, req),
     ...needs.map((n) => retrieveBookContext(n.query, {}, 1200, userId).catch(() => null)),
   ]);
 
@@ -202,9 +204,7 @@ async function research(
     coachContext: buildCoachDynamicBlock(context),
     exemplarsText: exemplars.text,
     exemplarNames: [...exemplars.structureNames, ...(exemplars.strengthName ? [exemplars.strengthName] : [])],
-    macroText: macro.text,
-    macroPlanId: macro.macroPlanId,
-    macroPhase: macro.phaseName,
+    ...macro,
     intakeBlock: intake.intakeBlock,
     raceDemandBlock: race.text,
     bookSources: [...new Set([...context.bookContext.sources.map((s) => s.bookTitle), ...needResults.flatMap((n) => n.sources)])],
@@ -224,16 +224,59 @@ export function formatResearch(r: Research): string {
 /**
  * Season context for a block. Falls back to none rather than a guessed phase:
  * a standalone block is valid; a block told it serves the wrong phase builds
- * the wrong thing confidently. Same rule as the single-call generator.
+ * the wrong thing confidently.
+ *
+ * With `phaseNumber` (one plan per phase, built when due) the phase's brief
+ * becomes the contract, and the hand-over is MEASURED: the previous phase's
+ * KPIs as they actually ended (missed ones become must-haves here), or — for
+ * an extension — this phase's own lagging KPIs.
  */
 async function resolveMacroContext(
-  userId: string, macroPlanId: string | undefined, blockNumber: number | undefined,
-): Promise<{ text: string; phaseName: string | null; macroPlanId: string | null }> {
-  if (!macroPlanId) return { text: '', phaseName: null, macroPlanId: null };
+  userId: string, req: BuildRequest,
+): Promise<Pick<Research, 'macroText' | 'macroPlanId' | 'macroPhase' | 'phaseNumber' | 'phaseRanges' | 'phaseRules'>> {
+  const none = { macroText: '', macroPlanId: null, macroPhase: null, phaseNumber: null, phaseRanges: null, phaseRules: '' };
+  if (!req.macroPlanId) return none;
   const macro = await getActiveMacroPlan(userId);
-  if (!macro || macro.id !== macroPlanId) return { text: '', phaseName: null, macroPlanId: null };
-  const seasonWeek = blockNumber ? (blockNumber - 1) * 12 + 1 : 1;
-  return { text: formatMacroPlan(macro, seasonWeek), phaseName: phaseForWeek(macro, seasonWeek)?.name ?? null, macroPlanId: macro.id };
+  if (!macro || macro.id !== req.macroPlanId) return none;
+
+  if (req.phaseNumber) {
+    const phase = macro.phases.find((p) => p.phase_number === req.phaseNumber);
+    if (!phase) return none;
+    const timeline = timelineOf(macro);
+    let carriedGaps: string[] = [];
+    let previousOutcome = '';
+    if (req.extensionWeeks) {
+      const me = timeline.find((e) => e.phase.phase_number === phase.phase_number)!;
+      const st = await phaseKpiStatuses(userId, phase, me.start).catch(() => []);
+      carriedGaps = st.filter((x) => x.current !== null && !x.met).map((x) => `${x.kpi.label} — now ${x.current}, target ${x.kpi.target}`);
+    } else if (phase.phase_number > 1) {
+      const prevEntry = timeline.find((e) => e.phase.phase_number === phase.phase_number - 1)!;
+      if (prevEntry && !prevEntry.projected) {
+        const st = await phaseKpiStatuses(userId, prevEntry.phase, prevEntry.start).catch(() => []);
+        carriedGaps = st.filter((x) => x.current !== null && !x.met).map((x) => `${x.kpi.label} — ended at ${x.current}, target ${x.kpi.target}`);
+        previousOutcome = st.length
+          ? `How ${prevEntry.phase.name} actually ended: ${st.map((x) => `${x.kpi.label}: ${x.current ?? 'not measured'} (${x.current === null ? 'unknown' : x.met ? 'met' : 'missed'})`).join('; ')}.`
+          : '';
+      }
+    }
+    return {
+      macroText: `${formatMacroPlan(macro, null, phase.phase_number)}\n\n${formatPhaseBrief(phase, { extensionWeeks: req.extensionWeeks, carriedGaps, previousOutcome })}`,
+      macroPlanId: macro.id,
+      macroPhase: phase.name,
+      phaseNumber: phase.phase_number,
+      phaseRanges: { km: phase.weekly_km_range, vert: phase.weekly_vert_range_m },
+      phaseRules: [
+        phase.goal ? `Phase goal: ${phase.goal}` : '',
+        phase.must_haves?.length || carriedGaps.length ? `Must-haves: ${[...(phase.must_haves ?? []), ...carriedGaps].join('; ')}` : '',
+        phase.avoid?.length ? `Don'ts: ${phase.avoid.join('; ')}` : '',
+        phase.kpis?.length ? `KPIs this phase is measured on: ${phase.kpis.map((k) => k.label).join('; ')}` : '',
+      ].filter(Boolean).join('\n'),
+    };
+  }
+
+  // Legacy: block numbers assumed 12-week blocks.
+  const seasonWeek = req.blockNumber ? (req.blockNumber - 1) * 12 + 1 : 1;
+  return { ...none, macroText: formatMacroPlan(macro, seasonWeek), macroPlanId: macro.id, macroPhase: phaseForWeek(macro, seasonWeek)?.name ?? null };
 }
 
 export async function prepare(userId: string, req: BuildRequest): Promise<PreparedStage> {

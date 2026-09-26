@@ -70,6 +70,12 @@ export interface Research {
   macroText: string;
   macroPlanId: string | null;
   macroPhase: string | null;
+  /** The season phase this plan builds (one plan per phase); null for a standalone plan. */
+  phaseNumber?: number | null;
+  /** The phase's weekly bands — the checker holds every week inside them. */
+  phaseRanges?: { km: [number, number] | null; vert: [number, number] | null } | null;
+  /** Goal, must-haves (incl. carried gaps), don'ts and KPIs, short — for writers and the reviewer. */
+  phaseRules?: string;
   intakeBlock: string;
   raceDemandBlock: string;
   bookSources: string[];

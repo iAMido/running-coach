@@ -26,11 +26,12 @@ import { COACH_STATIC_BLOCK } from '@/lib/ai/coach-prompts';
 import { MODEL_FOR, REASONING_FOR } from '@/lib/ai/model-registry';
 import { buildTrainingState, formatTrainingState } from '@/lib/coach/training-state';
 import { evaluateTriggers, shouldPropose, describeNoChange } from '@/lib/coach/proposal-triggers';
-import { getActiveMacroPlan, phaseForWeek, formatMacroPlan } from '@/lib/coach/macro-plan';
+import { getActiveMacroPlan, formatMacroPlan } from '@/lib/coach/macro-plan';
+import { currentPhase } from '@/lib/coach/season-progress';
+import { kpiBlockFor } from '@/lib/coach/season-status';
 import { getActivePlan } from '@/lib/db/plans';
 import { getAthleteProfile } from '@/lib/db/profile';
-import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
-import { nowInUserTz } from '@/lib/utils/user-time';
+import { nowInUserTz, userDateStr } from '@/lib/utils/user-time';
 
 /** Sunday of the week that just ENDED, YYYY-MM-DD in the athlete's timezone. */
 function lastCompletedWeekStart(): string {
@@ -82,21 +83,14 @@ export async function proposeForUser(userId: string, weekStart: string): Promise
     getActiveMacroPlan(userId),
   ]);
 
-  // Which phase the athlete is in, and how deep into it.
-  let phase = null;
-  let weeksIntoPhase: number | null = null;
-  if (macro && plan?.start_date) {
-    const seasonWeek = calculateCurrentWeek(plan.start_date, plan.duration_weeks).currentWeek;
-    phase = phaseForWeek(macro, seasonWeek);
-    if (phase) {
-      let before = 0;
-      for (const p of macro.phases) {
-        if (p.phase_number === phase.phase_number) break;
-        before += p.weeks;
-      }
-      weeksIntoPhase = seasonWeek - before;
-    }
-  }
+  // Which phase the athlete is in, and how deep into it — from the season's
+  // own progress (phases are built when due, so the block plan's week number
+  // no longer says which phase this is).
+  const cp = macro ? currentPhase(macro, userDateStr()) : null;
+  const phase = cp?.entry.phase ?? null;
+  const weeksIntoPhase = cp?.weekOfPhase ?? null;
+  // The phase KPIs the proposal should steer toward.
+  const kpiBlock = macro ? await kpiBlockFor(userId) : '';
 
   const triggers = evaluateTriggers({ state, phase, weeksIntoPhase });
 
@@ -138,7 +132,8 @@ export async function proposeForUser(userId: string, weekStart: string): Promise
 
   const systemPrompt = [
     formatTrainingState(state),
-    macro ? formatMacroPlan(macro, weeksIntoPhase ?? undefined) : '',
+    macro ? formatMacroPlan(macro, null, phase?.phase_number ?? null) : '',
+    kpiBlock,
     '## WHY YOU ARE BEING ASKED',
     'These rules fired on the week just completed:',
     triggerList,
@@ -155,6 +150,7 @@ export async function proposeForUser(userId: string, weekStart: string): Promise
     '- Preserve every field the current weeks carry, including total_elevation_gain_m, elevation_gain_m and indoor_alternative.',
     '- If a trigger reflects missing DATA rather than a training problem, say so and propose nothing for it.',
     '- Cut vert before km when load must come down.',
+    '- If a PHASE KPI is behind, prefer the change that moves it — and name the KPI in the summary.',
     '',
     'Return ONLY raw JSON:',
     '{',

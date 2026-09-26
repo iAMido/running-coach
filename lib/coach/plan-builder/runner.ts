@@ -17,6 +17,7 @@
 
 import { supabase } from '@/lib/db/supabase';
 import { MODEL_FOR } from '@/lib/ai/model-registry';
+import { recordPhaseBuilt } from '@/lib/coach/macro-plan';
 import { getAthleteProfile } from '@/lib/db/profile';
 import { parseZonesFromProfile } from '@/lib/utils/zones';
 import { extractJson, planOutputTokenBudget } from '@/lib/coach/plan-output';
@@ -111,6 +112,7 @@ function checkContext(row: PlanBuildRow, zones: CheckContext['zones']): CheckCon
     athlete: prep.athlete,
     zones,
     strengthLibrary: Object.keys(row.outline?.strength_sessions ?? {}),
+    phaseRanges: prep.research.phaseRanges ?? null,
   };
 }
 
@@ -366,10 +368,17 @@ async function runStage(row: PlanBuildRow): Promise<StageResult> {
         current_week_num: 1,
         status: 'active',
         macro_plan_id: row.prepared!.research.macroPlanId,
-        block_number: row.request.blockNumber ?? null,
+        block_number: row.request.phaseNumber ?? row.request.blockNumber ?? null,
         macro_phase: row.prepared!.research.macroPhase,
       }).select('id').single();
       if (error) throw new Error(`saving the plan failed: ${error.message}`);
+      // One plan per season phase: record that this phase is now active (and
+      // the previous one done), so the season knows where the athlete really is.
+      if (row.prepared!.research.macroPlanId && row.prepared!.research.phaseNumber) {
+        await recordPhaseBuilt(row.prepared!.research.macroPlanId, row.prepared!.research.phaseNumber, {
+          planId: plan.id, startDate: row.prepared!.startDate, extensionWeeks: row.request.extensionWeeks ?? 0,
+        }).catch((e) => console.error('season progress not recorded:', e));
+      }
       note('save');
       return { stage: 'done', plan_id: plan.id, timings };
     }

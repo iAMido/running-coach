@@ -13,7 +13,8 @@ import { buildScorecard, type Scorecard, type ScorecardRun } from '@/lib/utils/s
 import { plannedWorkoutForRunDate } from '@/lib/ai/run-reaction';
 import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
 import type { TrainingPlan } from '@/lib/db/types';
-import { getActiveMacroPlan, phaseForWeek } from '@/lib/coach/macro-plan';
+import { getActiveMacroPlan } from '@/lib/coach/macro-plan';
+import { currentPhase } from '@/lib/coach/season-progress';
 
 interface WeekRunRow {
   date: string;
@@ -77,9 +78,8 @@ export async function buildScorecardForUser(
   let phaseVertRangeM: [number, number] | null = null;
   try {
     const macro = await getActiveMacroPlan(userId);
-    if (macro && plan?.start_date) {
-      const seasonWeek = calculateCurrentWeek(plan.start_date, plan.duration_weeks, new Date(`${weekStart}T12:00:00Z`)).currentWeek;
-      phaseVertRangeM = phaseForWeek(macro, seasonWeek)?.weekly_vert_range_m ?? null;
+    if (macro) {
+      phaseVertRangeM = currentPhase(macro, weekStart)?.entry.phase.weekly_vert_range_m ?? null;
     }
   } catch (err) {
     console.error('scorecard: season phase unavailable:', err);

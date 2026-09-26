@@ -8,6 +8,11 @@ const phase = (n: number, name: string, weeks: number, km: [number, number], ver
   phase_number: n, name, focus: '', weeks, weekly_km_range: km, weekly_vert_range_m: vert,
   long_run_vert_ceiling_m: null, capability: '', key_sessions: [],
   exit_criteria: ['3 consecutive weeks at 400+ m vert', 'long run 2 h with decoupling at or below his own median'],
+  goal: 'Build the climbing base', must_haves: ['weekly climb'], avoid: ['stacking climb and descent'], watch_for: ['first-step heel pain'],
+  kpis: [
+    { id: 'km', label: 'km', metric: 'weekly_km', comparator: 'gte', target: km[0], consecutive_weeks: 2 },
+    { id: 'lr', label: 'long run', metric: 'long_run_km', comparator: 'gte', target: 12 },
+  ],
   ...extra,
 });
 
@@ -72,6 +77,25 @@ test('steep races need an explicit poles decision; absolute decoupling bands are
   const d = good();
   d.phases[0].exit_criteria = ['decoupling below 5% on long runs'];
   expect(errs(d)).toContain('absolute_decoupling');
+});
+
+test('each phase needs a goal and 2+ measurable KPIs, and they must be reachable inside its own ranges', () => {
+  const s = good();
+  s.phases[0].kpis = [s.phases[0].kpis![0]];
+  expect(errs(s)).toContain('phase_kpis');
+  const trap = good();
+  trap.phases[1].kpis!.push({ id: 'v', label: '1000 m weeks', metric: 'weekly_vert_m', comparator: 'gte', target: 1000, consecutive_weeks: 3 });
+  expect(errs(trap)).toContain('kpi_reachable'); // Build's own range tops out at 800
+  const long = good();
+  long.phases[0].kpis![0].consecutive_weeks = 15; // in a 12-week phase
+  expect(errs(long)).toContain('kpi_reachable');
+});
+
+test('normalize: an unknown KPI metric is dropped, never trusted', () => {
+  const { season } = normalizeSeason({ phases: [{ name: 'A', weeks: 4, kpis: [
+    { metric: 'weekly_km', target: 30 }, { metric: 'vibes', target: 10 }, { metric: 'form', target: 'x' },
+  ] }] }, 'G');
+  expect(season!.phases[0].kpis!.map((k) => k.metric)).toEqual(['weekly_km']);
 });
 
 test('normalize: renumbers phases, refuses a season with no usable phases', () => {

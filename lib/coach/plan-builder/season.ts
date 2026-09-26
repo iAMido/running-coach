@@ -95,7 +95,27 @@ ${buildMacroPlanPrompt({
     ? `The race is inside this season: the phases must sum to exactly ${prep.race.weeksToRace} weeks, ending on race week, and the final phase is the taper.`
     : `The phases must sum to exactly ${req.horizonWeeks} weeks.${prep.race.durationNote ? ` ${prep.race.durationNote}` : ''}`}
 ${prep.race.hasElevation && prep.race.elevationGainM && raceInHorizon ? `- The peak phase's weekly climbing range must reach at least the race's own ${prep.race.elevationGainM} m.\n` : ''}- Add a top-level "decisions" array: poles (yes or no, and the phase they enter), fuelling practice, altitude, and anything else the race brief raises. Unstated is not decided.
-- Be brief — reason fully, write tersely. Rationale ≤ 120 words; ≤ 4 exit criteria per phase, each a single measurable line.`;
+- Be brief — reason fully, write tersely. Rationale ≤ 120 words; ≤ 4 exit criteria per phase, each a single measurable line.
+
+### EACH PHASE ALSO CARRIES YOUR BRIEF — THE CONTRACT ITS COACH WILL BUILD FROM
+Every phase is later built as its own training plan, by a coach who gets only
+your brief, the athlete's data at that time, and the research. Write the brief
+for that coach. Add these fields to every phase:
+- "goal": one sentence — what this phase is for.
+- "why_this_length": one sentence.
+- "must_haves": 2-4 items that MUST be in the phase's plan.
+- "avoid": 2-4 don'ts.
+- "watch_for": 2-3 warning signs that mean ease off or extend (e.g. first-step heel pain, readiness REST twice in a week).
+- "handoff": what this phase hands to the next one.
+- "kpis": 2-4 MEASURABLE targets. The app evaluates them from his data every week — the weekly reviewer steers toward the ones behind, and they decide when the phase is done. Use ONLY these metrics:
+  - "weekly_km", "weekly_vert_m" — with "consecutive_weeks" (complete weeks in a row). Weekly vert is what his watch LOGS; indoor incline often records 0.
+  - "long_run_km", "session_vert_m" — best single run in the phase.
+  - "adherence_pct" — % of runs on his stated days.
+  - "decoupling_pctile" — median decoupling as a percentile of HIS OWN history (use "lte"; only steady runs produce it — hiked sessions do not).
+  - "form" (CTL − ATL, latest), "ctl" (latest).
+  Every KPI must be reachable INSIDE the phase's own weekly ranges, session cap and length — a KPI the phase cannot reach is a trap. The exit criteria restate the KPIs in words.
+  Example: { "id": "vert_700x3", "label": "3 weeks in a row at 700+ m logged climbing", "metric": "weekly_vert_m", "comparator": "gte", "target": 700, "consecutive_weeks": 3 }
+A taper phase needs only a goal and "form" as its KPI.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -174,6 +194,7 @@ Read it as one season and answer:
 2. **Separate tracks** — do volume, climbing and descent each progress on their own track, with climbing cut before km when load must drop, and descent treated as its own stressor?
 3. **Exit criteria** — can each phase's criteria actually be reached inside its length and weekly ranges, and measured with the app's data? A criterion needing more than the phase's range allows is a trap.
 4. **Against the athlete and the race** — does phase 1 start from his measured load? Does the peak prepare him for THIS race's gradient and climb? Are his plantar-fasciitis history, poles, fuelling and altitude handled? Does the season end correctly (race week and taper, or a clean hand-over)?
+5. **The briefs** — could a coach who sees ONLY a phase's brief build the right plan from it? Do the KPIs measure the phase's goal (not something easier to count), and does each phase's hand-over match what the next phase assumes?
 
 Severity: "must_fix" ONLY for problems that would hurt him or leave him unprepared — name the phases and say exactly what to change. Everything else is a "note". At most 6 issues. If it fits, say so.
 

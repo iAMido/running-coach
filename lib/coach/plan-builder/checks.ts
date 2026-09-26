@@ -210,6 +210,11 @@ export interface CheckContext {
    * dropped at save time.
    */
   strengthLibrary?: string[] | null;
+  /**
+   * The season phase's weekly bands when this plan builds a phase. The season
+   * head coach set them; a week above them is the plan overruling the season.
+   */
+  phaseRanges?: { km: [number, number] | null; vert: [number, number] | null } | null;
 }
 
 function over(value: number, ref: number, t: { warnPct: number; warnAbs: number; errorPct: number; errorAbs: number }): Severity | null {
@@ -420,6 +425,21 @@ export function checkPlan(weeks: PlanWeek[], ctx: CheckContext): Violation[] {
         add({ rule: 'hard_easy', severity: 'warn', week: n, day: DAYS[d],
           message: `Hard sessions on consecutive days (${DAYS[d - 1]}, ${DAYS[d]}).` });
       }
+    }
+
+    // --- inside the season phase's bands -----------------------------------------------
+    const pr = ctx.phaseRanges;
+    if (pr?.km && week.total_km > pr.km[1] * 1.1) {
+      add({ rule: 'phase_range', severity: 'error', week: n,
+        message: `${fmt(week.total_km)} km is above the season phase's range (${pr.km[0]}-${pr.km[1]} km).` });
+    } else if (pr?.km && !recovery && !taper && week.total_km < pr.km[0] * 0.8) {
+      add({ rule: 'phase_range', severity: 'warn', week: n,
+        message: `${fmt(week.total_km)} km is well below the season phase's range (${pr.km[0]}-${pr.km[1]} km).` });
+    }
+    const wv = week.total_elevation_gain_m;
+    if (pr?.vert && typeof wv === 'number' && wv > pr.vert[1] * 1.15) {
+      add({ rule: 'phase_range', severity: 'error', week: n,
+        message: `${Math.round(wv)} m climbing is above the season phase's range (${pr.vert[0]}-${pr.vert[1]} m).` });
     }
 
     // --- against the outline -------------------------------------------------------

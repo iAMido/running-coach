@@ -198,7 +198,11 @@ ${outline.phases.map((p) => `- ${p.name} (weeks ${p.start_week}-${p.end_week}): 
 Weekly targets:
 ${outline.weeks.map((w) => targetLine(w, hasElev)).join('\n')}
 Strength library (reference by id — do NOT define new sessions): ${libraryIds.join(', ') || 'none'}
-
+${prep.research.phaseRules ? `
+## THE SEASON PHASE THIS PLAN BUILDS
+${prep.research.phaseRules}
+Weekly km${prep.race.hasElevation ? ' and climbing' : ''} must stay inside the phase's ranges (${prep.research.phaseRanges?.km?.join('-') ?? '?'} km${prep.research.phaseRanges?.vert ? `, ${prep.research.phaseRanges.vert.join('-')} m` : ''}).
+` : ''}
 ## HOW TO WRITE WEEKS
 You are one of several coaches writing this plan in parallel, each a few
 weeks of it, from the outline above. You will be told which weeks are yours.
@@ -308,7 +312,10 @@ Strength library: ${Object.entries(outline.strength_sessions).map(([id, s]) => `
 ## THE ASSEMBLED PLAN (written phase by phase, in parallel, by different coaches)
 ${renderPlanCompact(weeks)}
 
-## ALREADY FOUND BY MEASUREMENT — do not repeat these
+${prep.research.phaseRules ? `## THE SEASON PHASE THIS PLAN BUILDS
+${prep.research.phaseRules}
+
+` : ''}## ALREADY FOUND BY MEASUREMENT — do not repeat these
 ${[...measured.map((i) => `- ${i.problem}`), ...remainingRuleErrors.map((v) => `- W${v.week}: ${v.message}`)].join('\n') || '- nothing'}
 
 ## YOUR TASK: DOES IT ALL FIT?
@@ -325,6 +332,7 @@ job is the whole. Read the plan as one plan and answer four questions:
 4. **Plan against the athlete and the race** — is the start right for his measured
    load, does the peak prepare him for THIS race's demand, is the injury history
    respected, does the final week land correctly?
+${prep.research.phaseRules ? "5. **Against the season phase** — does the plan deliver the phase goal and honour its must-haves and don'ts, and can following it actually reach each KPI by the end of the phase?" : ''}
 
 Severity: "must_fix" ONLY for problems that would materially hurt the athlete or
 leave him unprepared for the race — name the weeks and say exactly what to change.

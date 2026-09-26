@@ -13,6 +13,7 @@ import { formatScorecard } from '@/lib/utils/scorecard';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { reviewAnalysisSchema, validateInput } from '@/lib/validation/schemas';
 import { getActivePlan } from '@/lib/db/plans';
+import { kpiBlockFor } from '@/lib/coach/season-status';
 import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
 import { nowInUserTz } from '@/lib/utils/user-time';
 import type { Run, Lap } from '@/lib/db/types';
@@ -142,6 +143,8 @@ export async function POST(request: NextRequest) {
     if (preflight.augmentedSystemSuffix) {
       systemPrompt = systemPrompt + preflight.augmentedSystemSuffix;
     }
+    // The season phase's KPIs, measured — the reviewer steers toward the ones behind.
+    const kpiBlock = await kpiBlockFor(userId);
     const userPrompt = buildEnhancedWeeklyAnalysisPrompt(context, {
       runs: runsWithLaps,
       feedback: feedback || [],
@@ -154,7 +157,9 @@ export async function POST(request: NextRequest) {
       weekNumber: reviewWeekNumber,
       efficiency,
       scorecard,
-    });
+    }) + (kpiBlock ? `
+
+${kpiBlock}` : '');
 
     const callStart = Date.now();
     const response = await callOpenRouter(

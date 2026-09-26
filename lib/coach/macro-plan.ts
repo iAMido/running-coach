@@ -204,6 +204,33 @@ export async function saveMacroPlan(
 }
 
 /**
+ * A training plan was built for a season phase: that phase becomes ACTIVE with
+ * its real start date, the phase before it (if active) is DONE, and an
+ * extension adds weeks rather than restarting the phase.
+ */
+export async function recordPhaseBuilt(
+  macroPlanId: string, phaseNumber: number, opts: { planId: string; startDate: string; extensionWeeks: number },
+): Promise<void> {
+  const { data } = await supabase.from('macro_plans').select('phases, phase_progress').eq('id', macroPlanId).single();
+  if (!data) return;
+  const phases = data.phases as MacroPhase[];
+  const progress: PhaseProgress[] = phases.map((p) => (data.phase_progress as PhaseProgress[] | null)?.find((x) => x.phase_number === p.phase_number) ?? {
+    phase_number: p.phase_number, status: 'planned', start_date: null, extension_weeks: 0, plan_ids: [], ended_on: null,
+  });
+  const dayBefore = new Date(Date.parse(`${opts.startDate}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+  const next = progress.map((p): PhaseProgress => {
+    if (p.phase_number === phaseNumber) {
+      return opts.extensionWeeks > 0
+        ? { ...p, status: 'active', extension_weeks: p.extension_weeks + opts.extensionWeeks, plan_ids: [...p.plan_ids, opts.planId] }
+        : { ...p, status: 'active', start_date: p.start_date && p.status === 'active' ? p.start_date : opts.startDate, plan_ids: [...p.plan_ids, opts.planId] };
+    }
+    if (p.status === 'active' && opts.extensionWeeks === 0) return { ...p, status: 'done', ended_on: dayBefore };
+    return p;
+  });
+  await supabase.from('macro_plans').update({ phase_progress: next, updated_at: new Date().toISOString() }).eq('id', macroPlanId);
+}
+
+/**
  * Which phase a given week of the season falls in.
  *
  * Walks the declared lengths. Returns null past the end rather than clamping
@@ -233,7 +260,7 @@ export function seasonWeekFor(plan: MacroPlan, today: string, startDate: string)
  * knows what it is FOR, and by the weekly proposal so it can tell a wobble
  * from a phase that has run its course.
  */
-export function formatMacroPlan(plan: MacroPlan, currentWeek?: number | null): string {
+export function formatMacroPlan(plan: MacroPlan, currentWeek?: number | null, currentPhaseNumber?: number | null): string {
   const lines: string[] = [
     '## SEASON PLAN (macro)',
     `Goal: ${plan.goal_name}${plan.race_date ? ` on ${plan.race_date}` : ''}`,
@@ -250,10 +277,16 @@ export function formatMacroPlan(plan: MacroPlan, currentWeek?: number | null): s
   for (const p of plan.phases) {
     const from = cursor + 1;
     cursor += p.weeks;
-    const isCurrent = currentWeek != null && currentWeek >= from && currentWeek <= cursor;
+    // By phase number when known (phases are built when due, so the calendar
+    // can drift); by season week otherwise.
+    const isCurrent = currentPhaseNumber != null
+      ? p.phase_number === currentPhaseNumber
+      : currentWeek != null && currentWeek >= from && currentWeek <= cursor;
     lines.push('');
     lines.push(`### Phase ${p.phase_number}: ${p.name} (weeks ${from}-${cursor})${isCurrent ? '  <- CURRENT' : ''}`);
+    if (p.goal) lines.push(`- Goal: ${p.goal}`);
     lines.push(`- Focus: ${p.focus}`);
+    if (p.kpis?.length) lines.push(`- KPIs: ${p.kpis.map((k) => k.label).join('; ')}`);
     lines.push(`- Building: ${p.capability}`);
     if (p.weekly_km_range) lines.push(`- Weekly km: ${p.weekly_km_range[0]}-${p.weekly_km_range[1]}`);
     if (p.weekly_vert_range_m) lines.push(`- Weekly vert: ${p.weekly_vert_range_m[0]}-${p.weekly_vert_range_m[1]} m`);

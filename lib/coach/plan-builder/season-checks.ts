@@ -10,7 +10,7 @@
  * phase's exit actually be measured.
  */
 
-import type { MacroPhase } from '@/lib/coach/macro-plan';
+import { KPI_METRICS, type MacroPhase, type PhaseKpi } from '@/lib/coach/macro-plan';
 import type { SeasonDraft, Violation } from './types';
 
 export interface SeasonCheckContext {
@@ -55,6 +55,27 @@ function over(v: number, ref: number, t: { warnPct: number; warnAbs: number; err
   return null;
 }
 
+const strs = (x: unknown): string[] => (Array.isArray(x) ? x.filter((v): v is string => typeof v === 'string') : []);
+
+/** Keep only KPIs the app can evaluate; an unknown metric cannot be measured, so it is dropped (and the phase then fails the KPI-count rule). */
+function kpisOf(x: unknown): PhaseKpi[] {
+  if (!Array.isArray(x)) return [];
+  return x.flatMap((k: Record<string, unknown>, i: number): PhaseKpi[] => {
+    const metric = k.metric as PhaseKpi['metric'];
+    const target = Number(k.target);
+    if (!KPI_METRICS.includes(metric) || !Number.isFinite(target)) return [];
+    const weeks = Number(k.consecutive_weeks);
+    return [{
+      id: String(k.id ?? `${metric}_${i + 1}`),
+      label: String(k.label ?? metric),
+      metric,
+      comparator: k.comparator === 'lte' ? 'lte' : 'gte',
+      target,
+      ...(Number.isFinite(weeks) && weeks > 0 ? { consecutive_weeks: Math.round(weeks) } : {}),
+    }];
+  });
+}
+
 /** Validate the model's season; fatal problems mean it cannot be checked or saved. */
 export function normalizeSeason(raw: unknown, goalName: string): { season: SeasonDraft | null; fatal: string[] } {
   const o = (raw ?? {}) as Record<string, unknown>;
@@ -70,6 +91,13 @@ export function normalizeSeason(raw: unknown, goalName: string): { season: Seaso
     capability: String(p.capability ?? ''),
     exit_criteria: Array.isArray(p.exit_criteria) ? p.exit_criteria.map(String) : [],
     key_sessions: Array.isArray(p.key_sessions) ? p.key_sessions.map(String) : [],
+    goal: typeof p.goal === 'string' ? p.goal : undefined,
+    why_this_length: typeof p.why_this_length === 'string' ? p.why_this_length : undefined,
+    must_haves: strs(p.must_haves),
+    avoid: strs(p.avoid),
+    watch_for: strs(p.watch_for),
+    handoff: typeof p.handoff === 'string' ? p.handoff : undefined,
+    kpis: kpisOf(p.kpis),
   }));
   if (phases.length === 0) fatal.push('the season has no phases');
   if (phases.some((p) => !Number.isFinite(p.weeks) || p.weeks < 1)) fatal.push('a phase has no valid length in weeks');
@@ -157,6 +185,43 @@ export function checkSeason(s: SeasonDraft, ctx: SeasonCheckContext): Violation[
       }
     }
 
+    // --- the brief: a goal and KPIs the app can measure ------------------------------
+    if (!isTaper(p)) {
+      if (!p.goal) add({ rule: 'phase_brief', severity: 'error', week: n, message: `${p.name} has no goal.` });
+      if ((p.kpis?.length ?? 0) < 2) {
+        add({ rule: 'phase_kpis', severity: 'error', week: n,
+          message: `${p.name} has ${p.kpis?.length ?? 0} measurable KPI(s); it needs at least 2 the app can evaluate (${KPI_METRICS.join(', ')}).` });
+      }
+      if (!p.must_haves?.length || !p.avoid?.length || !p.watch_for?.length) {
+        add({ rule: 'phase_brief', severity: 'warn', week: n, message: `${p.name}'s brief is missing must-haves, don'ts or warning signs.` });
+      }
+    }
+    // A KPI the phase's own ranges cannot reach is a trap: the phase can never
+    // be "done" by following it. The head coach's review found exactly this in
+    // both the single-call and the staged seasons before this rule existed.
+    for (const k of p.kpis ?? []) {
+      if (k.comparator !== 'gte') continue;
+      if (k.consecutive_weeks && k.consecutive_weeks > p.weeks) {
+        add({ rule: 'kpi_reachable', severity: 'error', week: n,
+          message: `KPI "${k.label}" needs ${k.consecutive_weeks} consecutive weeks in a ${p.weeks}-week phase.` });
+      }
+      if (k.metric === 'weekly_km' && km && k.target > km[1]) {
+        add({ rule: 'kpi_reachable', severity: 'error', week: n,
+          message: `KPI "${k.label}" targets ${k.target} km/week, above ${p.name}'s own range (${km[0]}-${km[1]}).` });
+      }
+      if (k.metric === 'weekly_vert_m' && vert && k.target > vert[1]) {
+        add({ rule: 'kpi_reachable', severity: 'error', week: n,
+          message: `KPI "${k.label}" targets ${k.target} m/week, above ${p.name}'s own climbing range (${vert[0]}-${vert[1]}).` });
+      }
+      if (k.metric === 'session_vert_m') {
+        const cap = p.long_run_vert_ceiling_m ?? vert?.[1] ?? null;
+        if (cap !== null && k.target > cap) {
+          add({ rule: 'kpi_reachable', severity: 'error', week: n,
+            message: `KPI "${k.label}" asks for a ${k.target} m single climb; ${p.name} caps a single session at ${cap} m.` });
+        }
+      }
+    }
+
     // --- exit criteria can be measured ---------------------------------------------
     if (p.exit_criteria.length === 0) {
       add({ rule: 'exit_criteria', severity: 'error', week: n, message: `${p.name} has no exit criteria — nothing says when to advance.` });
@@ -203,6 +268,10 @@ export function renderSeason(s: SeasonDraft): string {
     `P${p.phase_number} ${p.name} · ${p.weeks} wk · ${p.weekly_km_range?.join('-') ?? '?'} km/wk` +
     (p.weekly_vert_range_m ? ` · ${p.weekly_vert_range_m.join('-')} m/wk` : '') +
     (p.long_run_vert_ceiling_m != null ? ` · long-run climb ≤${p.long_run_vert_ceiling_m} m` : '') +
-    `\n  focus: ${p.focus}\n  capability: ${p.capability}\n  key sessions: ${p.key_sessions.join('; ')}\n  exit: ${p.exit_criteria.join(' | ')}`,
+    `\n  goal: ${p.goal ?? '—'}${p.why_this_length ? ` (length: ${p.why_this_length})` : ''}` +
+    `\n  focus: ${p.focus}\n  capability: ${p.capability}\n  key sessions: ${p.key_sessions.join('; ')}` +
+    `\n  KPIs: ${(p.kpis ?? []).map((k) => `${k.label} [${k.metric} ${k.comparator === 'gte' ? '≥' : '≤'} ${k.target}${k.consecutive_weeks ? ` x${k.consecutive_weeks} wk` : ''}]`).join('; ') || 'none'}` +
+    `\n  must: ${(p.must_haves ?? []).join('; ') || '—'}\n  avoid: ${(p.avoid ?? []).join('; ') || '—'}\n  watch for: ${(p.watch_for ?? []).join('; ') || '—'}` +
+    `\n  hand-over: ${p.handoff ?? '—'}\n  exit: ${p.exit_criteria.join(' | ')}`,
   ).join('\n');
 }

@@ -85,7 +85,16 @@ export const planGenerationSchema = z.object({
    * knows what it is FOR rather than restating a generic build.
    */
   macroPlanId: z.string().uuid().optional(),
+  /** @deprecated assumed 12-week blocks; use phaseNumber. */
   blockNumber: z.number().int().min(1).max(20).optional(),
+  /**
+   * The season phase this plan builds — one plan per phase, built when the
+   * phase is due. With macroPlanId, the phase's brief (goal, KPIs, ranges,
+   * must-haves, don'ts) becomes the plan builder's contract.
+   */
+  phaseNumber: z.number().int().min(1).max(20).optional(),
+  /** Build a 2-3 week EXTENSION of the phase instead of the phase itself. */
+  extensionWeeks: z.number().int().min(1).max(4).optional(),
 
   // ---- Race profile. What the plan must actually prepare the athlete FOR. ----
   /**
