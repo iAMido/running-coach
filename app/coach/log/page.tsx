@@ -5,6 +5,7 @@ import { Slider } from '@/components/ui/slider';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ClipboardList, CheckCircle, Save, Activity } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { RunDataEditor } from '@/components/coach/run-data-editor';
 import type { Run } from '@/lib/db/types';
 import { VertBadge } from '@/components/coach/vert-badge';
 
@@ -29,16 +30,19 @@ interface FeedbackFormProps {
   submitError: string | null;
   isEditing: boolean;
   onSubmit: () => void;
+  /** Treadmill / manual data editor for the selected run, shown above the feedback. */
+  dataEditor?: React.ReactNode;
 }
 
 function FeedbackFormContent({
   rating, setRating, effort, setEffort, feeling, setFeeling,
   preRunFeeling, setPreRunFeeling, followedPlan, setFollowedPlan,
   comment, setComment, selectedRun, submitting, submitted, submitError,
-  isEditing, onSubmit,
+  isEditing, onSubmit, dataEditor,
 }: FeedbackFormProps) {
   return (
     <div className="space-y-6">
+      {dataEditor}
       {/* Rating */}
       <div className="space-y-3">
         <div className="flex justify-between items-center">
@@ -432,6 +436,7 @@ export default function LogRunsPage() {
     }
   };
 
+  const selectedRunRow = runs.find((r) => r.id === selectedRun) ?? null;
   const formProps: FeedbackFormProps = {
     rating, setRating, effort, setEffort, feeling, setFeeling,
     preRunFeeling, setPreRunFeeling, followedPlan, setFollowedPlan,
@@ -439,6 +444,12 @@ export default function LogRunsPage() {
     submitError,
     isEditing: !!selectedRun && feedbackByRunId.has(selectedRun),
     onSubmit: handleSubmit,
+    dataEditor: selectedRunRow ? (
+      <RunDataEditor
+        run={selectedRunRow}
+        onSaved={(updated) => setRuns((prev) => prev.map((r) => (r.id === updated.id ? { ...r, ...updated } : r)))}
+      />
+    ) : null,
   };
 
   if (loading) {

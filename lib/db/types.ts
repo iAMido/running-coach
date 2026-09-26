@@ -3,6 +3,10 @@
 
 export interface Run {
   id: string;
+  /** Marked by the athlete as a treadmill session (lib/utils/treadmill.ts). */
+  is_treadmill?: boolean | null;
+  /** Present when the athlete corrected the run by hand; holds the watch's original values. */
+  manual_edit?: import('@/lib/utils/treadmill').ManualEdit | null;
   user_id?: string;
   filename?: string;
   date: string;

@@ -498,6 +498,11 @@ function formatSingleRun(run: Run, decouplingHistory: number[] = []): string {
   // variable, and a silently missing tag would let a steep session read as a
   // road run. Same rule the GAP tag two lines up follows.
   parts.push(formatVert(run.elevation_gain_m, run.distance_km, run.elevation_loss_m));
+  // Say where the numbers came from: a treadmill session the athlete entered
+  // by hand is real climbing, but it was not measured by the watch.
+  if (run.is_treadmill) {
+    parts.push(run.manual_edit ? '[treadmill — distance/climb entered by athlete]' : '[treadmill]');
+  }
 
   if (typeof run.decoupling_pct === 'number') {
     parts.push(formatDecoupling(run.decoupling_pct, decouplingHistory));
