@@ -151,3 +151,13 @@ test('week 1 starts this week Sun-Tue, next Sunday Wed-Sat — never in a week t
   expect(planStartSunday('2026-09-30')).toBe('2026-10-04'); // Wednesday
   expect(planStartSunday('2026-09-26')).toBe('2026-09-27'); // Saturday
 });
+
+test('writers keep athlete and previous-coach layers, drop only the general book layer', async () => {
+  const { athleteAndCoachLayers } = await import('./prompts');
+  const ctx = '### Priority 1: ATHLETE DATA\nzones\n### Priority 2: PREVIOUS COACH\nVT1\n### Priority 3: METHODOLOGY\nbooks…\n## YOUR TASK';
+  const out = athleteAndCoachLayers(ctx);
+  expect(out).toContain('zones');
+  expect(out).toContain('VT1');
+  expect(out).not.toContain('books');
+  expect(athleteAndCoachLayers('no layers here')).toBe('no layers here');
+});

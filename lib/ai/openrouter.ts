@@ -107,6 +107,11 @@ export interface OpenRouterResponse {
   completionTokens?: number | null;
   /** Of `completionTokens`, how many were hidden reasoning. */
   reasoningTokensUsed?: number | null;
+  promptTokens?: number | null;
+  /** Of `promptTokens`, how many were read from the prompt cache (billed at ~10%). */
+  cachedTokens?: number | null;
+  /** What OpenRouter actually charged for the call, USD. */
+  costUsd?: number | null;
 }
 
 /**
@@ -170,6 +175,9 @@ export async function callOpenRouter(
         model,
         ...tokenFields(model, maxTokens, reasoningTokens),
         messages: payloadMessages,
+        // OpenRouter usage accounting: returns the actual charge and cache
+        // reads, so cost is measured rather than estimated from token counts.
+        usage: { include: true },
       }),
     });
 
@@ -194,6 +202,9 @@ export async function callOpenRouter(
       finishReason: data.choices[0].finish_reason ?? null,
       completionTokens: data.usage?.completion_tokens ?? null,
       reasoningTokensUsed: data.usage?.completion_tokens_details?.reasoning_tokens ?? null,
+      promptTokens: data.usage?.prompt_tokens ?? null,
+      cachedTokens: data.usage?.prompt_tokens_details?.cached_tokens ?? null,
+      costUsd: typeof data.usage?.cost === 'number' ? data.usage.cost : null,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

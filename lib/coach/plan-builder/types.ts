@@ -182,7 +182,8 @@ export interface PlanBuildRow {
   review_rounds: number;
   plan_id: string | null;
   error: string | null;
-  timings: Record<string, { ms: number; tokens?: number; thinking?: number }>;
+  /** Per stage: wall clock, output tokens, and what OpenRouter actually charged. */
+  timings: Record<string, { ms: number; tokens?: number; thinking?: number; cost?: number; prompt?: number; cached?: number }>;
   dry_run: boolean;
   running_until: string | null;
   attempts: Record<string, number>;

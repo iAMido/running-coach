@@ -26,7 +26,7 @@ import { logCoachCall } from '@/lib/supervisor';
 import type { PlanWeek } from '@/lib/db/types';
 import { prepare } from './prepare';
 import { buildOutlinePrompt, buildReviewPrompt, buildStrengthPrompt, buildWriterPrompt, type WriteChunk } from './prompts';
-import { assemblePlan, chunksContaining, chunksFor, mergeStrength, mergeWeeks, normalizeOutline, parseWriterWeeks } from './assemble';
+import { assemblePlan, chunksFor, mergeStrength, mergeWeeks, narrowChunks, normalizeOutline, parseWriterWeeks } from './assemble';
 import { checkCoherence, checkPlan, type CheckContext } from './checks';
 import { STAGE_LABELS } from './view';
 import type {
@@ -93,23 +93,45 @@ async function commit(row: PlanBuildRow, patch: Partial<PlanBuildRow>): Promise<
 // Model calls
 // ---------------------------------------------------------------------------
 
+/** Accumulates what a stage's model calls actually cost (OpenRouter usage accounting). */
+class Meter {
+  cost = 0;
+  prompt = 0;
+  cached = 0;
+  add(r: OpenRouterResponse) {
+    this.cost += r.costUsd ?? 0;
+    this.prompt += r.promptTokens ?? 0;
+    this.cached += r.cachedTokens ?? 0;
+  }
+  get summary() {
+    return { cost: Math.round(this.cost * 1000) / 1000, prompt: this.prompt, cached: this.cached };
+  }
+}
+
 async function ask(
   userId: string, task: ModelTaskKey, system: string, user: string, maxTokens: number,
+  meter: Meter, sharedPrefix?: string,
 ): Promise<OpenRouterResponse & { ms: number }> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OpenRouter API key not configured');
   const t = Date.now();
   const r = await callOpenRouter(
     [{ role: 'system', content: system }, { role: 'user', content: user }],
-    { apiKey, model: MODEL_FOR[task], maxTokens, reasoningTokens: REASONING_FOR[task], cacheableSystemPrefix: COACH_STATIC_BLOCK },
+    {
+      apiKey, model: MODEL_FOR[task], maxTokens, reasoningTokens: REASONING_FOR[task],
+      // The cached prefix is the byte-stable part: the coach persona, plus —
+      // for writers — everything every writer in this build shares.
+      cacheableSystemPrefix: sharedPrefix ? `${COACH_STATIC_BLOCK}\n\n${sharedPrefix}` : COACH_STATIC_BLOCK,
+    },
   );
+  meter.add(r);
   const ms = Date.now() - t;
   // Best-effort telemetry: one coach_calls row per model call, same table the
   // supervisor's weekly health audit already reads.
   logCoachCall({
     user_id: userId, route: ROUTE, query_type: 'plan_generation', model: MODEL_FOR[task],
-    context_tokens: Math.round(system.length / 4), context_budget: null, ceiling_hit: false,
-    cache_used: true, preflight_ok: true, preflight_warnings: [`builder:${task}`], preflight_augmented: false,
+    context_tokens: r.promptTokens ?? Math.round((system.length + (sharedPrefix?.length ?? 0)) / 4), context_budget: null, ceiling_hit: false,
+    cache_used: (r.cachedTokens ?? 0) > 0, preflight_ok: true, preflight_warnings: [`builder:${task}`], preflight_augmented: false,
     latency_ms: ms, status: r.error ? 'error' : r.finishReason === 'length' ? 'partial' : 'ok',
     error_message: r.error ?? null, plan_modified: false,
   }).catch(() => {});
@@ -145,18 +167,19 @@ async function zonesFor(userId: string) {
 async function writeChunks(
   row: PlanBuildRow,
   chunks: WriteChunk[],
-  fixes?: Map<WriteChunk, string[]>,
+  fixes: Map<WriteChunk, string[]> | undefined,
+  meter: Meter,
 ): Promise<{ weeks: PlanWeek[]; failures: string[]; ms: number; tokens: number }> {
   const t = Date.now();
   let tokens = 0;
   const results = await Promise.all(chunks.map(async (chunk) => {
     const problems = fixes?.get(chunk);
     const current = problems ? (row.weeks ?? []).filter((w) => chunk.weeks.includes(w.week_number)) : undefined;
-    const { system, user } = buildWriterPrompt(row.request, row.prepared!, row.outline!, chunk,
+    const { shared, system, user } = buildWriterPrompt(row.request, row.prepared!, row.outline!, chunk,
       problems ? { problems, current: current! } : undefined);
     let lastError = '';
     for (let attempt = 0; attempt < 2; attempt++) {
-      const r = await ask(row.user_id, 'plan_writer', system, user, planOutputTokenBudget(chunk.weeks.length));
+      const r = await ask(row.user_id, 'plan_writer', system, user, planOutputTokenBudget(chunk.weeks.length), meter, shared);
       tokens += r.completionTokens ?? 0;
       if (r.error) { lastError = r.error; continue; }
       const parsed = parseWriterWeeks(r.content, chunk, r.finishReason);
@@ -173,15 +196,31 @@ async function writeChunks(
   };
 }
 
+/**
+ * Put the writers' shared context in the prompt cache before they start.
+ *
+ * The first-draft writers all start at once, so without this none of them
+ * can read the cache — each pays full price (x1.25 for the cache write) for
+ * the same ~25k-token context. Measured 2026-09-27: $1.05 of a $3.34 build.
+ * One 1-token call writes the cache; the writers then read it at ~10%.
+ * Costs a few seconds. Best-effort — a failed prime only loses the saving.
+ */
+async function primeWriterCache(row: PlanBuildRow, chunk: WriteChunk, meter: Meter): Promise<void> {
+  const { shared } = buildWriterPrompt(row.request, row.prepared!, row.outline!, chunk);
+  try {
+    await ask(row.user_id, 'plan_writer', 'Cache warm-up. Reply with the single word OK.', 'OK?', 1, meter, shared);
+  } catch { /* the writers still run, just without the cache */ }
+}
+
 /** Exercises for the outline's named strength sessions. One retry. */
-async function writeStrength(row: PlanBuildRow): Promise<{ library: PlanOutline['strength_sessions']; missing: string[]; tokens: number }> {
+async function writeStrength(row: PlanBuildRow, meter: Meter): Promise<{ library: PlanOutline['strength_sessions']; missing: string[]; tokens: number }> {
   let library = row.outline!.strength_sessions;
   if (Object.keys(library).length === 0) return { library, missing: [], tokens: 0 };
   const { system, user } = buildStrengthPrompt(row.request, row.prepared!, row.outline!);
   let tokens = 0;
   let missing = Object.keys(library);
   for (let attempt = 0; attempt < 2 && missing.length; attempt++) {
-    const r = await ask(row.user_id, 'plan_writer', system, user, 8_000);
+    const r = await ask(row.user_id, 'plan_writer', system, user, 8_000, meter);
     tokens += r.completionTokens ?? 0;
     if (r.error || r.finishReason === 'length') continue;
     try {
@@ -195,7 +234,7 @@ async function writeStrength(row: PlanBuildRow): Promise<{ library: PlanOutline[
 
 /** Rule errors → rewrite the chunks that hold them → recheck. Up to MAX_REPAIR_ROUNDS. */
 async function checkAndRepair(
-  row: PlanBuildRow, weeks: PlanWeek[], ctx: CheckContext, prior: CheckReport | null,
+  row: PlanBuildRow, weeks: PlanWeek[], ctx: CheckContext, prior: CheckReport | null, meter: Meter,
 ): Promise<{ weeks: PlanWeek[]; report: CheckReport; tokens: number }> {
   const repairs = [...(prior?.repairs ?? [])];
   let tokens = 0;
@@ -205,12 +244,12 @@ async function checkAndRepair(
     const errors = violations.filter((v) => v.severity === 'error');
     if (errors.length === 0) break;
     const errorWeeks = [...new Set(errors.map((e) => e.week).filter((w): w is number => w !== null))];
-    const targets = chunksContaining(chunks, errorWeeks);
+    const targets = narrowChunks(chunks, errorWeeks);
     if (targets.length === 0) break;
     const fixes = new Map(targets.map((c) => [c, errors
       .filter((e) => e.week !== null && c.weeks.includes(e.week))
       .map((e) => `Week ${e.week}${e.day ? ` ${e.day}` : ''}: ${e.message}`)]));
-    const res = await writeChunks({ ...row, weeks }, targets, fixes);
+    const res = await writeChunks({ ...row, weeks }, targets, fixes, meter);
     tokens += res.tokens;
     if (res.weeks.length === 0) break;
     weeks = mergeWeeks(weeks, res.weeks);
@@ -237,7 +276,8 @@ async function runStage(row: PlanBuildRow): Promise<StageResult> {
   const t = Date.now();
   const timings = { ...row.timings };
   const attempts = { ...(row.attempts ?? {}) };
-  const note = (k: string, extra: { tokens?: number; thinking?: number } = {}) => { timings[k] = { ms: Date.now() - t, ...extra }; };
+  const meter = new Meter();
+  const note = (k: string, extra: { tokens?: number; thinking?: number } = {}) => { timings[k] = { ms: Date.now() - t, ...extra, ...meter.summary }; };
 
   switch (row.stage) {
     case 'created': {
@@ -248,7 +288,7 @@ async function runStage(row: PlanBuildRow): Promise<StageResult> {
 
     case 'prepared': {
       const { system, user } = buildOutlinePrompt(row.request, row.prepared!);
-      const r = await ask(row.user_id, 'plan_outline', system, user, 8_000);
+      const r = await ask(row.user_id, 'plan_outline', system, user, 8_000, meter);
       note('outline', { tokens: r.completionTokens ?? undefined, thinking: r.reasoningTokensUsed ?? undefined });
       let problem = r.error ?? (r.finishReason === 'length' ? 'the outline was cut off at the length limit' : null);
       if (!problem) {
@@ -275,7 +315,9 @@ async function runStage(row: PlanBuildRow): Promise<StageResult> {
     case 'outlined': {
       // Phases and the strength programme's exercises are independent given
       // the outline — write them all at once.
-      const [res, strength] = await Promise.all([writeChunks(row, chunksFor(row.outline!)), writeStrength(row)]);
+      const chunks = chunksFor(row.outline!);
+      await primeWriterCache(row, chunks[0], meter);
+      const [res, strength] = await Promise.all([writeChunks(row, chunks, undefined, meter), writeStrength(row, meter)]);
       note('write', { tokens: res.tokens + strength.tokens });
       if (strength.missing.length) res.failures.push(`strength sessions without exercises: ${strength.missing.join(', ')}`);
       if (res.failures.length) {
@@ -291,7 +333,7 @@ async function runStage(row: PlanBuildRow): Promise<StageResult> {
 
     case 'written': {
       const ctx = checkContext(row, await zonesFor(row.user_id));
-      const { weeks, report, tokens } = await checkAndRepair(row, row.weeks!, ctx, null);
+      const { weeks, report, tokens } = await checkAndRepair(row, row.weeks!, ctx, null, meter);
       note('check', { tokens });
       return { stage: 'checked', weeks, checks: report, timings };
     }
@@ -301,7 +343,7 @@ async function runStage(row: PlanBuildRow): Promise<StageResult> {
       const measured = checkCoherence(row.weeks!, row.outline!, { hasElevation: row.prepared!.race.hasElevation });
       const remaining = (row.checks?.violations ?? []).filter((v) => v.severity === 'error');
       const { system, user } = buildReviewPrompt(row.request, row.prepared!, row.outline!, row.weeks!, measured, remaining);
-      const r = await ask(row.user_id, 'plan_review', system, user, 4_000);
+      const r = await ask(row.user_id, 'plan_review', system, user, 4_000, meter);
       note(`review_${round}`, { tokens: r.completionTokens ?? undefined, thinking: r.reasoningTokensUsed ?? undefined });
 
       let coach: CoherenceIssue[] = [];
@@ -334,14 +376,14 @@ async function runStage(row: PlanBuildRow): Promise<StageResult> {
       const last = row.reviews[row.reviews.length - 1];
       const mustFix = last.issues.filter((i) => i.severity === 'must_fix' && i.weeks.length > 0);
       const chunks = chunksFor(row.outline!);
-      const targets = chunksContaining(chunks, mustFix.flatMap((i) => i.weeks));
+      const targets = narrowChunks(chunks, mustFix.flatMap((i) => i.weeks));
       const fixes = new Map(targets.map((c) => [c, mustFix
         .filter((i) => i.weeks.some((w) => c.weeks.includes(w)))
         .map((i) => `${i.problem} FIX: ${i.fix}`)]));
-      const res = await writeChunks(row, targets, fixes);
+      const res = await writeChunks(row, targets, fixes, meter);
       let weeks = res.weeks.length ? mergeWeeks(row.weeks!, res.weeks) : row.weeks!;
       const ctx = checkContext(row, await zonesFor(row.user_id));
-      const checked = await checkAndRepair({ ...row, weeks }, weeks, ctx, row.checks);
+      const checked = await checkAndRepair({ ...row, weeks }, weeks, ctx, row.checks, meter);
       weeks = checked.weeks;
       note(`fix_${row.review_rounds}`, { tokens: res.tokens + checked.tokens });
       const next: BuildStage = row.review_rounds < MAX_REVIEW_ROUNDS ? 'checked' : 'reviewed';

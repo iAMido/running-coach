@@ -41,7 +41,7 @@ test('Grok 4.7 is steered by effort (it ignores token budgets), still with headr
 
 test('a task budget overrides the default, never below the 1,024 minimum', () => {
   expect(tokenFields('anthropic/claude-opus-5.5', 2000, 4000).max_tokens).toBe(6000);
-  expect(tokenFields('anthropic/claude-opus-5.5', 2000, 100).reasoning?.max_tokens).toBe(1024);
+  expect(tokenFields('anthropic/claude-opus-5.5', 2000, 100).reasoning).toEqual({ max_tokens: 1024, exclude: true });
 });
 
 test('every task routed to a reasoning model is covered', () => {

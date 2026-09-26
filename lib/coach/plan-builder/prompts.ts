@@ -143,13 +143,36 @@ function targetLine(w: OutlineWeek, hasElevation: boolean): string {
     `, long run ${w.long_run_km} km, ${w.quality_sessions} quality, strength [${w.strength.join(', ') || 'none'}] — ${w.focus}`;
 }
 
+/**
+ * The athlete and previous-coach layers of the 3-layer context, without the
+ * general book layer.
+ *
+ * Measured 2026-09-27: the general book excerpts were 87% of the 3-layer
+ * context (~102k of 117k characters) and every writer call re-read them —
+ * 18 calls, ~$3.40 of a ~$6 build. The books have already shaped the outline
+ * the writers follow, and the targeted research (one excerpt block per need)
+ * still reaches every writer, so the general block was paid for twice. The
+ * athlete data — profile, HR zones, recovery, efficiency, last 14 days of runs
+ * — and the previous coach's workouts are kept whole.
+ */
+export function athleteAndCoachLayers(coachContext: string): string {
+  const cut = coachContext.indexOf('### Priority 3');
+  return cut > 0 ? coachContext.slice(0, cut).trimEnd() : coachContext;
+}
+
+/**
+ * Split into a SHARED part — byte-identical for every writer call in a build,
+ * sent as the cached prefix — and the chunk's own task. Repair and fix calls
+ * then read the shared part from the prompt cache at ~10% of the price.
+ * Nothing chunk-specific may enter `shared`, or the cache stops hitting.
+ */
 export function buildWriterPrompt(
   req: BuildRequest,
   prep: PreparedStage,
   outline: PlanOutline,
   chunk: WriteChunk,
   fix?: { problems: string[]; current: PlanWeek[] },
-): { system: string; user: string } {
+): { shared: string; system: string; user: string } {
   const hasElev = prep.race.hasElevation;
   const mine = outline.weeks.filter((w) => chunk.weeks.includes(w.week));
   const before = outline.weeks.find((w) => w.week === chunk.weeks[0] - 1);
@@ -157,7 +180,7 @@ export function buildWriterPrompt(
   const phase = outline.phases.find((p) => p.name === chunk.phase);
   const libraryIds = Object.keys(outline.strength_sessions);
 
-  const system = `${prep.research.coachContext}
+  const shared = `${athleteAndCoachLayers(prep.research.coachContext)}
 
 ${prep.race.text}
 
@@ -165,27 +188,24 @@ ${formatResearch(prep.research)}
 
 ${params(req, prep)}
 
-## THE HEAD COACH'S OUTLINE — YOUR CONTRACT
+## THE HEAD COACH'S OUTLINE — THE CONTRACT EVERY PHASE WRITER FOLLOWS
 Plan: ${outline.plan_name}
 Rationale: ${outline.rationale}
 Day roles: ${Object.entries(outline.day_roles).map(([d, r]) => `${d} = ${r}`).join('; ')}
 Decisions: ${outline.decisions.join(' | ') || 'none'}
 Phases:
-${outline.phases.map((p) => `- ${p.name} (weeks ${p.start_week}-${p.end_week}): ${p.purpose}. Key sessions: ${p.key_sessions.join('; ')}. Strength: ${p.strength_focus}`).join('\n')}
+${outline.phases.map((p) => `- ${p.name} (weeks ${p.start_week}-${p.end_week}): ${p.purpose}. Key sessions: ${p.key_sessions.join('; ')}. Strength: ${p.strength_focus}. Exit: ${p.exit_criteria.join('; ')}`).join('\n')}
+Weekly targets:
+${outline.weeks.map((w) => targetLine(w, hasElev)).join('\n')}
 Strength library (reference by id — do NOT define new sessions): ${libraryIds.join(', ') || 'none'}
 
-## YOUR TASK: WRITE WEEKS ${chunk.weeks[0]}-${chunk.weeks[chunk.weeks.length - 1]} (${chunk.phase})
-${phase ? `Phase purpose: ${phase.purpose}\nExit criteria this phase works toward: ${phase.exit_criteria.join('; ')}` : ''}
-
-Targets you must hit (week totals within ±10%, long run within ±15%):
-${mine.map((w) => targetLine(w, hasElev)).join('\n')}
-
-Continuity — other coaches write the neighbouring weeks from the same outline:
-${before ? targetLine(before, hasElev).replace('- ', '- BEFORE yours: ') : '- Yours is the first block: start from the athlete\'s measured current load.'}
-${after ? targetLine(after, hasElev).replace('- ', '- AFTER yours: ') : '- Yours is the last block.'}
+## HOW TO WRITE WEEKS
+You are one of several coaches writing this plan in parallel, each a few
+weeks of it, from the outline above. You will be told which weeks are yours.
 
 Rules:
 - A workout's "distance" values must add up to the week's "total_km" (±10%) — add them up before you write the total.
+- Hit each week's targets: totals within ±10%, long run within ±15%.
 - Put the long run on the long-run day from the day roles. Keep quality sessions on the quality day. Never two hard days back to back.
 - Attach each week's strength sessions to training days with "strength": "<id>" — exactly the ids listed for that week. Never on the long-run day or the day before it.
 ${hasElev ? `- Every week has "total_elevation_gain_m" and every run has "elevation_gain_m"; they must add up to the week total (±15%).
@@ -203,8 +223,8 @@ Return ONLY this JSON object — your weeks and nothing else:
 {
   "weeks": [
     {
-      "week_number": ${chunk.weeks[0]},
-      "phase": "${chunk.phase}",
+      "week_number": 5,
+      "phase": "<phase name from the outline>",
       "focus": "…",
       "total_km": 30,${hasElev ? '\n      "total_elevation_gain_m": 250,' : ''}
       "workouts": {
@@ -221,12 +241,22 @@ Return ONLY this JSON object — your weeks and nothing else:
   ]
 }`;
 
+  const system = `## YOUR WEEKS: ${chunk.weeks.join(', ')} (${chunk.phase})
+${phase ? `Phase purpose: ${phase.purpose}\nExit criteria this phase works toward: ${phase.exit_criteria.join('; ')}` : ''}
+
+Your targets:
+${mine.map((w) => targetLine(w, hasElev)).join('\n')}
+
+Continuity — other coaches write the neighbouring weeks from the same outline:
+${before ? targetLine(before, hasElev).replace('- ', '- BEFORE yours: ') : "- Yours is the first block: start from the athlete's measured current load."}
+${after ? targetLine(after, hasElev).replace('- ', '- AFTER yours: ') : '- Yours is the last block.'}`;
+
   const user = fix
     ? `Your previous version of these weeks broke these rules:\n${fix.problems.map((p) => `- ${p}`).join('\n')}\n\n` +
       `Previous version:\n${JSON.stringify({ weeks: fix.current })}\n\n` +
       `Rewrite weeks ${chunk.weeks.join(', ')} fixing EVERY problem listed, changing as little else as possible. Return only the JSON.`
     : `Write weeks ${chunk.weeks.join(', ')}. Return only the JSON.`;
-  return { system, user };
+  return { shared, system, user };
 }
 
 // ---------------------------------------------------------------------------

@@ -137,6 +137,26 @@ export function chunksFor(outline: PlanOutline): WriteChunk[] {
   return chunks;
 }
 
+/**
+ * Only the given weeks, grouped into contiguous runs inside their chunk. A
+ * repair rewrites the weeks that broke a rule — not the 3-4 week block around
+ * them, which the first staged builds did, rewriting all 12 weeks to fix a
+ * handful and paying for it every round.
+ */
+export function narrowChunks(chunks: WriteChunk[], weeks: number[]): WriteChunk[] {
+  const out: WriteChunk[] = [];
+  for (const c of chunks) {
+    const hit = c.weeks.filter((w) => weeks.includes(w));
+    let run: number[] = [];
+    for (const w of hit) {
+      if (run.length && w !== run[run.length - 1] + 1) { out.push({ phase: c.phase, weeks: run }); run = []; }
+      run.push(w);
+    }
+    if (run.length) out.push({ phase: c.phase, weeks: run });
+  }
+  return out;
+}
+
 /** The chunks that contain any of these weeks. */
 export function chunksContaining(chunks: WriteChunk[], weeks: number[]): WriteChunk[] {
   return chunks.filter((c) => c.weeks.some((w) => weeks.includes(w)));

@@ -62,6 +62,14 @@ dotenv.config({ path: flag('--env') ?? '.env.local' });
     for (const i of r.issues) console.log(`  ${i.severity === 'must_fix' ? '!' : '·'} [${i.source}] W${i.weeks.join(',')} ${i.problem}\n      → ${i.fix}`);
   }
   console.log('\nTIMINGS:', JSON.stringify(row.timings));
+  const stages = Object.entries(row.timings);
+  const cost = stages.reduce((a, [, t]) => a + (t.cost ?? 0), 0);
+  const prompt = stages.reduce((a, [, t]) => a + (t.prompt ?? 0), 0);
+  const cached = stages.reduce((a, [, t]) => a + (t.cached ?? 0), 0);
+  console.log(`COST (billed by OpenRouter): $${cost.toFixed(2)} · prompt tokens ${prompt} (${cached} from cache, ${prompt ? Math.round((100 * cached) / prompt) : 0}%)`);
+  for (const [k, t] of stages) {
+    if (t.cost) console.log(`  ${k.padEnd(10)} $${t.cost.toFixed(3)} · ${t.prompt} in (${t.cached} cached) · ${t.tokens ?? 0} out`);
+  }
 
   const out = flag('--out') ?? 'test-plan-builder.json';
   fs.writeFileSync(out, JSON.stringify({ weeks: row.weeks, strength_sessions: row.outline?.strength_sessions, outline: row.outline }, null, 2));

@@ -1,6 +1,6 @@
 /** Run with `bun test`. */
 import { expect, test } from 'bun:test';
-import { assemblePlan, chunksContaining, chunksFor, mergeStrength, mergeWeeks, normalizeOutline, parseWriterWeeks } from './assemble';
+import { assemblePlan, chunksContaining, chunksFor, mergeStrength, mergeWeeks, narrowChunks, normalizeOutline, parseWriterWeeks } from './assemble';
 import type { BuildReport, PlanOutline } from './types';
 
 const rawOutline = (weeks: number, over: Record<string, unknown> = {}) => ({
@@ -77,4 +77,11 @@ test('strength: the outline names sessions, the writer fills exercises, and cann
   expect(library.a.focus).toBe('f');
   expect('rogue' in library).toBe(false);
   expect(missing).toEqual(['b']);
+});
+
+test('repairs target only the broken weeks, grouped into contiguous runs', () => {
+  const chunks = [{ phase: 'Base', weeks: [1, 2, 3, 4] }, { phase: 'Build', weeks: [5, 6, 7] }];
+  expect(narrowChunks(chunks, [2, 4, 5, 6])).toEqual([
+    { phase: 'Base', weeks: [2] }, { phase: 'Base', weeks: [4] }, { phase: 'Build', weeks: [5, 6] },
+  ]);
 });
