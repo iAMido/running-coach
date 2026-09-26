@@ -17,6 +17,8 @@ export interface MacroPlanParams {
   runsPerWeek?: number;
   raceDemand?: RaceDemand;
   state?: TrainingState | null;
+  /** Expert reference plans — their phase shapes are exactly what a season is. */
+  exemplarsText?: string;
 }
 
 /**
@@ -37,7 +39,7 @@ export function suggestedPhaseCount(horizonWeeks: number): number {
 }
 
 export function buildMacroPlanPrompt(params: MacroPlanParams): string {
-  const { goalName, raceDate, horizonWeeks, trainingDays, runsPerWeek, raceDemand, state } = params;
+  const { goalName, raceDate, horizonWeeks, trainingDays, runsPerWeek, raceDemand, state, exemplarsText } = params;
   const phases = suggestedPhaseCount(horizonWeeks);
   const months = (horizonWeeks / 4.345).toFixed(1);
 
@@ -57,6 +59,8 @@ ignore the plan.
 ${trainingDays ? `- Training days: ${trainingDays}` : ''}${runsPerWeek ? `\n- Runs per week: ${runsPerWeek}` : ''}
 ${buildRaceDemandBlock(raceDemand)}
 ${state ? formatTrainingState(state) : ''}
+
+${exemplarsText ?? ''}
 
 ### WHAT EACH PHASE MUST CARRY
 

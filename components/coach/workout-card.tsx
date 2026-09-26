@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Activity, Flame, ChevronDown, ChevronUp, Timer, Target, Zap, Mountain, Home } from 'lucide-react';
+import { Activity, Flame, ChevronDown, ChevronUp, Timer, Target, Zap, Mountain, Home, Dumbbell } from 'lucide-react';
 import type { Workout } from '@/lib/db/types';
 
 // Helper function to get workout tag class based on workout type
@@ -28,7 +28,7 @@ export function WorkoutCard({ day, workout, isToday = false, variant = 'card' }:
   const [expanded, setExpanded] = useState(false);
 
   // Check if there's detailed content to show
-  const hasDetails = workout.description || workout.notes || workout.indoor_alternative;
+  const hasDetails = workout.description || workout.notes || workout.indoor_alternative || workout.strength;
 
   if (variant === 'row') {
     // Table row variant for Dashboard
@@ -184,6 +184,15 @@ export function WorkoutCard({ day, workout, isToday = false, variant = 'card' }:
                 +{workout.elevation_gain_m}m
               </span>
             )}
+            {/* Visible without expanding: a strength session is a second
+                commitment on the day, and finding out it exists only after
+                tapping is how it gets skipped. */}
+            {workout.strength && (
+              <span className="flex items-center gap-1">
+                <Dumbbell className="w-3 h-3" />
+                + strength{workout.strength.duration_minutes ? ` ${workout.strength.duration_minutes}min` : ''}
+              </span>
+            )}
           </div>
 
           {/* Expanded details */}
@@ -218,6 +227,37 @@ export function WorkoutCard({ day, workout, isToday = false, variant = 'card' }:
                   {workout.indoor_alternative.description && (
                     <p className="text-sm mt-1 text-muted-foreground">{workout.indoor_alternative.description}</p>
                   )}
+                </div>
+              )}
+              {/* Strength attached to this day. Rendered as a table-like list
+                  because a strength session is executed by reading it set by
+                  set in the gym — prose would have to be re-parsed there. */}
+              {workout.strength && workout.strength.exercises?.length > 0 && (
+                <div className="bg-muted/50 rounded-lg p-3 border border-border/50">
+                  <p className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                    <Dumbbell className="w-3 h-3" />
+                    Strength: {workout.strength.name}
+                    {workout.strength.duration_minutes ? ` · ${workout.strength.duration_minutes} min` : ''}
+                  </p>
+                  {workout.strength.focus && (
+                    <p className="text-xs italic text-muted-foreground mb-2">{workout.strength.focus}</p>
+                  )}
+                  <ul className="space-y-1">
+                    {workout.strength.exercises.map((e, i) => (
+                      <li key={i} className="text-sm flex flex-wrap items-baseline gap-x-2">
+                        <span className="font-medium">
+                          {e.exercise}
+                          {e.each_side ? <span className="text-xs text-muted-foreground font-normal"> (each side)</span> : null}
+                        </span>
+                        <span className="text-muted-foreground tabular-nums">
+                          {e.sets}×{e.seconds ? `${e.seconds}s` : e.reps ?? '?'}
+                        </span>
+                        {e.load && <span className="text-xs text-muted-foreground">{e.load}</span>}
+                        {e.rest_seconds ? <span className="text-xs text-muted-foreground">rest {e.rest_seconds}s</span> : null}
+                        {e.note && <span className="text-xs text-muted-foreground italic w-full">{e.note}</span>}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
             </div>

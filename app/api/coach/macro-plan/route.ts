@@ -13,6 +13,7 @@ import { COACH_STATIC_BLOCK } from '@/lib/ai/coach-prompts';
 import { buildMacroPlanPrompt } from '@/lib/ai/macro-plan-prompt';
 import { getActiveMacroPlan, saveMacroPlan, type MacroPhase } from '@/lib/coach/macro-plan';
 import { buildTrainingState } from '@/lib/coach/training-state';
+import { exemplarsForRequest } from '@/lib/coach/plan-exemplars-db';
 import { getAthleteProfile } from '@/lib/db/profile';
 import { getClimbBaseline } from '@/lib/db/runs';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
@@ -55,6 +56,16 @@ export async function POST(request: NextRequest) {
     raceElevationGainM ? getClimbBaseline(userId) : Promise.resolve(undefined),
   ]);
 
+  // The reference plans' phase lengths, loading rhythm and stated reasoning are
+  // exactly what a season needs to learn from. Best-effort.
+  const exemplars = await exemplarsForRequest({
+    planType: 'season',
+    raceDistanceKm,
+    raceElevationGainM,
+    goalText: goalName,
+    age: profile?.age ?? null,
+  }).catch(() => ({ structureNames: [], strengthName: null, text: '' }));
+
   const prompt = buildMacroPlanPrompt({
     goalName,
     raceDate,
@@ -63,6 +74,7 @@ export async function POST(request: NextRequest) {
     trainingDays: profile?.training_days || undefined,
     raceDemand: { distanceKm: raceDistanceKm, elevationGainM: raceElevationGainM, terrainAccess, climb },
     state,
+    exemplarsText: exemplars.text,
   });
 
   const started = Date.now();

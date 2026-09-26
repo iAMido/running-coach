@@ -20,6 +20,12 @@ async function main() {
   const { generateEmbedding } = await import('../lib/rag/embeddings');
   const q = 'Create a 12-week trail plan for a 21K with 1300m of climbing';
   const { embedding } = await generateEmbedding(q);
+  // Counted live. This used to divide by a hardcoded 1452, which went stale
+  // the moment two books were added (1,954 chunks) and made every percentage
+  // below quietly wrong.
+  const { count: corpusSize } = await supabase.from('book_instructions').select('*', { count: 'exact', head: true });
+  const total = corpusSize ?? 0;
+  console.log(`corpus: ${total} chunks`);
   // How selective is each threshold across the WHOLE corpus, not just top-10?
   for (const t of [0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]) {
     const { data, error } = await supabase.rpc('match_instructions', {
@@ -27,7 +33,7 @@ async function main() {
     });
     if (error) { console.log(t, 'ERROR', error.message); continue; }
     const n = (data as unknown[]).length;
-    console.log(`threshold ${t.toFixed(2)} -> ${n} of 1452 chunks (${(n/1452*100).toFixed(1)}%)`);
+    console.log(`threshold ${t.toFixed(2)} -> ${n} of ${total} chunks (${(n / Math.max(1, total) * 100).toFixed(1)}%)`);
   }
 }
 main().catch(e => { console.error(e); process.exit(1); });

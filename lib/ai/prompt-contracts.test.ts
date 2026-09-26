@@ -26,6 +26,7 @@ import {
   ADJUSTMENT_WINDOW_WEEKS,
   COACH_STATIC_BLOCK,
   buildCoachSystemPrompt,
+  buildEnhancedPlanGenerationPrompt,
   buildPlanAdjustmentPrompt,
   buildRaceDemandBlock,
 } from '@/lib/ai/coach-prompts';
@@ -229,4 +230,59 @@ test('gear decisions name their owner instead of being conditional', () => {
   expect(block).toContain('SEASON-level decision and must never be left unstated');
   expect(block).toContain('exit criterion');
   expect(block).not.toContain('If poles are appropriate');
+});
+
+// ------------------------------------------------------ plan generation
+
+const CTX = {
+  queryType: 'plan_generation',
+  userContext: { text: '', tokenCount: 0 },
+  coachContext: { text: '', tokenCount: 0, workoutsIncluded: [], phasesIncluded: [] },
+  bookContext: { text: '', tokenCount: 0, sources: [] },
+} as unknown as Parameters<typeof buildEnhancedPlanGenerationPrompt>[0];
+
+function planPrompt(exemplarsText?: string) {
+  return buildEnhancedPlanGenerationPrompt(CTX, {
+    planType: 'Trail / Mountain',
+    durationWeeks: 12,
+    runsPerWeek: 4,
+    trainingDays: 'Sunday, Monday, Wednesday, Friday',
+    exemplarsText,
+  });
+}
+
+test('strength is programmed INSIDE the plan, with evidence-based placement', () => {
+  const p = planPrompt();
+  expect(p).toContain('STRENGTH IS PART OF THE PLAN');
+  // The one rule every reference plan agrees on.
+  expect(p).toContain('Never on the long-run day');
+  // Found by generating a real plan: an earlier rule forbade strength the day
+  // before a quality session. The model placed it there anyway — and the
+  // expert plans supplied as evidence do exactly that (Carmel-Kinneret: 25 of
+  // 54 strength sessions). The rule was stricter than every source, so it went.
+  expect(p).not.toContain('within 24 hours BEFORE a quality');
+  // A made-up load is a guess dressed as a prescription.
+  expect(p).toContain('NEVER invent a kilogram figure');
+});
+
+test('strength sessions are defined once and referenced, so the plan fits one response', () => {
+  // Written out inline, strength was 27% of the output and a 12-week plan hit
+  // the token cap at week 10. The library is what keeps it complete.
+  const p = planPrompt();
+  expect(p).toContain('"strength_sessions"');
+  expect(p).toContain('Define each distinct strength session ONCE');
+  expect(p).toContain('"strength": "eccentric_base"');
+  // The example must model correct placement too, because models copy
+  // examples: it sits mid-week, clear of the long run — the one placement rule
+  // every reference plan agrees on.
+  expect(p).toContain('48h+ before the long run');
+});
+
+test('reference plans are framed as structure to learn, never sessions to copy', () => {
+  const p = planPrompt('## REFERENCE PLANS FROM EXPERT COACHES\n(example)');
+  expect(p).toContain('REFERENCE PLANS FROM EXPERT COACHES');
+  expect(p).toContain('Reference Plans');
+  expect(p).toContain('never copy sessions or days');
+  // Absent library → no dangling heading, generation behaves as before.
+  expect(planPrompt(undefined)).not.toContain('REFERENCE PLANS FROM EXPERT COACHES');
 });

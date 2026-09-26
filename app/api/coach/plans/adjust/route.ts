@@ -237,6 +237,12 @@ function carryForwardElevation(
       if (workout.indoor_alternative == null && before.indoor_alternative != null) {
         workout.indoor_alternative = before.indoor_alternative;
       }
+      // Strength too. Only when the adjusted day is the SAME session — a day
+      // whose type changed (e.g. an easy run swapped for a long run) must not
+      // inherit strength, since strength never belongs on a long-run day.
+      if (workout.strength == null && before.strength != null && workout.type === before.type) {
+        workout.strength = before.strength;
+      }
     }
   }
   return merged;

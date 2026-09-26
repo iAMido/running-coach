@@ -20,7 +20,9 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
   process.exit(1);
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+// RunCoach tables live in the `runcoach` schema since the May 2026 consolidation;
+// without this the client defaulted to `public` and every call failed.
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { db: { schema: 'runcoach' } });
 
 interface TPRun {
   workout_name: string | null;

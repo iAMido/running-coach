@@ -31,6 +31,16 @@ export interface OpenRouterConfig {
 export interface OpenRouterResponse {
   content: string;
   error?: string;
+  /**
+   * Why generation stopped: 'stop' (finished), 'length' (hit maxTokens and was
+   * CUT OFF), etc. Previously discarded, which meant a plan truncated mid-JSON
+   * at the token cap was indistinguishable from a model that emitted malformed
+   * JSON — both surfaced only as "failed to parse". 'length' is the one to act
+   * on: the content is incomplete by construction.
+   */
+  finishReason?: string | null;
+  /** Output tokens used, when the provider reports it. */
+  completionTokens?: number | null;
 }
 
 /**
@@ -113,7 +123,11 @@ export async function callOpenRouter(
       return { content: '', error: 'No response from model' };
     }
 
-    return { content: data.choices[0].message.content };
+    return {
+      content: data.choices[0].message.content,
+      finishReason: data.choices[0].finish_reason ?? null,
+      completionTokens: data.usage?.completion_tokens ?? null,
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return { content: '', error: `Failed to call OpenRouter: ${message}` };

@@ -8,6 +8,8 @@ import { buildContext, getContextStats } from '@/lib/rag/context-builder';
 import { getAthleteProfile } from '@/lib/db/profile';
 import { getClimbBaseline } from '@/lib/db/runs';
 import { getActiveMacroPlan, phaseForWeek, formatMacroPlan } from '@/lib/coach/macro-plan';
+import { exemplarsForRequest } from '@/lib/coach/plan-exemplars-db';
+import { parsePlanOutput, planOutputTokenBudget } from '@/lib/coach/plan-output';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { planGenerationSchema, validateInput } from '@/lib/validation/schemas';
 import {
@@ -73,6 +75,17 @@ export async function POST(request: NextRequest) {
 
       const macroContext = await resolveMacroContext(userId, macroPlanId, blockNumber);
 
+      // Expert reference plans chosen for THIS race by terrain, distance and
+      // goal, plus a strength block matched to age. Best-effort: an empty or
+      // unreachable library yields '' and generation proceeds as before.
+      const exemplars = await exemplarsForRequest({
+        planType,
+        raceDistanceKm,
+        raceElevationGainM,
+        goalText: [targetRace, notes, profile?.current_goal].filter(Boolean).join(' '),
+        age: profile?.age ?? null,
+      }).catch(() => ({ structureNames: [], strengthName: null, text: '' }));
+
 
     // Pre-flight supervisor gate for plan generation. Flags zero book
     // sources or zero coach workouts surfaced — both mean the resulting
@@ -90,6 +103,7 @@ export async function POST(request: NextRequest) {
       // Race profile + his OWN measured climbing. Without the second
       // half the model has no anchor and invents a starting point.
       macroContext: macroContext.text,
+      exemplarsText: exemplars.text,
       raceDemand: {
         distanceKm: raceDistanceKm,
         elevationGainM: raceElevationGainM,
@@ -110,7 +124,9 @@ export async function POST(request: NextRequest) {
         { role: 'system', content: systemPrompt },
         { role: 'user', content: `Generate my ${durationWeeks}-week ${planType} training plan. IMPORTANT: Return ONLY the raw JSON object with no markdown code blocks, no explanation, no extra text — just the JSON.` },
       ],
-      { apiKey, model: MODEL_FOR.plan_generation, maxTokens: 16000, cacheableSystemPrefix: COACH_STATIC_BLOCK }
+      // Sized to the plan: a fixed 16,000 cut a 12-week plan with strength off
+      // at week 10. See planOutputTokenBudget.
+      { apiKey, model: MODEL_FOR.plan_generation, maxTokens: planOutputTokenBudget(durationWeeks), cacheableSystemPrefix: COACH_STATIC_BLOCK }
     );
     const callLatencyMs = Date.now() - callStart;
 
@@ -118,25 +134,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: response.error }, { status: 500 });
     }
 
-    // Try to parse JSON from response
-    let planJson;
-    try {
-      // First: try to extract JSON from a markdown code block (```json ... ```)
-      const codeBlockMatch = response.content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-      if (codeBlockMatch) {
-        planJson = JSON.parse(codeBlockMatch[1]);
-      } else {
-        // Second: try to find the outermost JSON object (from first { to last })
-        const firstBrace = response.content.indexOf('{');
-        const lastBrace = response.content.lastIndexOf('}');
-        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-          planJson = JSON.parse(response.content.slice(firstBrace, lastBrace + 1));
-        } else {
-          planJson = { raw_response: response.content };
-        }
-      }
-    } catch {
-      planJson = { raw_response: response.content };
+    // Parse and validate BEFORE anything touches the database. This used to
+    // fall back to saving { raw_response } as the ACTIVE plan after retiring
+    // the working one — a failed generation destroyed the current plan.
+    const parsed = parsePlanOutput(response.content, {
+      expectedWeeks: durationWeeks,
+      finishReason: response.finishReason,
+    });
+    if (!parsed.ok) {
+      return NextResponse.json(
+        { error: parsed.message, reason: parsed.reason, weeksReturned: parsed.weeksReturned },
+        { status: 502 },
+      );
+    }
+    const planJson = parsed.plan;
+    if (parsed.strength.dangling.length) {
+      console.warn('plan-gen: dropped undefined strength refs:', parsed.strength.dangling);
     }
 
     // Save to database - mark existing active plans as completed

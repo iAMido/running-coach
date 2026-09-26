@@ -2,7 +2,11 @@
  * Load coaching book from PDF file into Supabase
  * Extracts text, chunks it, generates embeddings, and stores in database
  *
- * Usage: npx tsx scripts/load-book-pdf.ts <path-to-pdf-file>
+ * Usage: npx tsx scripts/load-book-pdf.ts <path-to-pdf-file> [--dry-run]
+ *
+ * --dry-run extracts, chunks and reports without writing anything. Use it
+ * first: a re-run DELETES the book's existing chunks before re-embedding, so
+ * a bad extraction discovered mid-write leaves the book half-loaded.
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -12,10 +16,29 @@ import * as dotenv from 'dotenv';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const pdfParse = require('pdf-parse');
+// pdf-parse 2.x exports a PDFParse CLASS. This line used to be
+// `const pdfParse = require('pdf-parse')` and called it as a function, which
+// throws "pdfParse is not a function" on 2.x — the script had been broken since
+// the dependency moved, while the in-app upload route had already been updated.
+// Mirrors app/api/coach/resources/route.ts exactly.
+const { PDFParse } = require('pdf-parse');
+
+async function extractPdf(buf: Buffer): Promise<{ text: string; numpages: number }> {
+  const parser = new PDFParse({ data: new Uint8Array(buf) });
+  try {
+    const result = await parser.getText();
+    return { text: result.text || '', numpages: result.total ?? result.pages?.length ?? 0 };
+  } finally {
+    await parser.destroy().catch(() => {});
+  }
+}
+
+const DRY_RUN = process.argv.includes('--dry-run');
 
 // Load environment variables
-dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+// --env <path> matches the other scripts; worktrees have no .env.local.
+const envIdx = process.argv.indexOf('--env');
+dotenv.config({ path: envIdx >= 0 ? process.argv[envIdx + 1] : path.resolve(process.cwd(), '.env.local') });
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -31,7 +54,12 @@ if (!OPENROUTER_API_KEY) {
   process.exit(1);
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+// RunCoach tables live in the `runcoach` schema since the May 2026
+// consolidation onto the CalTrack project. This client had no schema option,
+// so it defaulted to `public` and failed with "Could not find the table
+// 'public.coaching_books'" — the second way this script had silently stopped
+// working, alongside the pdf-parse 2.x break. Mirrors lib/db/supabase.ts.
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { db: { schema: 'runcoach' } });
 
 interface BookMetadata {
   title: string;
@@ -45,6 +73,27 @@ interface BookMetadata {
 
 // Book metadata mapping
 const BOOK_METADATA: Record<string, BookMetadata> = {
+  // Added 2026-09-26. The first book in this corpus that covers mountain
+  // training at all: before it, "power hike" appeared 0 times in 1,452 chunks
+  // and retrieval answered trail questions with road hill-rep theory.
+  'Uphill Athlete': {
+    title: 'Training for the Uphill Athlete: A Manual for Mountain Runners and Ski Mountaineers',
+    author: 'Steve House, Scott Johnston, Kilian Jornet',
+    methodology: 'Uphill Athlete',
+    level: 'intermediate-advanced',
+    tags: ['mountain running', 'vertical', 'uphill', 'muscular endurance', 'aerobic threshold', 'strength', 'trail', 'ski mountaineering'],
+    phases: ['Transition', 'Base', 'Specific', 'Taper'],
+    focus_areas: ['aerobic base', 'aerobic threshold', 'muscular endurance', 'vertical training', 'uphill hiking', 'general and specific strength', 'periodization for mountain events'],
+  },
+  'Advanced Marathoning': {
+    title: 'Advanced Marathoning',
+    author: 'Pete Pfitzinger, Scott Douglas',
+    methodology: 'Pfitzinger',
+    level: 'advanced',
+    tags: ['marathon', 'lactate threshold', 'medium-long run', 'periodization', 'recovery', 'mesocycles'],
+    phases: ['Endurance', 'Lactate Threshold + Endurance', 'Race Preparation', 'Taper'],
+    focus_areas: ['mesocycle periodization', 'lactate threshold runs', 'medium-long runs', 'recovery', 'taper', 'nutrition'],
+  },
   'Endure': {
     title: 'Endure: Mind, Body, and the Curiously Elastic Limits of Human Performance',
     author: 'Alex Hutchinson',
@@ -97,6 +146,15 @@ const BOOK_METADATA: Record<string, BookMetadata> = {
  */
 function detectBook(filename: string): BookMetadata | null {
   const nameLower = filename.toLowerCase();
+
+  // Checked FIRST: the matchers below are loose substrings ('martin', 'coe',
+  // 'snow') that a longer author list could trip.
+  if (nameLower.includes('uphill athlete') || nameLower.includes('jornet')) {
+    return BOOK_METADATA['Uphill Athlete'];
+  }
+  if (nameLower.includes('advanced marathoning') || nameLower.includes('pfitzinger')) {
+    return BOOK_METADATA['Advanced Marathoning'];
+  }
 
   if (nameLower.includes('endure') || nameLower.includes('hutchinson')) {
     return BOOK_METADATA['Endure'];
@@ -286,7 +344,7 @@ async function main() {
 
   // Read PDF file
   const dataBuffer = fs.readFileSync(filePath);
-  const pdfData = await pdfParse(dataBuffer);
+  const pdfData = await extractPdf(dataBuffer);
 
   console.log(`PDF has ${pdfData.numpages} pages`);
   console.log(`Extracted ${pdfData.text.length} characters`);
@@ -303,6 +361,26 @@ async function main() {
 
   console.log(`Detected book: ${metadata.title}`);
   console.log(`Methodology: ${metadata.methodology}`);
+
+  if (DRY_RUN) {
+    const chunks = chunkText(pdfData.text, 2500, 200);
+    const phases: Record<string, number> = {};
+    const types: Record<string, number> = {};
+    let chapters = 0;
+    for (const c of chunks) {
+      const a = detectAppliesTo(c);
+      phases[a.phase ?? '(none)'] = (phases[a.phase ?? '(none)'] ?? 0) + 1;
+      types[a.workoutType ?? '(none)'] = (types[a.workoutType ?? '(none)'] ?? 0) + 1;
+      if (detectChapter(c).number) chapters++;
+    }
+    console.log(`
+DRY RUN — nothing written.`);
+    console.log(`chunks: ${chunks.length} · avg ${Math.round(pdfData.text.length / Math.max(1, chunks.length))} chars`);
+    console.log(`chapter markers detected: ${chapters}`);
+    console.log(`applies_to_phase: ${JSON.stringify(phases)}`);
+    console.log(`applies_to_workout_type: ${JSON.stringify(types)}`);
+    return;
+  }
 
   // Check if book already exists - delete old entries
   const { data: existingBook } = await supabase

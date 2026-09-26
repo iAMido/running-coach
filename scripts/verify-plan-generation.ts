@@ -30,6 +30,8 @@ async function main() {
   const { buildPlanGenerationContext } = await import('../lib/rag/plan-generation-context');
   const { getAthleteProfile } = await import('../lib/db/profile');
   const { getClimbBaseline } = await import('../lib/db/runs');
+  const { exemplarsForRequest } = await import('../lib/coach/plan-exemplars-db');
+  const { parsePlanOutput, planOutputTokenBudget } = await import('../lib/coach/plan-output');
   const { callOpenRouter } = await import('../lib/ai/openrouter');
   const { MODEL_FOR } = await import('../lib/ai/model-registry');
   const { supabase } = await import('../lib/db/supabase');
@@ -55,11 +57,20 @@ async function main() {
     buildPlanGenerationContext(userId, { raceDate: '2027-07-03', currentWeeklyKm: 30 }),
   ]);
 
+  // Mirrors the generate routes: expert reference plans for this race.
+  const exemplars = await exemplarsForRequest({
+    planType, raceDistanceKm, raceElevationGainM,
+    goalText: '21K trail race 1300m', age: profile?.age ?? null,
+  });
+  console.log('reference plans:', exemplars.structureNames.join(' + ') || '(none)');
+  console.log('strength reference:', exemplars.strengthName ?? '(none)');
+
   const systemPrompt = buildEnhancedPlanGenerationPrompt(context, {
     planType, durationWeeks, runsPerWeek,
     targetRace: '21K trail race, 1300m gain, 2027-07-03',
     trainingDays,
     raceDemand: { distanceKm: raceDistanceKm, elevationGainM: raceElevationGainM, terrainAccess, climb: climbBaseline },
+    exemplarsText: exemplars.text,
     intakeBlock: planGenCtx.intakeBlock,
   });
 
@@ -67,18 +78,28 @@ async function main() {
   console.log('RACE DEMAND present:', systemPrompt.includes('RACE DEMAND'));
   console.log('day anchors defer to supplied days:', !systemPrompt.includes('**Monday**: Quality work'));
 
+  const t0 = Date.now();
   const response = await callOpenRouter(
     [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: `Generate my ${durationWeeks}-week ${planType} training plan. IMPORTANT: Return ONLY the raw JSON object with no markdown code blocks, no explanation, no extra text — just the JSON.` },
     ],
-    { apiKey: process.env.OPENROUTER_API_KEY!, model: MODEL_FOR.plan_generation, maxTokens: 16000, cacheableSystemPrefix: COACH_STATIC_BLOCK },
+    { apiKey: process.env.OPENROUTER_API_KEY!, model: MODEL_FOR.plan_generation, maxTokens: planOutputTokenBudget(durationWeeks), cacheableSystemPrefix: COACH_STATIC_BLOCK },
   );
 
   if (response.error) { console.error('ERROR:', response.error); process.exit(1); }
 
   const first = response.content.indexOf('{'), last = response.content.lastIndexOf('}');
-  const plan = JSON.parse(response.content.slice(first, last + 1));
+  const seconds = Math.round((Date.now() - t0) / 1000);
+  console.log(`finish_reason: ${response.finishReason} · completion tokens: ${response.completionTokens} · ${seconds}s (${Math.round((response.completionTokens ?? 0) / Math.max(1, seconds))} tok/s) · budget ${planOutputTokenBudget(durationWeeks)}`);
+  const parsed = parsePlanOutput(response.content, { expectedWeeks: durationWeeks, finishReason: response.finishReason });
+  if (!parsed.ok) {
+    (await import('fs')).writeFileSync('test-plan-raw.txt', response.content);
+    console.error(`REFUSED (${parsed.reason}): ${parsed.message}`);
+    process.exit(1);
+  }
+  console.log(`strength refs expanded: ${parsed.strength.expanded} · dangling: ${parsed.strength.dangling.length}`);
+  const plan = parsed.plan as any;
 
   const fs = await import('fs');
   fs.writeFileSync('test-plan-output.json', JSON.stringify(plan, null, 2));

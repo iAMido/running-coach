@@ -188,6 +188,42 @@ export interface Workout {
     duration?: string;
     description?: string;
   } | null;
+  /**
+   * A strength session attached to THIS training day — usually after an easy
+   * run, or as the day's only session.
+   *
+   * Attached rather than a separate day entry because `PlanWeek.workouts` holds
+   * one workout per day, and the pattern every expert plan in the library uses
+   * is strength paired with an easy run on the same day. It also keeps strength
+   * on the athlete's stated training days: nothing here invents a gym day he
+   * never offered.
+   *
+   * Before 2026-09-26 strength was a side panel of 3 fixed bodyweight templates
+   * chosen by a hardcoded week→phase mapping, disconnected from the plan, its
+   * days, and the race.
+   */
+  strength?: PlannedStrength | null;
+}
+
+export interface PlannedStrength {
+  name: string;
+  duration_minutes?: number;
+  /** Why this session exists in this phase — the coaching intent. */
+  focus?: string;
+  exercises: {
+    exercise: string;
+    sets: number;
+    /** Reps or a range ("8-10"). Omit for timed holds. */
+    reps?: string | number;
+    /** Timed holds (planks, wall sits). */
+    seconds?: number;
+    rest_seconds?: number;
+    /** "bodyweight", "moderate DB", "~RPE 7", "70% 1RM". Never an invented kilo figure. */
+    load?: string;
+    /** True for single-leg / single-arm work — performed each side. */
+    each_side?: boolean;
+    note?: string;
+  }[];
 }
 
 export interface RunFeedback {

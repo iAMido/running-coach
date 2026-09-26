@@ -248,6 +248,12 @@ export default function TrainingPlanPage() {
 
   const weekData = getCurrentWeekData();
   const totalWeeks = activePlan?.duration_weeks || getPlanWeeks().length || 0;
+  // Whether this plan programmes its own strength anywhere. Checked across the
+  // whole plan, not the viewed week, so the panel does not flicker in and out
+  // as you page through weeks (a taper week may legitimately have none).
+  const planHasStrength = getPlanWeeks().some((w) =>
+    Object.values(w.workouts ?? {}).some((wo) => !!wo?.strength),
+  );
   const planProgress = activePlan ? Math.round(((activePlan.current_week_num || 1) / (activePlan.duration_weeks || 1)) * 100) : 0;
 
   if (loading) {
@@ -515,8 +521,13 @@ export default function TrainingPlanPage() {
                   account. */}
               <PushToWatch weekNumber={viewingWeek} currentWeek={calculatedCurrentWeek} />
 
-              {/* Strength Training */}
-              <StrengthWorkout weekNumber={viewingWeek} totalWeeks={totalWeeks} />
+              {/* Generic strength panel — ONLY for plans that do not programme
+                  their own strength. Plans generated since 2026-09-26 attach
+                  strength to training days (see the workout cards above);
+                  showing this fixed 3-template panel beside them would put two
+                  competing strength programmes on one screen. Older plans have
+                  no strength field, so they keep the panel as before. */}
+              {!planHasStrength && <StrengthWorkout weekNumber={viewingWeek} totalWeeks={totalWeeks} />}
             </>
           ) : (
             <div className="rc-card">

@@ -27,6 +27,8 @@ import { buildContext, getContextStats } from '@/lib/rag/context-builder';
 import { getAthleteProfile } from '@/lib/db/profile';
 import { getClimbBaseline } from '@/lib/db/runs';
 import { getActiveMacroPlan, phaseForWeek, formatMacroPlan } from '@/lib/coach/macro-plan';
+import { exemplarsForRequest } from '@/lib/coach/plan-exemplars-db';
+import { parsePlanOutput, planOutputTokenBudget } from '@/lib/coach/plan-output';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { planGenerationSchema, validateInput } from '@/lib/validation/schemas';
 import {
@@ -94,6 +96,17 @@ export async function POST(request: NextRequest) {
 
     const macroContext = await resolveMacroContext(userId, macroPlanId, blockNumber);
 
+    // Expert reference plans chosen for THIS race by terrain, distance and
+    // goal, plus a strength block matched to age. Best-effort: an empty or
+    // unreachable library yields '' and generation proceeds as before.
+    const exemplars = await exemplarsForRequest({
+      planType,
+      raceDistanceKm,
+      raceElevationGainM,
+      goalText: [targetRace, notes, profile?.current_goal].filter(Boolean).join(' '),
+      age: profile?.age ?? null,
+    }).catch(() => ({ structureNames: [], strengthName: null, text: '' }));
+
 
   const preflight = supervisorValidate({ context, queryType: 'plan_generation' });
 
@@ -107,6 +120,7 @@ export async function POST(request: NextRequest) {
     // Race profile + his OWN measured climbing. Without the second
     // half the model has no anchor and invents a starting point.
     macroContext: macroContext.text,
+    exemplarsText: exemplars.text,
     raceDemand: {
       distanceKm: raceDistanceKm,
       elevationGainM: raceElevationGainM,
@@ -144,7 +158,9 @@ export async function POST(request: NextRequest) {
             { role: 'system', content: systemPrompt },
             { role: 'user', content: `Generate my ${durationWeeks}-week ${planType} training plan. IMPORTANT: Return ONLY the raw JSON object with no markdown code blocks, no explanation, no extra text — just the JSON.` },
           ],
-          { apiKey, model: MODEL_FOR.plan_generation, maxTokens: 16000, cacheableSystemPrefix: COACH_STATIC_BLOCK },
+          // Sized to the plan: a fixed 16,000 cut a 12-week plan with strength
+          // off at week 10. See planOutputTokenBudget.
+          { apiKey, model: MODEL_FOR.plan_generation, maxTokens: planOutputTokenBudget(durationWeeks), cacheableSystemPrefix: COACH_STATIC_BLOCK },
         );
 
         for await (const chunk of generator) {
@@ -160,23 +176,20 @@ export async function POST(request: NextRequest) {
 
       const latencyMs = Date.now() - callStart;
 
-      // Parse the assembled JSON
-      let planJson: Record<string, unknown>;
-      try {
-        const codeBlockMatch = fullText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-        if (codeBlockMatch) {
-          planJson = JSON.parse(codeBlockMatch[1]);
-        } else {
-          const first = fullText.indexOf('{');
-          const last = fullText.lastIndexOf('}');
-          if (first !== -1 && last > first) {
-            planJson = JSON.parse(fullText.slice(first, last + 1));
-          } else {
-            planJson = { raw_response: fullText };
-          }
-        }
-      } catch {
-        planJson = { raw_response: fullText };
+      // Parse and validate BEFORE anything touches the database. This used to
+      // fall back to saving { raw_response } as the ACTIVE plan after retiring
+      // the working one — a failed generation destroyed the current plan. The
+      // stream carries no finish_reason, so completeness is checked
+      // structurally: fewer weeks than requested is a refusal.
+      const parsed = parsePlanOutput(fullText, { expectedWeeks: durationWeeks });
+      if (!parsed.ok) {
+        emit('error', { message: parsed.message, reason: parsed.reason, weeksReturned: parsed.weeksReturned });
+        controller.close();
+        return;
+      }
+      const planJson: Record<string, unknown> = parsed.plan;
+      if (parsed.strength.dangling.length) {
+        console.warn('plan-gen: dropped undefined strength refs:', parsed.strength.dangling);
       }
 
       // Save: deactivate previous, insert new

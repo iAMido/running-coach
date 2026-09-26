@@ -641,13 +641,20 @@ export function buildEnhancedPlanGenerationPrompt(
      * its exit criteria. Empty for a standalone plan, which stays valid.
      */
     macroContext?: string;
+    /**
+     * Rendered REFERENCE PLANS from the expert library — the 2 most
+     * structurally similar plans plus a strength block. See
+     * lib/coach/plan-exemplars-db.ts. Empty when the library is empty, and
+     * generation then behaves exactly as it did before the library existed.
+     */
+    exemplarsText?: string;
     /** Rendered intake block from buildPlanGenerationContext (90-day stats,
      *  PRs, prior plan outcomes, athlete intake form fields). Wider window
      *  than the default 14-day RAG context — plan-gen needs the runway. */
     intakeBlock?: string;
   }
 ): string {
-  const { planType, durationWeeks, runsPerWeek, targetRace, notes, trainingDays, raceDemand, macroContext, intakeBlock } = params;
+  const { planType, durationWeeks, runsPerWeek, targetRace, notes, trainingDays, raceDemand, macroContext, exemplarsText, intakeBlock } = params;
   const raceDemandBlock = buildRaceDemandBlock(raceDemand);
 
   // Calculate phase distribution
@@ -683,6 +690,7 @@ ${macroContext ? `${macroContext}
 
 **This block serves the phase marked CURRENT above.** Write it to satisfy that phase's exit criteria — its weekly km and vert ranges are the band you work inside, not suggestions. Do NOT restate the whole season; generate only these ${durationWeeks} weeks.
 ` : ''}
+${exemplarsText ?? ''}
 ### SUGGESTED PHASE DISTRIBUTION
 This split is a DEFAULT, not a prescription. The methodology retrieved above is
 the primary source: if it prescribes a different structure for this race type,
@@ -693,10 +701,37 @@ followed and where you departed from the default.
 - Specific/Peak Phase: Weeks ${baseWeeks + supportWeeks + 1}-${hasRaceGoal ? durationWeeks - 1 : durationWeeks} (${specificWeeks} weeks)
 ${hasRaceGoal ? `- Taper: Week ${durationWeeks} (1 week)` : ''}
 
-### HOW TO USE THE THREE DATA SOURCES:
+### HOW TO USE THE DATA SOURCES:
 1. **Athlete Data**: Use current fitness level, recent runs, and fatigue to set appropriate starting volumes
 2. **Previous Coach Workouts**: Incorporate familiar workout names and structures the athlete knows
 3. **Book Methodology**: Follow the periodization principles and intensity guidelines from the books
+4. **Reference Plans** (when present above): learn how comparable plans were BUILT — phase lengths, loading rhythm, how deep recovery weeks go, how climb and volume progress, and how strength is placed and progressed. Adapt the structure to this athlete; never copy sessions or days.
+
+### STRENGTH IS PART OF THE PLAN
+Every expert plan in the reference library schedules strength INSIDE the plan and
+progresses it by phase. Do the same — strength is not an optional add-on.
+
+- **Frequency by phase**: about 2 sessions/week in base and build, 1 in peak
+  (maintenance: less volume, keep the intensity), 0-1 light session in taper.
+- **Placement**: attach strength to one of the athlete's own training days via the
+  "strength" field — after an easy run, or after that day's quality session (keep
+  hard days hard, easy days easy). **Never on the long-run day, and avoid the day
+  before the long run.** Strength the day before a quality session is fine: it is
+  routine in the reference plans (Carmel-Kinneret places 25 of its 54 strength
+  sessions there). Never create a day he does not train in order to fit strength in.
+- **Progression**: foundation (bodyweight, clean single-leg patterns, hip and
+  trunk stability) → loaded single-leg and eccentric work (split squats, single-
+  leg RDLs, step-downs, loaded carries) → maintenance → light activation.
+- **Mountain races — eccentric strength IS descent training.** Step-downs and
+  slow lowering are the race's descents in miniature. Build them gradually and
+  include calf and foot work (heel raises, eccentric calf lowers, tibialis
+  raises) with this athlete's plantar fasciitis history in mind — progress load
+  slowly and say so.
+- **Load**: express as bodyweight, "moderate dumbbells", or RPE / reps in
+  reserve (e.g. "RPE 7, 2-3 reps in reserve"). NEVER invent a kilogram figure:
+  his strength numbers are unknown, and a made-up load is a guess dressed as
+  a prescription.
+- Keep sessions 20-40 minutes. 5-8 exercises.
 
 ### OUTPUT FORMAT
 Return the plan as a JSON object with this structure:
@@ -711,6 +746,19 @@ Return the plan as a JSON object with this structure:
     "support_weeks": ${supportWeeks},
     "specific_weeks": ${specificWeeks},
     "taper_weeks": ${hasRaceGoal ? 1 : 0}
+  },
+  "strength_sessions": {
+    "eccentric_base": {
+      "name": "Single-leg strength + eccentric control",
+      "duration_minutes": 30,
+      "focus": "Descent durability: control the lowering phase",
+      "exercises": [
+        { "exercise": "Bulgarian Split Squat", "sets": 3, "reps": "8-10", "each_side": true, "rest_seconds": 60, "load": "moderate dumbbells, RPE 7" },
+        { "exercise": "Step-Down (slow, 3 s lower)", "sets": 3, "reps": 8, "each_side": true, "rest_seconds": 45, "load": "bodyweight" },
+        { "exercise": "Eccentric Calf Lower", "sets": 3, "reps": 12, "each_side": true, "rest_seconds": 45, "load": "bodyweight", "note": "Progress slowly — plantar fasciitis history" },
+        { "exercise": "Side Plank", "sets": 2, "seconds": 30, "each_side": true, "rest_seconds": 30 }
+      ]
+    }
   },
   "weeks": [
     {
@@ -735,6 +783,22 @@ Return the plan as a JSON object with this structure:
             "description": "5% grade, easy effort. Trains climb only, not descent."
           },
           "source": "Previous coach 'Recovery Run' or 'Book methodology'"
+        },
+        "Wednesday": {
+          "type": "Easy Run + Strength",
+          "duration": "40 min + 30 min strength",
+          "distance": "6 km",
+          "elevation_gain_m": 50,
+          "target_hr": "Z1-Z2 (120-140)",
+          "target_pace": "6:30-7:00/km",
+          "description": "Easy run, then strength. 48h+ before the long run.",
+          "indoor_alternative": {
+            "type": "Treadmill easy",
+            "equipment": "treadmill",
+            "description": "1-2% grade, conversational."
+          },
+          "strength": "eccentric_base",
+          "source": "Previous coach 'Recovery Run' or 'Book methodology'"
         }
       }
     }
@@ -749,7 +813,10 @@ IMPORTANT:
 - Include the "source" field to cite where each workout came from (previous coach or book)
 - Keep workout descriptions concise (under 80 chars each) to fit within token limits
 - Emit "total_elevation_gain_m" per week and "elevation_gain_m" per workout ONLY when a RACE DEMAND block appears above. Omit both for a flat-race or general-fitness plan - do NOT emit 0, which reads as "prescribed no climb" rather than "climb was not part of this plan"
-- Emit "indoor_alternative" on EVERY workout (see the indoor-alternative rule in your instructions)
+- Emit "indoor_alternative" on EVERY workout (see the indoor-alternative rule in your instructions). Keep its description under 60 characters, and omit its "duration" when it matches the session's own
+- **Define each distinct strength session ONCE in "strength_sessions"**, keyed by a short id, and reference it from a day with \`"strength": "<id>"\`. Never write a strength session out in full inside a day. Sessions repeat across a sub-block exactly as the reference plans' do; define a new id only when the session genuinely changes (e.g. foundation → eccentric → maintenance). Every id you reference MUST exist in "strength_sessions"
+- Omit "strength" on days without a strength session — never an empty value
+- The whole plan must fit in ONE response. Being concise is what makes that possible
 
 ### WRITING target_hr — THE ZONE LABEL AND THE BPM MUST AGREE
 - Sustained easy running lives in **Z1-Z2**. Prescribe easy runs and long runs that way. Reserve a bare **Z1** for genuine recovery jogs and walk-backs only: Z1 tops out around 124 bpm for this athlete, so asking for Z1 across a 45-minute run is asking for near-walking, and the session will be missed every time it is prescribed.
@@ -1099,7 +1166,8 @@ Return a JSON object with this structure:
           "target_pace": "Pace range",
           "description": "Full workout description",
           "elevation_gain_m": 120,
-          "indoor_alternative": { "type": "...", "equipment": "...", "duration": "...", "description": "..." }
+          "indoor_alternative": { "type": "...", "equipment": "...", "duration": "...", "description": "..." },
+          "strength": { "name": "...", "duration_minutes": 30, "exercises": [ { "exercise": "...", "sets": 3, "reps": "8-10", "each_side": true, "load": "RPE 7" } ] }
         }
       }
     }
@@ -1114,6 +1182,9 @@ IMPORTANT:
 - Be conservative with injured athletes
 - Adjust ONLY weeks ${currentWeek} to ${lastWeek}. Do not rewrite the rest of the plan
 - PRESERVE every field each workout already carries, including
-  elevation_gain_m, indoor_alternative and the week's total_elevation_gain_m.
-  Omitting a field silently deletes a target the athlete is training toward`;
+  elevation_gain_m, indoor_alternative, strength and the week's total_elevation_gain_m.
+  Omitting a field silently deletes a target the athlete is training toward
+- If you MOVE a session, strength moves with the day it was attached to only if
+  the new placement still respects the strength rules: never on the long-run
+  day, and avoid the day before the long run`;
 }

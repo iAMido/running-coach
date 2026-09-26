@@ -21,6 +21,7 @@ async function main() {
   const { COACH_STATIC_BLOCK } = await import('../lib/ai/coach-prompts');
   const { MODEL_FOR } = await import('../lib/ai/model-registry');
   const { saveMacroPlan, formatMacroPlan } = await import('../lib/coach/macro-plan');
+  const { exemplarsForRequest } = await import('../lib/coach/plan-exemplars-db');
 
   const { data } = await supabase.from('athlete_profile').select('user_id').limit(1).maybeSingle();
   const userId = (data as { user_id: string }).user_id;
@@ -35,6 +36,13 @@ async function main() {
     getClimbBaseline(userId),
   ]);
 
+  // Mirrors app/api/coach/macro-plan: reference plans for the season.
+  const exemplars = await exemplarsForRequest({
+    planType: 'season', raceDistanceKm: 21, raceElevationGainM: 1300,
+    goalText: '21K trail race, 1300m elevation gain', age: profile?.age ?? null,
+  });
+  console.log(`reference plans: ${exemplars.structureNames.join(' + ') || '(none)'}`);
+
   const prompt = buildMacroPlanPrompt({
     goalName: '21K trail race, 1300m elevation gain',
     raceDate: '2027-07-03',
@@ -47,6 +55,7 @@ async function main() {
       climb,
     },
     state,
+    exemplarsText: exemplars.text,
   });
   console.log(`\nprompt chars: ${prompt.length}`);
 
