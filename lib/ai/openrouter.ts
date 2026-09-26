@@ -26,6 +26,70 @@ export interface OpenRouterConfig {
    * get the prefix inlined as plain text.
    */
   cacheableSystemPrefix?: string;
+  /**
+   * Thinking budget, in tokens, ON TOP OF `maxTokens`. Only meaningful for
+   * models that reason (see MANDATORY_REASONING); omitted = the model's
+   * default budget. `maxTokens` therefore keeps meaning "length of the
+   * visible answer" whichever model a task is routed to.
+   */
+  reasoningTokens?: number;
+}
+
+/**
+ * How each reasoning model's thinking is controlled. Measured 2026-09-26
+ * when moving to Opus 5.5 / Sonnet 5 / Grok 4.7.
+ *
+ * Why this table exists: reasoning tokens count against `max_tokens`. Left
+ * alone, a 300-token request to Opus 5.5 spent it thinking and returned
+ * `finish_reason: length` with a truncated answer, and the SAME request
+ * streamed returned nothing at all — the stream reader only yields
+ * `delta.content`, and the budget ran out before any content began. Every
+ * `maxTokens` in the app was sized for visible output, so thinking gets its
+ * own headroom and is excluded from the response.
+ *
+ * - `mandatory`: OpenRouter rejects `reasoning: { enabled: false }` with
+ *   "Reasoning is mandatory for this endpoint". Can only be bounded.
+ * - `adaptive`: thinks on its own when a prompt looks hard — Sonnet 5 spent
+ *   0 thinking tokens on a one-line question and 2,048 on the weekly-review
+ *   prompt, unasked. Switched OFF unless a task asks for a budget, so a
+ *   1,500-token chat answer cannot silently lose half its room to thinking
+ *   and it behaves as Sonnet 4.6 did.
+ *
+ * The budget is HEADROOM, not a guarantee. Opus 5.5 treats it as a hint:
+ * given 1,024 on a 12-week plan it thought for 14,241 tokens and ran out of
+ * room at week 10. Grok 4.7 ignores a token budget entirely (2,859 used
+ * against 2,048) but does honour `effort`, so it is controlled that way —
+ * `low` halved Grocky's plan review from 81 s to 40 s.
+ */
+const REASONING_POLICY: Record<string, { kind: 'mandatory' | 'adaptive'; defaultBudget: number; effort?: 'low' | 'medium' | 'high' }> = {
+  'anthropic/claude-opus-5.5': { kind: 'mandatory', defaultBudget: 2_048 },
+  'x-ai/grok-4.7':             { kind: 'mandatory', defaultBudget: 4_000, effort: 'low' },
+  'anthropic/claude-sonnet-5': { kind: 'adaptive',  defaultBudget: 2_048 },
+};
+
+type ReasoningField =
+  | { max_tokens: number; exclude: true }
+  | { effort: 'low' | 'medium' | 'high'; exclude: true }
+  | { enabled: false };
+
+/** `max_tokens` + `reasoning` body fields for a model. Exported for tests. */
+export function tokenFields(
+  model: string,
+  maxTokens: number,
+  reasoningTokens?: number,
+): { max_tokens: number; reasoning?: ReasoningField } {
+  const policy = REASONING_POLICY[model];
+  const wantsThinking = reasoningTokens === undefined ? policy?.kind === 'mandatory' : reasoningTokens > 0;
+  if (!wantsThinking) {
+    if (policy?.kind === 'adaptive') return { max_tokens: maxTokens, reasoning: { enabled: false } };
+    if (policy?.kind !== 'mandatory') return { max_tokens: maxTokens };
+  }
+  // 1,024 is Anthropic's minimum thinking budget.
+  const budget = Math.max(1_024, reasoningTokens || policy?.defaultBudget || 1_024);
+  const reasoning: ReasoningField = policy?.effort
+    ? { effort: policy.effort, exclude: true }
+    : { max_tokens: budget, exclude: true };
+  return { max_tokens: maxTokens + budget, reasoning };
 }
 
 export interface OpenRouterResponse {
@@ -39,8 +103,10 @@ export interface OpenRouterResponse {
    * on: the content is incomplete by construction.
    */
   finishReason?: string | null;
-  /** Output tokens used, when the provider reports it. */
+  /** Output tokens used, when the provider reports it. Includes reasoning. */
   completionTokens?: number | null;
+  /** Of `completionTokens`, how many were hidden reasoning. */
+  reasoningTokensUsed?: number | null;
 }
 
 /**
@@ -81,7 +147,7 @@ export async function callOpenRouter(
   messages: ChatMessage[],
   config: OpenRouterConfig
 ): Promise<OpenRouterResponse> {
-  const { apiKey, model = 'anthropic/claude-sonnet-4.6', maxTokens = 2000, cacheableSystemPrefix } = config;
+  const { apiKey, model = 'anthropic/claude-sonnet-5', maxTokens = 2000, cacheableSystemPrefix, reasoningTokens } = config;
 
   if (!apiKey) {
     return { content: '', error: 'OpenRouter API key not configured.' };
@@ -102,7 +168,7 @@ export async function callOpenRouter(
       },
       body: JSON.stringify({
         model,
-        max_tokens: maxTokens,
+        ...tokenFields(model, maxTokens, reasoningTokens),
         messages: payloadMessages,
       }),
     });
@@ -127,6 +193,7 @@ export async function callOpenRouter(
       content: data.choices[0].message.content,
       finishReason: data.choices[0].finish_reason ?? null,
       completionTokens: data.usage?.completion_tokens ?? null,
+      reasoningTokensUsed: data.usage?.completion_tokens_details?.reasoning_tokens ?? null,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -141,7 +208,7 @@ export async function* streamOpenRouter(
   messages: ChatMessage[],
   config: OpenRouterConfig
 ): AsyncGenerator<string, void, unknown> {
-  const { apiKey, model = 'anthropic/claude-sonnet-4.6', maxTokens = 2000, cacheableSystemPrefix } = config;
+  const { apiKey, model = 'anthropic/claude-sonnet-5', maxTokens = 2000, cacheableSystemPrefix, reasoningTokens } = config;
 
   if (!apiKey) {
     throw new Error('OpenRouter API key not configured.');
@@ -161,7 +228,7 @@ export async function* streamOpenRouter(
     },
     body: JSON.stringify({
       model,
-      max_tokens: maxTokens,
+      ...tokenFields(model, maxTokens, reasoningTokens),
       messages: payloadMessages,
       stream: true,
     }),
@@ -205,18 +272,3 @@ export async function* streamOpenRouter(
     }
   }
 }
-
-/**
- * Get available models from OpenRouter
- */
-export const AVAILABLE_MODELS = [
-  { id: 'anthropic/claude-sonnet-4.6', name: 'Claude Sonnet 4.6' },
-  { id: 'anthropic/claude-opus-4.7', name: 'Claude Opus 4.7' },
-  { id: 'anthropic/claude-haiku-4.5', name: 'Claude Haiku 4.5' },
-  { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' },
-  { id: 'x-ai/grok-4.3', name: 'Grok 4.3 (Grocky)' },
-  { id: 'openai/gpt-4o', name: 'GPT-4o' },
-  { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini' },
-  { id: 'google/gemini-pro', name: 'Gemini Pro' },
-  { id: 'meta-llama/llama-3.1-70b-instruct', name: 'Llama 3.1 70B' },
-];

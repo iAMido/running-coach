@@ -23,7 +23,7 @@ import {
   runCritic,
 } from '@/lib/supervisor';
 import { TOKEN_BUDGETS_PER_QUERY } from '@/lib/rag/types';
-import { MODEL_FOR } from '@/lib/ai/model-registry';
+import { MODEL_FOR, REASONING_FOR, WEEKLY_REVIEW_MAX_TOKENS } from '@/lib/ai/model-registry';
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser();
@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      { apiKey, model: MODEL_FOR.weekly_review, maxTokens: 2000, cacheableSystemPrefix: COACH_STATIC_BLOCK }
+      { apiKey, model: MODEL_FOR.weekly_review, maxTokens: WEEKLY_REVIEW_MAX_TOKENS, reasoningTokens: REASONING_FOR.weekly_review, cacheableSystemPrefix: COACH_STATIC_BLOCK }
     );
     const callLatencyMs = Date.now() - callStart;
 

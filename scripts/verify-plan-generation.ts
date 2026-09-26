@@ -23,6 +23,11 @@ import * as dotenv from 'dotenv';
 const argv = process.argv.slice(2);
 const envIdx = argv.indexOf('--env');
 dotenv.config({ path: envIdx >= 0 ? argv[envIdx + 1] : '.env.local' });
+// --model / --reasoning compare alternatives without editing the registry.
+const flag = (name: string) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : undefined; };
+const modelOverride = flag('--model');
+const reasoningOverride = flag('--reasoning') ? Number(flag('--reasoning')) : undefined;
+const outFile = flag('--out') ?? 'test-plan-output.json';
 
 async function main() {
   const { buildEnhancedPlanGenerationPrompt, COACH_STATIC_BLOCK } = await import('../lib/ai/coach-prompts');
@@ -33,7 +38,7 @@ async function main() {
   const { exemplarsForRequest } = await import('../lib/coach/plan-exemplars-db');
   const { parsePlanOutput, planOutputTokenBudget } = await import('../lib/coach/plan-output');
   const { callOpenRouter } = await import('../lib/ai/openrouter');
-  const { MODEL_FOR } = await import('../lib/ai/model-registry');
+  const { MODEL_FOR, REASONING_FOR } = await import('../lib/ai/model-registry');
   const { supabase } = await import('../lib/db/supabase');
 
   const { data: prof } = await supabase.from('athlete_profile').select('user_id').limit(1).maybeSingle();
@@ -84,14 +89,14 @@ async function main() {
       { role: 'system', content: systemPrompt },
       { role: 'user', content: `Generate my ${durationWeeks}-week ${planType} training plan. IMPORTANT: Return ONLY the raw JSON object with no markdown code blocks, no explanation, no extra text — just the JSON.` },
     ],
-    { apiKey: process.env.OPENROUTER_API_KEY!, model: MODEL_FOR.plan_generation, maxTokens: planOutputTokenBudget(durationWeeks), cacheableSystemPrefix: COACH_STATIC_BLOCK },
+    { apiKey: process.env.OPENROUTER_API_KEY!, model: modelOverride ?? MODEL_FOR.plan_generation, maxTokens: planOutputTokenBudget(durationWeeks), reasoningTokens: reasoningOverride ?? REASONING_FOR.plan_generation, cacheableSystemPrefix: COACH_STATIC_BLOCK },
   );
 
   if (response.error) { console.error('ERROR:', response.error); process.exit(1); }
 
   const first = response.content.indexOf('{'), last = response.content.lastIndexOf('}');
   const seconds = Math.round((Date.now() - t0) / 1000);
-  console.log(`finish_reason: ${response.finishReason} · completion tokens: ${response.completionTokens} · ${seconds}s (${Math.round((response.completionTokens ?? 0) / Math.max(1, seconds))} tok/s) · budget ${planOutputTokenBudget(durationWeeks)}`);
+  console.log(`finish_reason: ${response.finishReason} · completion tokens: ${response.completionTokens} · ${seconds}s (${Math.round((response.completionTokens ?? 0) / Math.max(1, seconds))} tok/s) · thinking ${response.reasoningTokensUsed ?? 0} · answer ${response.content.length} chars · budget ${planOutputTokenBudget(durationWeeks)}`);
   const parsed = parsePlanOutput(response.content, { expectedWeeks: durationWeeks, finishReason: response.finishReason });
   if (!parsed.ok) {
     (await import('fs')).writeFileSync('test-plan-raw.txt', response.content);
@@ -102,7 +107,7 @@ async function main() {
   const plan = parsed.plan as any;
 
   const fs = await import('fs');
-  fs.writeFileSync('test-plan-output.json', JSON.stringify(plan, null, 2));
+  fs.writeFileSync(outFile, JSON.stringify(plan, null, 2));
   console.log('\nwrote test-plan-output.json');
   console.log('plan_name:', plan.plan_name);
   console.log('weeks returned:', plan.weeks?.length);

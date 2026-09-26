@@ -27,33 +27,44 @@ export const MODEL_FOR = {
    * history. Opus's deeper reasoning chain catches cross-constraints
    * that Sonnet sometimes blurs. ~5× the per-call cost, but per-year
    * cost is still <$10.
+   *
+   * STAYS ON OPUS 4.7 — Opus 5.5 was tested and rejected on 2026-09-26.
+   * Its reasoning cannot be disabled and it treats the thinking budget as a
+   * hint: on the 12-week verification plan it took 274 s with a 6,000
+   * budget, and with a 1,024 budget it thought for 14,241 tokens anyway and
+   * was cut off at week 10 of 12 after 265 s. The function limit is 300 s.
+   * Opus 4.7 wrote the same plan complete in 149 s. Revisit only with a
+   * measured run of scripts/verify-plan-generation.ts --model <id>.
+   * This key also drives the season macro plan and the Saturday proposal.
    */
   plan_generation:      'anthropic/claude-opus-4.7',
   // Adjustment is a smaller, bounded task than generation — at most a 4-week
   // window against an existing plan. Named here rather than left to
   // callOpenRouter's default, so the choice is visible and deliberate instead
   // of being whatever the library happens to fall back to.
-  plan_adjust:          'anthropic/claude-sonnet-4.6',
+  plan_adjust:          'anthropic/claude-sonnet-5',
 
   /**
    * Weekly review — substantial reasoning over the week's runs,
-   * intervals, lap data, planned-vs-actual. Runs ~52/year. Sonnet is
-   * plenty.
+   * intervals, lap data, planned-vs-actual, zones and grade-adjusted pace.
+   * Moved from Sonnet to Opus on 2026-09-26: this is judgement over dense
+   * data, closer to plan building than to chat, and at ~52 runs a year the
+   * difference is roughly $6/year.
    */
-  weekly_review:        'anthropic/claude-sonnet-4.6',
+  weekly_review:        'anthropic/claude-opus-5.5',
 
   /**
    * Plan modification in chat — needs structured JSON output and
    * accuracy on individual workout edits.
    */
-  plan_modification:    'anthropic/claude-sonnet-4.6',
+  plan_modification:    'anthropic/claude-sonnet-5',
 
   /**
    * Default chat — for non-trivial questions. The complexity router
    * (see lib/ai/router.ts) picks between chat_quick and chat_default
    * via a cheap Haiku classification call.
    */
-  chat_default:         'anthropic/claude-sonnet-4.6',
+  chat_default:         'anthropic/claude-sonnet-5',
 
   /**
    * Quick chat — "should I run today?", "is my HR too high?" etc.
@@ -77,9 +88,9 @@ export const MODEL_FOR = {
   /**
    * Grocky (second opinion). Different model family for voice diversity.
    */
-  // Grok 4 was deprecated by xAI in late 2026; switched to 4.3 per the
-  // OpenRouter migration notice.
-  grocky:               'x-ai/grok-4.3',
+  // Grok 4 was deprecated by xAI in 2026 (→ 4.3); 4.3 → 4.7 on 2026-09-26. Still
+  // a different model family from the Claude coaches, which is the point.
+  grocky:               'x-ai/grok-4.7',
 } as const;
 
 export type ModelTaskKey = keyof typeof MODEL_FOR;
@@ -91,3 +102,31 @@ export type ModelTaskKey = keyof typeof MODEL_FOR;
 export function modelFor(task: ModelTaskKey): string {
   return MODEL_FOR[task] ?? MODEL_FOR.chat_default;
 }
+
+/**
+ * Thinking budget (tokens, on top of the visible-output limit) for tasks
+ * routed to a reasoning model. Tasks not listed get the model's default in
+ * lib/ai/openrouter.ts (REASONING_POLICY). Reasoning on Opus 5.5 and
+ * Grok 4.7 cannot be disabled, only bounded.
+ *
+ * Plan generation deliberately has NO entry: it runs on Opus 4.7, where a
+ * budget here would switch thinking ON and push a ~150 s request toward the
+ * 300 s limit. The call sites still pass REASONING_FOR.plan_generation so a
+ * future model change needs only this table.
+ *
+ * The weekly review's budget is generous because Opus 5.5 overshoots it
+ * (4,274 used against 4,000 in testing) and the thinking shares max_tokens
+ * with the answer. Measured review: 68-82 s, well inside the limit.
+ */
+export const REASONING_FOR: Partial<Record<ModelTaskKey, number>> = {
+  weekly_review:   8_000,
+};
+
+/**
+ * Visible-answer limit for the weekly review. Was 2,000 from the app's first
+ * commit; measured 2026-09-26, the review was being CUT OFF mid-sentence at
+ * exactly 2,000 tokens on the production model (Sonnet 4.6) — the prompt now
+ * carries laps, zones, GAP, decoupling and the scorecard, and the model
+ * uses them. It is a ceiling, not a target: a finished review stops early.
+ */
+export const WEEKLY_REVIEW_MAX_TOKENS = 5_000;

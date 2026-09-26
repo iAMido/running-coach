@@ -200,7 +200,14 @@ The strength extractor handles four encodings in precedence order (`strength_exe
 
 **Authentication:** NextAuth.js with Google OAuth. API routes use `getAuthenticatedUser()` from `lib/auth/get-user.ts`.
 
-**AI Integration:** OpenRouter API client supports multiple models (Claude Sonnet 4, Grok, GPT-4o). 3-layer RAG provides context: athlete data + coach patterns + book methodology.
+**AI Integration:** OpenRouter, with every task's model named in `lib/ai/model-registry.ts` (`MODEL_FOR`). 3-layer RAG provides context: athlete data + coach patterns + book methodology.
+
+**Models (reviewed and measured 2026-09-26):** plan generation / season plan / Saturday proposal → **Opus 4.7**; weekly review → **Opus 5.5**; chat, chat plan edits, plan adjust → **Sonnet 5**; run note, critic, question classifier → **Haiku 4.5**; Grocky → **Grok 4.7** (effort `low`); CalTrack food analysis → GPT-4o-mini (untouched). `chat_quick` is not used by the chat — every chat answer goes to `chat_default`; `chat_quick` only writes the morning-after run note.
+
+- **Reasoning models eat `max_tokens`.** Opus 5.5 and Grok 4.7 cannot have reasoning disabled ("Reasoning is mandatory"); Sonnet 5 reasons on its own when a prompt is hard (0 tokens on a one-liner, 2,048 on the weekly review). Unhandled, a 300-token Opus call ended `length` and the streamed version returned **nothing**. `tokenFields` in `lib/ai/openrouter.ts` (`REASONING_POLICY`) therefore adds thinking headroom ON TOP of `maxTokens` and excludes reasoning from the response, switches Sonnet 5's thinking OFF unless a task asks (`REASONING_FOR`), and steers Grok by `effort` because it ignores token budgets. Every `maxTokens` in the app means visible-answer length. Adding a new model: check whether it reasons before routing a task to it.
+- **Opus 5.5 was rejected for plan generation.** It treats the thinking budget as a hint: given 1,024 it thought 14,241 tokens and was cut off at week 10 of 12 after 265 s (the truncation guard refused the save). The function limit is 300 s; Opus 4.7 writes the same 12-week plan complete in 149 s. Re-test with `scripts/verify-plan-generation.ts --model <id> [--reasoning N]` before changing it.
+- **The weekly review was being truncated in production** at its old 2,000-token limit (Sonnet 4.6 stopped mid-sentence at exactly 2,000). Now `WEEKLY_REVIEW_MAX_TOKENS = 5000`. `scripts/verify-weekly-review.ts [--models a,b]` compares models on the same real prompt, read-only.
+- **Free OpenRouter models were tested for the Haiku jobs and none is usable** (2026-09-26): rate limits (`free-models-per-min`) and provider errors on most, one restricted to "agentic harnesses", and Nemotron Ultra leaked its reasoning into the answer ("The user wants me to…") — which would have become the run note. Haiku classified 7/8, wrote 3/3 notes, 2/2 valid critic JSON. Free endpoints may also log prompts that contain health data. The Haiku jobs cost cents a month.
 
 **RAG context budget:** `TOKEN_BUDGETS_PER_QUERY` in `lib/rag/types.ts` sets the per-query-type budget (chat 20k, daily 24k, weekly review 32k, plan generation 48k). `QUERY_WEIGHTS` splits each budget across the three layers. Raised from the original 8k flat budget once we noticed the coach layer was capped at ~800 tokens and surfacing only 5 of 69 historical workouts.
 
@@ -529,7 +536,7 @@ Edit `lib/cv-data.ts` - single source of truth for all CV sections.
 - RAG context: `lib/rag/context-builder.ts` assembles the 3-layer context
 - Token budgets per query type: `TOKEN_BUDGETS_PER_QUERY` in `lib/rag/types.ts`
 - Prompt caching: pass `cacheSystemPrompt: true` to `callOpenRouter`
-- Model selection: `lib/ai/openrouter.ts` (change model IDs there)
+- Model selection: `lib/ai/model-registry.ts` (`MODEL_FOR`, `REASONING_FOR`); reasoning handling in `lib/ai/openrouter.ts` (`REASONING_POLICY`)
 
 ### Backfilling embeddings (one-shot admin)
 The Supabase Edge Function `supabase/functions/backfill-embeddings` finds any `book_instructions` rows where `embedding IS NULL`, embeds via OpenAI `text-embedding-3-small` (1536d), and writes back. Requires the `OPENAI_API_KEY` Supabase secret. Invoke via POST with the anon key in `Authorization: Bearer`. Append `?dryRun=1` to count without writing.

@@ -19,7 +19,7 @@ import { getClimbBaseline } from '@/lib/db/runs';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { macroPlanGenerationSchema, validateInput } from '@/lib/validation/schemas';
 import { logCoachCall } from '@/lib/supervisor';
-import { MODEL_FOR } from '@/lib/ai/model-registry';
+import { MODEL_FOR, REASONING_FOR } from '@/lib/ai/model-registry';
 
 export async function GET() {
   const auth = await getAuthenticatedUser();
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
       { role: 'system', content: prompt },
       { role: 'user', content: 'Design my season. Return ONLY the raw JSON object.' },
     ],
-    { apiKey, model: MODEL_FOR.plan_generation, maxTokens: 6000, cacheableSystemPrefix: COACH_STATIC_BLOCK },
+    { apiKey, model: MODEL_FOR.plan_generation, maxTokens: 6000, reasoningTokens: REASONING_FOR.plan_generation, cacheableSystemPrefix: COACH_STATIC_BLOCK },
   );
   const latencyMs = Date.now() - started;
 

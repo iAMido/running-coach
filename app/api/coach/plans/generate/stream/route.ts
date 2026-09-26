@@ -38,7 +38,7 @@ import {
   runCritic,
 } from '@/lib/supervisor';
 import { TOKEN_BUDGETS_PER_QUERY } from '@/lib/rag/types';
-import { MODEL_FOR } from '@/lib/ai/model-registry';
+import { MODEL_FOR, REASONING_FOR } from '@/lib/ai/model-registry';
 import { buildPlanGenerationContext } from '@/lib/rag/plan-generation-context';
 
 void callOpenRouter; // streaming-only, but referenced via openrouter types
@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
           ],
           // Sized to the plan: a fixed 16,000 cut a 12-week plan with strength
           // off at week 10. See planOutputTokenBudget.
-          { apiKey, model: MODEL_FOR.plan_generation, maxTokens: planOutputTokenBudget(durationWeeks), cacheableSystemPrefix: COACH_STATIC_BLOCK },
+          { apiKey, model: MODEL_FOR.plan_generation, maxTokens: planOutputTokenBudget(durationWeeks), reasoningTokens: REASONING_FOR.plan_generation, cacheableSystemPrefix: COACH_STATIC_BLOCK },
         );
 
         for await (const chunk of generator) {

@@ -23,7 +23,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { callOpenRouter } from '@/lib/ai/openrouter';
 import { COACH_STATIC_BLOCK } from '@/lib/ai/coach-prompts';
-import { MODEL_FOR } from '@/lib/ai/model-registry';
+import { MODEL_FOR, REASONING_FOR } from '@/lib/ai/model-registry';
 import { buildTrainingState, formatTrainingState } from '@/lib/coach/training-state';
 import { evaluateTriggers, shouldPropose, describeNoChange } from '@/lib/coach/proposal-triggers';
 import { getActiveMacroPlan, phaseForWeek, formatMacroPlan } from '@/lib/coach/macro-plan';
@@ -168,7 +168,7 @@ export async function proposeForUser(userId: string, weekStart: string): Promise
       { role: 'system', content: systemPrompt },
       { role: 'user', content: 'Propose the adjustment. Return ONLY the raw JSON object.' },
     ],
-    { apiKey, model: MODEL_FOR.plan_generation, maxTokens: 8000, cacheableSystemPrefix: COACH_STATIC_BLOCK },
+    { apiKey, model: MODEL_FOR.plan_generation, maxTokens: 8000, reasoningTokens: REASONING_FOR.plan_generation, cacheableSystemPrefix: COACH_STATIC_BLOCK },
   );
 
   if (response.error) {

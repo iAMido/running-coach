@@ -19,7 +19,7 @@ async function main() {
   const { getClimbBaseline } = await import('../lib/db/runs');
   const { callOpenRouter } = await import('../lib/ai/openrouter');
   const { COACH_STATIC_BLOCK } = await import('../lib/ai/coach-prompts');
-  const { MODEL_FOR } = await import('../lib/ai/model-registry');
+  const { MODEL_FOR, REASONING_FOR } = await import('../lib/ai/model-registry');
   const { saveMacroPlan, formatMacroPlan } = await import('../lib/coach/macro-plan');
   const { exemplarsForRequest } = await import('../lib/coach/plan-exemplars-db');
 
@@ -61,7 +61,7 @@ async function main() {
 
   const res = await callOpenRouter(
     [{ role: 'system', content: prompt }, { role: 'user', content: 'Design my season. Return ONLY the raw JSON object.' }],
-    { apiKey: process.env.OPENROUTER_API_KEY!, model: MODEL_FOR.plan_generation, maxTokens: 6000, cacheableSystemPrefix: COACH_STATIC_BLOCK },
+    { apiKey: process.env.OPENROUTER_API_KEY!, model: MODEL_FOR.plan_generation, maxTokens: 6000, reasoningTokens: REASONING_FOR.plan_generation, cacheableSystemPrefix: COACH_STATIC_BLOCK },
   );
   if (res.error) { console.error(res.error); process.exit(1); }
   const f = res.content.indexOf('{'), l = res.content.lastIndexOf('}');
