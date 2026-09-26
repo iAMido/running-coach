@@ -66,7 +66,8 @@ export async function GET() {
   const warningCounts: Record<string, number> = {};
   let preflightWarnings = 0;
   for (const c of calls) {
-    const arr = c.preflight_warnings || [];
+    // ':info' entries are context (no active plan, a rest day), not faults.
+    const arr = (c.preflight_warnings || []).filter((w) => !w.endsWith(':info'));
     preflightWarnings += arr.length;
     for (const w of arr) {
       const code = w.split(':')[0];

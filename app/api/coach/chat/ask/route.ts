@@ -125,6 +125,14 @@ export async function POST(request: NextRequest) {
     // Get the user's query from the last message
     const lastUserMessage = messages.filter(m => m.role === 'user').pop();
     const query = lastUserMessage?.content || '';
+    // Book search for a SHORT follow-up ("2. Don't know", "1 2 days before")
+    // also carries the coach's previous message — usually the question being
+    // answered. Searched alone, those words matched no book, and the coach
+    // answered follow-ups with no methodology at all (6 of 16 chats in one
+    // week). The query type is still judged on the athlete's own words.
+    const previousCoach = [...messages].reverse().find(m => m.role === 'assistant')?.content ?? '';
+    const isShortFollowUp = query.trim().split(/\s+/).length < 12 && previousCoach.length > 0;
+    const retrievalQuery = isShortFollowUp ? `${previousCoach.slice(-600)}\n\nAthlete: ${query}` : query;
 
     // Resolve or create a chat session. The page sends sessionId on
     // continuing conversations; on the very first turn we create one and
@@ -154,7 +162,14 @@ export async function POST(request: NextRequest) {
       getActivePlan(userId),
     ]);
 
-    const context = await buildContext(userId, query, queryType, { plan: activePlan });
+    let context = await buildContext(userId, retrievalQuery, queryType, { plan: activePlan });
+    // Safety net for longer conversational replies ("Can you take me from
+    // here?"): if the books matched nothing, search once more with the coach's
+    // previous message included. Costs a second search only when the first
+    // came back empty.
+    if (context.bookContext.sources.length === 0 && !isShortFollowUp && previousCoach) {
+      context = await buildContext(userId, `${previousCoach.slice(-600)}\n\nAthlete: ${query}`, queryType, { plan: activePlan });
+    }
 
     let currentWeek = 1;
     if (isPlanModification && activePlan) {

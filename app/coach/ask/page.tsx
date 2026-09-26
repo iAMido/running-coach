@@ -15,7 +15,7 @@ interface ChatSession {
 interface SupervisorWarning {
   code: string;
   message: string;
-  severity: 'warn' | 'block';
+  severity: 'info' | 'warn' | 'block';
 }
 type DisplayMessage = ChatMessage & { supervisor?: { warnings: SupervisorWarning[] } };
 
@@ -429,7 +429,7 @@ export default function AskCoachPage() {
                     </div>
                   )}
                   <div className="max-w-[80%] flex flex-col gap-1.5">
-                    {message.role === 'assistant' && message.supervisor && message.supervisor.warnings.length > 0 && (
+                    {message.role === 'assistant' && message.supervisor && message.supervisor.warnings.some((w) => w.severity !== 'info') && (
                       <div
                         className="flex flex-wrap items-center gap-1.5 text-[11px] rounded-lg px-2.5 py-1.5"
                         style={{
@@ -437,11 +437,11 @@ export default function AskCoachPage() {
                           border: '1px solid oklch(0.90 0.08 75)',
                           color: 'oklch(0.40 0.10 75)',
                         }}
-                        title={message.supervisor.warnings.map(w => `${w.code}: ${w.message}`).join('\n')}
+                        title={message.supervisor.warnings.filter(w => w.severity !== 'info').map(w => `${w.code}: ${w.message}`).join('\n')}
                       >
                         <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-                        <span className="font-medium">Coach context note{message.supervisor.warnings.length > 1 ? 's' : ''}:</span>
-                        {message.supervisor.warnings.map(w => (
+                        <span className="font-medium">Coach context note{message.supervisor.warnings.filter(w => w.severity !== 'info').length > 1 ? 's' : ''}:</span>
+                        {message.supervisor.warnings.filter(w => w.severity !== 'info').map(w => (
                           <span
                             key={w.code}
                             className="rc-mono"

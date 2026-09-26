@@ -15,7 +15,12 @@ export interface PreflightWarning {
   /** Human-readable explanation surfaced in metadata / logs. */
   message: string;
   /** 'block' fails the call; 'warn' continues but records the warning. */
-  severity: 'warn' | 'block';
+  /**
+   * 'info' = context the coach should know but nothing is wrong (no active
+   * plan, a rest day). Still shown to the model; NOT counted as a warning in
+   * Coach Health and not shown as a warning chip in chat.
+   */
+  severity: 'info' | 'warn' | 'block';
 }
 
 export interface PreflightResult {

@@ -168,13 +168,21 @@ export function validateContext(input: PreflightInput): PreflightResult {
     case 'daily_advice':
     case 'ask_coach':
     case 'grocky': {
-      // Soft check: does the AI know what was planned for today?
-      const todayPlan = plan ? plannedWorkoutForDate(plan, nowInUserTz()) : null;
-      if (!todayPlan) {
+      // Does the AI know what was planned for today? Both outcomes are
+      // CONTEXT, not faults: no plan at all is one ongoing state (it was
+      // counted as a warning on every chat message — 14 in a week), and a day
+      // with nothing planned is usually a rest day.
+      if (!plan) {
+        warnings.push({
+          code: 'no_active_plan',
+          message: 'There is no active training plan — the coach is answering without one.',
+          severity: 'info',
+        });
+      } else if (!plannedWorkoutForDate(plan, nowInUserTz())) {
         warnings.push({
           code: 'no_planned_today',
-          message: 'No planned workout found for today in the active plan.',
-          severity: 'warn',
+          message: 'Nothing is planned for today (a rest day, or outside the plan).',
+          severity: 'info',
         });
       }
       break;
