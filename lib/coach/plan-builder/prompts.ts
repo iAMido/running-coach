@@ -17,18 +17,22 @@ import {
 } from '@/lib/ai/coach-prompts';
 import type { PlanWeek } from '@/lib/db/types';
 import { formatResearch } from './prepare';
+import { weekOneLabel } from './dates';
 import type { BuildRequest, CoherenceIssue, OutlineWeek, PlanOutline, PreparedStage, Violation } from './types';
 
 function params(req: BuildRequest, prep: PreparedStage): string {
   return [
     '## PLAN PARAMETERS',
     `- Type: ${req.planType}`,
-    `- Duration: ${req.durationWeeks} weeks (week 1 starts this Sunday-to-Saturday week)`,
+    `- Duration: ${req.durationWeeks} weeks. Week 1 is ${weekOneLabel(prep.startDate)}; weeks run Sunday to Saturday.`,
+    prep.weekOneSoFar
+      ? `- Week 1 is already under way: ${prep.weekOneSoFar.runs} run(s), ${prep.weekOneSoFar.km} km logged since Sunday. Treat those as done and prescribe only the rest of the week.`
+      : '',
     `- Runs per week: ${req.runsPerWeek}`,
     `- Target race: ${req.targetRace || 'none'}`,
     `- Training days: ${prep.trainingDaysText ?? 'NOT SPECIFIED — say so in the rationale instead of assuming a schedule'}`,
     `- Notes from the athlete: ${req.notes || 'none'}`,
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 }
 
 function defaultPhaseSplit(req: BuildRequest, prep: PreparedStage): string {

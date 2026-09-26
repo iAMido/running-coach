@@ -40,6 +40,8 @@ import {
 import { TOKEN_BUDGETS_PER_QUERY } from '@/lib/rag/types';
 import { MODEL_FOR, REASONING_FOR } from '@/lib/ai/model-registry';
 import { buildPlanGenerationContext } from '@/lib/rag/plan-generation-context';
+import { planStartSunday } from '@/lib/coach/plan-builder/dates';
+import { userDateStr } from '@/lib/utils/user-time';
 
 void callOpenRouter; // streaming-only, but referenced via openrouter types
 
@@ -206,7 +208,9 @@ export async function POST(request: NextRequest) {
           plan_type: planType,
           plan_json: planJson,
           duration_weeks: durationWeeks,
-          start_date: new Date().toISOString().split('T')[0],
+          // Week 1 is the Sunday-Saturday week containing start_date, so "today"
+          // on a Saturday began the plan with a finished week. See dates.ts.
+          start_date: planStartSunday(userDateStr()),
           current_week_num: 1,
           status: 'active',
           // Which season this block serves, and which phase of it. Null for a

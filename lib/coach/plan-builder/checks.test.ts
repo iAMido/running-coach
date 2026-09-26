@@ -3,6 +3,7 @@ import { expect, test } from 'bun:test';
 import type { PlanWeek, Workout } from '@/lib/db/types';
 import { checkCoherence, checkPlan, inclineVertFromDescription, parseKm, parseTargetHr, type CheckContext } from './checks';
 import type { PlanOutline } from './types';
+import { planStartSunday } from './dates';
 
 const run = (type: string, km: number, extra: Partial<Workout> = {}): Workout =>
   ({ type, distance: `${km} km`, elevation_gain_m: 50, ...extra });
@@ -132,6 +133,8 @@ test('incline arithmetic reads the forms writers use, and ignores percentages th
   expect(v('WU 15min easy + BENCHMARK 20min at 10%/5.5km/h (~183m)')).toBe(183);
   expect(v('5x5 min @12% hike')).toBe(250); // default 5.0 km/h at 12%
   expect(v('30min steady Z2-Z3 RPE 2-3 | CD 10min')).toBeNull();
+  // The speed after a comma belongs to the same block (193 m, not 303 m).
+  expect(v('WU 10min | 30 min at 11%, 3.5 km/h, hands on quads')).toBe(193);
   expect(v('Easy 40min, 85% of runs easy')).toBeNull();
 });
 
@@ -139,4 +142,12 @@ test('a treadmill session labelled far below what it climbs is an error', () => 
   const w = week(1, 30, {}, { Wednesday: run('Easy Run + Hike', 6, { elevation_gain_m: 18, description: '25min easy + 30min hike at 10-12%/5km/h' }) });
   const v = checkPlan([w, week(2, 32), week(3, 34)], ctx);
   expect(rules(v)).toContain('incline_vert_math');
+});
+
+test('week 1 starts this week Sun-Tue, next Sunday Wed-Sat — never in a week that is over', () => {
+
+  expect(planStartSunday('2026-09-27')).toBe('2026-09-27'); // Sunday
+  expect(planStartSunday('2026-09-29')).toBe('2026-09-27'); // Tuesday
+  expect(planStartSunday('2026-09-30')).toBe('2026-10-04'); // Wednesday
+  expect(planStartSunday('2026-09-26')).toBe('2026-09-27'); // Saturday
 });

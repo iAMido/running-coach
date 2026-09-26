@@ -62,6 +62,14 @@ export interface Research {
 }
 
 export interface PreparedStage {
+  /**
+   * Sunday that week 1 begins, YYYY-MM-DD. Saved as the plan's start_date.
+   * Not "today": week 1 is the Sunday-Saturday week containing start_date, so
+   * a plan built on a Saturday used to begin with a week that was already over.
+   */
+  startDate: string;
+  /** Runs already logged in week 1 when it starts this week. */
+  weekOneSoFar: { runs: number; km: number } | null;
   athlete: AthleteBrief;
   race: RaceBrief;
   research: Research;

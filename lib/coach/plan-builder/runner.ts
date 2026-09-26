@@ -363,7 +363,8 @@ async function runStage(row: PlanBuildRow): Promise<StageResult> {
         plan_type: row.request.planType,
         plan_json: planJson,
         duration_weeks: row.request.durationWeeks,
-        start_date: new Date().toISOString().split('T')[0],
+        // The Sunday the outline was written for — never "today".
+        start_date: row.prepared!.startDate,
         current_week_num: 1,
         status: 'active',
         macro_plan_id: row.prepared!.research.macroPlanId,

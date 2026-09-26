@@ -168,7 +168,11 @@ export function inclineVertFromDescription(desc: string | undefined | null): num
   if (!desc) return null;
   let total = 0;
   let found = false;
-  for (const seg of desc.split(/[|+;,]/)) {
+  // Segments split on | + ; — NOT commas: "30 min at 11%, 3.5 km/h" keeps its
+  // speed with its grade. Splitting on the comma dropped the speed, fell back
+  // to the table's 5.5 km/h and overstated the climb 57% (caught by the head
+  // coach's review on the second staged build).
+  for (const seg of desc.split(/[|+;]/)) {
     const grade = seg.match(/(?:at|@)\s*(\d+(?:\.\d+)?)(?:\s*[-–]\s*(\d+(?:\.\d+)?))?\s*%/i)
       ?? seg.match(/(\d+(?:\.\d+)?)(?:\s*[-–]\s*(\d+(?:\.\d+)?))?\s*%\s*(?:grade|incline)/i);
     if (!grade) continue;

@@ -25,6 +25,9 @@ import { getActiveMacroPlan, phaseForWeek, formatMacroPlan } from '@/lib/coach/m
 import { daysBetweenDateStr, userDateStr, userDateStrDaysAgo } from '@/lib/utils/user-time';
 import type { AthleteProfile } from '@/lib/db/types';
 import type { AthleteBrief, BuildRequest, PreparedStage, RaceBrief, Research } from './types';
+import { planStartSunday } from './dates';
+
+export { planStartSunday, weekOneLabel } from './dates';
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
@@ -96,7 +99,7 @@ async function assessAthlete(
 // Step 2 — the race
 // ---------------------------------------------------------------------------
 
-function understandRace(req: BuildRequest, climb: TrainingState['climb'] | undefined): RaceBrief {
+function understandRace(req: BuildRequest, climb: TrainingState['climb'] | undefined, startDate: string): RaceBrief {
   const distanceKm = req.raceDistanceKm ?? null;
   const elevationGainM = req.raceElevationGainM ?? null;
   const vertPerKm = distanceKm && elevationGainM ? round1(elevationGainM / distanceKm) : null;
@@ -105,7 +108,7 @@ function understandRace(req: BuildRequest, climb: TrainingState['climb'] | undef
   let weeksToRace: number | null = null;
   let durationNote: string | null = null;
   if (req.raceDate) {
-    const days = daysBetweenDateStr(userDateStr(), req.raceDate);
+    const days = daysBetweenDateStr(startDate, req.raceDate);
     weeksToRace = Math.max(1, Math.ceil((days + 1) / 7));
     if (weeksToRace > req.durationWeeks) {
       durationNote = `Race day is ${weeksToRace} weeks away; this ${req.durationWeeks}-week plan ends before it. ` +
@@ -239,7 +242,11 @@ export async function prepare(userId: string, req: BuildRequest): Promise<Prepar
   // race gap is the same "his climbing" the athlete brief reports.
   const state = await buildTrainingState(userId, { profile });
   const hasElevation = !!req.raceElevationGainM && req.raceElevationGainM > 0;
-  const race = understandRace(req, hasElevation ? state.climb : undefined);
+  const startDate = planStartSunday(userDateStr());
+  const partial = state.weeks.find((w) => w.isPartial);
+  const weekOneSoFar = partial && partial.weekStart === startDate && partial.runs > 0
+    ? { runs: partial.runs, km: partial.km } : null;
+  const race = understandRace(req, hasElevation ? state.climb : undefined, startDate);
   const [athlete, researched] = await Promise.all([
     assessAthlete(userId, req, state, profile),
     research(userId, req, race, profile),
@@ -250,5 +257,5 @@ export async function prepare(userId: string, req: BuildRequest): Promise<Prepar
     ? (req.trainingDayNotes ? `${days.join(', ')} (${req.trainingDayNotes})` : days.join(', '))
     : null;
 
-  return { athlete, race, research: researched, trainingDaysText };
+  return { startDate, weekOneSoFar, athlete, race, research: researched, trainingDaysText };
 }

@@ -48,7 +48,8 @@ app/
 │   │   ├── chat/grocky/route.ts      # Grocky Balboa (Grok second opinion)
 │   │   ├── feedback/route.ts         # Run feedback CRUD (links to run_id)
 │   │   ├── plans/route.ts            # Training plans CRUD
-│   │   ├── plans/generate/route.ts   # AI plan generation
+│   │   ├── plans/build/route.ts      # Staged plan builder (what the UI uses) — one stage per POST
+│   │   ├── plans/generate/route.ts   # Single-call plan generation (legacy, still callable)
 │   │   ├── plans/adjust/route.ts     # AI plan adjustment
 │   │   ├── profile/route.ts          # Athlete profile
 │   │   ├── reports/route.ts          # Coach reports list/detail
@@ -186,6 +187,26 @@ All tables have RLS enabled with policies for authenticated users.
 
 ### Key Patterns
 
+**Staged plan builder (`lib/coach/plan-builder/`, 2026-09-27) — how plans are built now.** The plan page no longer calls `plans/generate/stream`; it drives `POST /api/coach/plans/build` one stage at a time, and every stage's output lives in `runcoach.plan_builds`:
+
+| stage | what | how |
+|---|---|---|
+| `created` → prepare | athlete brief (last-4-complete-weeks km/vert, longest run, chosen vs actual run days), race brief (gradient, weeks to race, duration mismatch), research **one book search per need** (periodization, strength, climbing, descent, long run, taper, injury) | code + retrieval, ~12 s |
+| `prepared` → outline | phases, **every week's targets**, day roles, strength sessions *by name only*, decisions, rationale | `MODEL_FOR.plan_outline` (Opus 5.5) |
+| `outlined` → write | ≤4-week chunks never crossing a phase, all in parallel, plus a strength writer for the exercises | `plan_writer` (Opus 4.7), ~60 s |
+| `written` → check | `checkPlan` (pure, `checks.ts`); errors are handed back to the chunk's writer verbatim, ≤2 repair rounds | code |
+| `checked` → review | `checkCoherence` (phase joins, recovery alignment, peak vs outline) + head-coach review of the whole plan; must-fix → `coherence_fix` rewrites only those weeks; **≤2 rounds** | `plan_review` (Opus 5.5), ~100 s |
+| `reviewed` → save | the ONLY stage that touches `training_plans`; saves `plan_json.build_report` (rendered as "How this plan was built") | code |
+
+- **One stage per request is load-bearing.** Opus 5.5's thinking cannot be disabled or bounded (see Models); the first outline took 285 s of a 300 s limit before strength exercises were split out and prose capped. Stages are claimed (`running_until`) so a resumed page and an in-flight request never pay for the same call twice; the page resumes an unfinished build on load (`GET /api/coach/plans/build`).
+- **Arithmetic is checked in code, judgement by the reviewer.** The first review caught treadmill sessions labelled at a third of what they climb ("30 min at 10-12%" as +18 m), silently breaking every weekly climbing cap; that became the `incline_vert_math` rule (`inclineVertFromDescription`, grade × speed × time with the treadmill table's default speeds). When the reviewer keeps finding the same measurable thing, turn it into a rule.
+- **Zone label vs bpm is an error, not a note** (>5 bpm outside the label). The single-call generator wrote 23 of them in one 12-week plan ("Z1-Z2 (130-150)" — 150 is Z3), and `zone-discipline.ts` would then score correctly-run sessions as too hard.
+- **Scoring:** `scripts/score-plan.ts --file <plan.json> [--warnings]` runs the same rules over any plan; `scripts/verify-plan-builder.ts` runs a full build in dry-run (`plan_builds.dry_run`, save refuses). Baseline on the same 12-week trail request: single-call 23 errors; staged build 0 (both staged runs) after its own repairs.
+- The reviewer only sees `renderPlanCompact` — a field missing from that rendering reads to it as missing from the plan (it reported absent indoor alternatives that were all present). Render what you want reviewed.
+- **Week 1 is never a finished week.** `start_date` was "today", and week 1 is the Sunday-Saturday week containing it — a plan built on a Saturday opened with a week already over (the reviewer spotted 27.9 km already logged against week 1's 27 km). `planStartSunday` (`plan-builder/dates.ts`): built Sun-Tue → this Sunday, Wed-Sat → next Sunday; prompts state week 1's dates, and an under-way week 1 says what is already done. The legacy routes use the same rule.
+- Measured (2026-09-27, 12-week trail request): prepare 14 s, outline 122 s (was 285 s before strength exercises moved to their own writer and prose was capped), writers 47 s, checks+repairs 69 s, each review round 80-105 s, each fix round 80-110 s; total ~10.5 min over 9 requests. The second review round also caught a bug in the incline parser itself (it split "30 min at 11%, 3.5 km/h" at the comma and lost the speed) and refused the wrong relabel.
+- Legacy `plans/generate` (+`/stream`) routes still work and share the rule text (`PLAN_STRENGTH_RULES`, `PLAN_TARGET_HR_RULES`, `PLAN_DAY_ANCHOR_RULES` in `coach-prompts.ts`). The Saturday weekly-proposal cron is unaffected.
+
 **Expert plan exemplars (2026-09-26).** Ten full-plan JSON exports supplied by the athlete are distilled by `lib/coach/plan-exemplars.ts` (pure, tested) into phase shape, loading rhythm, weekly volume/climb, every *distinct* coaching note, a representative week per phase, and the strength programme — the raw exports are 140 KB–4 MB of mostly repeated serialisation. `scripts/load-plan-exemplars.ts --commit` writes `runcoach.plan_exemplars` and the "Expert Plan Library" RAG book. At generation, `exemplarsForRequest` (`lib/coach/plan-exemplars-db.ts`) picks **2 structure references + 1 strength reference** by `scoreExemplar`: terrain dominates distance (a 21K with 1,300 m gain selects Carmel 33K + 55K, not the half-marathon plan), strength blocks are never structure references, masters strength at age ≥40. Selection is deterministic on purpose — "which plan is shaped like this race" is about terrain and distance, not embedding similarity. The prompt says *learn the structure, do not copy sessions*, and days in references are relative. Wired into plan generate (both), and macro-plan.
 
 The strength extractor handles four encodings in precedence order (`strength_exercises` > `canonical_steps` > `library_workout.steps` > notes). `library_workout` is a trap: in some exports it is the *library template* the session was cloned from, not what was prescribed.
@@ -202,7 +223,7 @@ The strength extractor handles four encodings in precedence order (`strength_exe
 
 **AI Integration:** OpenRouter, with every task's model named in `lib/ai/model-registry.ts` (`MODEL_FOR`). 3-layer RAG provides context: athlete data + coach patterns + book methodology.
 
-**Models (reviewed and measured 2026-09-26):** plan generation / season plan / Saturday proposal → **Opus 4.7**; weekly review → **Opus 5.5**; chat, chat plan edits, plan adjust → **Sonnet 5**; run note, critic, question classifier → **Haiku 4.5**; Grocky → **Grok 4.7** (effort `low`); CalTrack food analysis → GPT-4o-mini (untouched). `chat_quick` is not used by the chat — every chat answer goes to `chat_default`; `chat_quick` only writes the morning-after run note.
+**Models (reviewed and measured 2026-09-26):** plan generation / season plan / Saturday proposal → **Opus 4.7**; staged builder: outline + review → **Opus 5.5**, phase writers → **Opus 4.7**; weekly review → **Opus 5.5**; chat, chat plan edits, plan adjust → **Sonnet 5**; run note, critic, question classifier → **Haiku 4.5**; Grocky → **Grok 4.7** (effort `low`); CalTrack food analysis → GPT-4o-mini (untouched). `chat_quick` is not used by the chat — every chat answer goes to `chat_default`; `chat_quick` only writes the morning-after run note.
 
 - **Reasoning models eat `max_tokens`.** Opus 5.5 and Grok 4.7 cannot have reasoning disabled ("Reasoning is mandatory"); Sonnet 5 reasons on its own when a prompt is hard (0 tokens on a one-liner, 2,048 on the weekly review). Unhandled, a 300-token Opus call ended `length` and the streamed version returned **nothing**. `tokenFields` in `lib/ai/openrouter.ts` (`REASONING_POLICY`) therefore adds thinking headroom ON TOP of `maxTokens` and excludes reasoning from the response, switches Sonnet 5's thinking OFF unless a task asks (`REASONING_FOR`), and steers Grok by `effort` because it ignores token budgets. Every `maxTokens` in the app means visible-answer length. Adding a new model: check whether it reasons before routing a task to it.
 - **Opus 5.5 was rejected for plan generation.** It treats the thinking budget as a hint: given 1,024 it thought 14,241 tokens and was cut off at week 10 of 12 after 265 s (the truncation guard refused the save). The function limit is 300 s; Opus 4.7 writes the same 12-week plan complete in 149 s. Re-test with `scripts/verify-plan-generation.ts --model <id> [--reasoning N]` before changing it.
