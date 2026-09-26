@@ -123,19 +123,34 @@ export function BookUpload({ onAdded }: { onAdded: () => void }) {
   const idx = ingest ? ORDER.indexOf(ingest.stage === 'failed' ? 'uploaded' : ingest.stage) : -1;
 
   return (
-    <div className="rc-card space-y-4">
-      <div className="flex items-center gap-2">
-        <BookPlus className="w-4 h-4" />
-        <h3 className="text-[16px] font-semibold" style={{ color: 'var(--rc-ink)' }}>Add a book</h3>
+    <div className="rc-card p-0 overflow-hidden">
+      <div className="flex items-center justify-between px-6 pt-5 pb-3.5" style={{ borderBottom: '1px solid var(--rc-line)' }}>
+        <div>
+          <div className="rc-kicker mb-1">Upload</div>
+          <h3 className="text-[18px] font-bold" style={{ letterSpacing: '-0.015em', color: 'var(--rc-ink)' }}>Add a book</h3>
+        </div>
+        <div className="p-2.5 rounded-xl" style={{ background: 'var(--rc-blue-soft)', color: 'var(--rc-blue-deep)' }}>
+          <BookPlus className="w-4 h-4" />
+        </div>
       </div>
-      <p className="text-[13px]" style={{ color: 'var(--rc-ink-3)' }}>
+      <div className="p-6 space-y-4">
+      <p className="text-[13px] leading-relaxed" style={{ color: 'var(--rc-ink-3)' }}>
         Upload a book PDF (up to 50 MB, with selectable text). The app reads it, writes its description, methodology and tags,
         splits it into chapters and sections, and adds it to the library the coaches search — then checks they can find it.
       </p>
 
       <div className="flex flex-wrap items-center gap-3">
-        <input ref={inputRef} type="file" accept="application/pdf,.pdf" disabled={working}
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-[13px]" />
+        {/* The native file input is hidden; the label is the styled button. */}
+        <input ref={inputRef} id="book-pdf" type="file" accept="application/pdf,.pdf" disabled={working}
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="sr-only" />
+        <label htmlFor="book-pdf"
+          className={`px-4 py-2 rounded-xl text-[13px] font-medium ${working ? 'opacity-40 pointer-events-none' : 'cursor-pointer'}`}
+          style={{ background: 'var(--rc-surface-2)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink-2)' }}>
+          Choose PDF
+        </label>
+        <span className="text-[13px] truncate max-w-[16rem]" style={{ color: file ? 'var(--rc-ink)' : 'var(--rc-ink-4)' }}>
+          {file ? file.name : 'No file chosen'}
+        </span>
         <button type="button" onClick={add} disabled={!file || working}
           className="px-4 py-2 rounded-xl text-[13px] font-medium disabled:opacity-40" style={{ background: 'var(--rc-blue)', color: 'white' }}>
           {working ? 'Working…' : 'Add book'}
@@ -192,6 +207,7 @@ export function BookUpload({ onAdded }: { onAdded: () => void }) {
           {error ?? ingest?.error} Nothing was added to the library.
         </p>
       )}
+      </div>
     </div>
   );
 }

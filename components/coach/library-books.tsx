@@ -27,11 +27,17 @@ export function LibraryBooks({ books, loading }: { books: LibraryBook[]; loading
   const [open, setOpen] = useState<string | null>(null);
   const muted = { color: 'var(--rc-ink-3)' };
   return (
-    <div className="rc-card space-y-3">
-      <div className="flex items-center gap-2">
-        <BookOpen className="w-4 h-4" />
-        <h3 className="text-[16px] font-semibold" style={{ color: 'var(--rc-ink)' }}>Books the coaches read ({books.length})</h3>
+    <div className="rc-card p-0 overflow-hidden">
+      <div className="flex items-center justify-between px-6 pt-5 pb-3.5" style={{ borderBottom: '1px solid var(--rc-line)' }}>
+        <div>
+          <div className="rc-kicker mb-1">Library</div>
+          <h3 className="text-[18px] font-bold" style={{ letterSpacing: '-0.015em', color: 'var(--rc-ink)' }}>Books the coaches read ({books.length})</h3>
+        </div>
+        <div className="p-2.5 rounded-xl" style={{ background: 'var(--rc-blue-soft)', color: 'var(--rc-blue-deep)' }}>
+          <BookOpen className="w-4 h-4" />
+        </div>
       </div>
+      <div className="p-6 space-y-3">
       <p className="text-[13px]" style={muted}>
         Every book below is searched when the coaches build plans, review your weeks and answer you.
         {books.length > 0 && ` ${books.reduce((a, b) => a + b.sections, 0).toLocaleString()} sections in total.`}
@@ -73,6 +79,7 @@ export function LibraryBooks({ books, loading }: { books: LibraryBook[]; loading
           })}
         </div>
       )}
+      </div>
     </div>
   );
 }

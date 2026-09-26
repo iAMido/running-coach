@@ -14,7 +14,7 @@ export function PlanBuildReport({ report, unit = 'Week' }: { report: BuildReport
   const r = report.coherence;
   const muted = { color: 'var(--rc-ink-3)' };
   return (
-    <details className="rc-card group">
+    <details className="rc-card p-5 group">
       <summary className="cursor-pointer list-none flex items-center justify-between">
         <span className="rc-kicker">{unit === 'Phase' ? 'HOW THIS SEASON WAS BUILT' : 'HOW THIS PLAN WAS BUILT'}</span>
         <span className="rc-mono text-[11px]" style={muted}>
