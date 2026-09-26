@@ -27,6 +27,8 @@
  */
 
 import { supabase } from '@/lib/db/supabase';
+import { planStartSunday } from '@/lib/coach/plan-builder/dates';
+import { userDateStr } from '@/lib/utils/user-time';
 
 export interface MacroPhase {
   phase_number: number;
@@ -43,6 +45,70 @@ export interface MacroPhase {
   /** What must be true to advance. Each must be checkable against TrainingState. */
   exit_criteria: string[];
   key_sessions: string[];
+
+  // --- The season head coach's brief for the phase (2026-09-27) -------------
+  // Written with the season, handed to the plan builder as the contract when
+  // the phase is built. Optional: seasons designed before briefs existed have
+  // none, and every reader treats absence as "no brief", never as "no rules".
+  /** One sentence: what this phase is for. */
+  goal?: string;
+  /** Why the phase is this long. */
+  why_this_length?: string;
+  must_haves?: string[];
+  /** The don'ts. */
+  avoid?: string[];
+  /** Warning signs that mean ease off or extend (first-step heel pain, readiness falling). */
+  watch_for?: string[];
+  /** What this phase hands to the next one. */
+  handoff?: string;
+  /**
+   * Measurable targets the app evaluates from the athlete's data. They drive
+   * the weekly reviewer's adjustments and the "phase nearly done" decision.
+   */
+  kpis?: PhaseKpi[];
+}
+
+/** What a KPI measures. Every metric is computed from data this app holds. */
+export type KpiMetric =
+  | 'weekly_km'          // km in a Sun-Sat week
+  | 'weekly_vert_m'      // metres climbed in a week (logged; indoor incline often records 0)
+  | 'long_run_km'        // longest single run in the phase
+  | 'session_vert_m'     // biggest single-run climb in the phase
+  | 'adherence_pct'      // % of the phase's runs on his stated training days
+  | 'decoupling_pctile'  // median decoupling of the phase's runs as a percentile of his OWN history
+  | 'form'               // CTL - ATL, latest
+  | 'ctl';               // chronic training load, latest
+
+export const KPI_METRICS: KpiMetric[] = [
+  'weekly_km', 'weekly_vert_m', 'long_run_km', 'session_vert_m', 'adherence_pct', 'decoupling_pctile', 'form', 'ctl',
+];
+
+export interface PhaseKpi {
+  /** Short stable id, e.g. "vert_700x3". */
+  id: string;
+  /** How the athlete reads it: "3 weeks in a row at 700+ m climbing". */
+  label: string;
+  metric: KpiMetric;
+  comparator: 'gte' | 'lte';
+  target: number;
+  /**
+   * For weekly metrics: how many CONSECUTIVE complete weeks must meet the
+   * target. Ignored for session and latest-value metrics.
+   */
+  consecutive_weeks?: number;
+}
+
+/** What actually happened to a phase, as opposed to what the season planned. */
+export interface PhaseProgress {
+  phase_number: number;
+  status: 'planned' | 'active' | 'done';
+  /** Sunday the phase actually started; null until it is built. */
+  start_date: string | null;
+  /** Weeks added because its KPIs were not met in time. */
+  extension_weeks: number;
+  /** Training plans built for this phase, oldest first (an extension adds one). */
+  plan_ids: string[];
+  ended_on: string | null;
 }
 
 export interface MacroPlan {
@@ -56,6 +122,10 @@ export interface MacroPlan {
   horizon_weeks: number;
   phases: MacroPhase[];
   rationale: string | null;
+  /** Sunday the season's first phase starts. */
+  start_date: string | null;
+  /** Null on seasons created before phase tracking; see `progressOf`. */
+  phase_progress: PhaseProgress[] | null;
   status: 'active' | 'superseded' | 'completed';
   revision: number;
   supersedes: string | null;
@@ -86,7 +156,8 @@ export async function getActiveMacroPlan(userId: string): Promise<MacroPlan | nu
  */
 export async function saveMacroPlan(
   userId: string,
-  plan: Omit<MacroPlan, 'id' | 'user_id' | 'status' | 'revision' | 'supersedes' | 'created_at' | 'updated_at'>,
+  plan: Omit<MacroPlan, 'id' | 'user_id' | 'status' | 'revision' | 'supersedes' | 'created_at' | 'updated_at' | 'phase_progress' | 'start_date'>
+    & { start_date?: string | null },
 ): Promise<MacroPlan | null> {
   const previous = await getActiveMacroPlan(userId);
 
@@ -108,6 +179,12 @@ export async function saveMacroPlan(
       horizon_weeks: plan.horizon_weeks,
       phases: plan.phases,
       rationale: plan.rationale,
+      // Same week-1 rule as a training plan: never a week that is already over.
+      start_date: plan.start_date ?? planStartSunday(userDateStr()),
+      phase_progress: plan.phases.map((p) => ({
+        phase_number: p.phase_number, status: 'planned', start_date: null,
+        extension_weeks: 0, plan_ids: [], ended_on: null,
+      } satisfies PhaseProgress)),
       status: 'active',
       revision: (previous?.revision ?? 0) + 1,
       supersedes: previous?.id ?? null,

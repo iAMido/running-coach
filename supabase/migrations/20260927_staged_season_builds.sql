@@ -14,3 +14,14 @@ ALTER TABLE runcoach.plan_builds ADD COLUMN IF NOT EXISTS macro_plan_id uuid;
 
 -- How the season was built and checked, shown under the season on the plan page.
 ALTER TABLE runcoach.macro_plans ADD COLUMN IF NOT EXISTS build_report jsonb;
+
+-- Phase-by-phase seasons: the season head coach writes a brief (goal, KPIs,
+-- must-haves, don'ts, warning signs, hand-over) per phase, stored inside
+-- `phases`; each phase is then built as ONE training plan when it is due.
+-- `start_date` anchors the season's calendar; `phase_progress` records what
+-- actually happened — which phase is active, when it really started, how many
+-- weeks it was extended, and which training plans served it.
+ALTER TABLE runcoach.macro_plans ADD COLUMN IF NOT EXISTS start_date date;
+ALTER TABLE runcoach.macro_plans ADD COLUMN IF NOT EXISTS phase_progress jsonb;
+-- Existing seasons had no start date; their creation day is the best anchor.
+UPDATE runcoach.macro_plans SET start_date = (created_at AT TIME ZONE 'Asia/Jerusalem')::date WHERE start_date IS NULL;
