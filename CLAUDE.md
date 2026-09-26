@@ -235,6 +235,8 @@ The strength extractor handles four encodings in precedence order (`strength_exe
 
 **AI Integration:** OpenRouter, with every task's model named in `lib/ai/model-registry.ts` (`MODEL_FOR`). 3-layer RAG provides context: athlete data + coach patterns + book methodology.
 
+**Provider fallback — NanoGPT (2026-09-27).** `callOpenRouter` / `streamOpenRouter` try OpenRouter first and retry the SAME request on NanoGPT (`https://nano-gpt.com/api/v1/chat/completions`, `NANOGPT_API_KEY`) only when OpenRouter itself fails: network error, 5xx, 429, 408, 402 (credits out) or 401/403 (key problem) — never on 400/404/422, which would fail there too (`shouldFallBack`). Streams fall back only before the first token. Measured before wiring: every `MODEL_FOR` model has the same id and the same price on NanoGPT, answers, streams, reasons (the `reasoning` body works unchanged; reasoning arrives in a separate field the stream reader ignores) and returns `usage.cost`, with the account on zero-data-retention routes only. One difference: Claude caching there needs `prompt_caching: { enabled: true }` (`requestBody`) — Opus 4.7 read 0 of 4,129 tokens from cache without it, 4,123 with it. Haiku 4.5 never caches below Anthropic's ~4k-token minimum on either provider. `OpenRouterResponse.provider` says who answered; the plan builder logs `model (nanogpt)` in coach_calls. NanoGPT account settings: request logging OFF, support access OFF, ZDR-only ON, a per-key USD/day cap.
+
 **Models (reviewed and measured 2026-09-26):** plan generation / season plan / Saturday proposal → **Opus 4.7**; staged builder: outline + review → **Opus 5.5**, phase writers → **Opus 4.7**; weekly review → **Opus 5.5**; chat, chat plan edits, plan adjust → **Sonnet 5**; run note, critic, question classifier → **Haiku 4.5**; Grocky → **Grok 4.7** (effort `low`); CalTrack food analysis → GPT-4o-mini (untouched). `chat_quick` is not used by the chat — every chat answer goes to `chat_default`; `chat_quick` only writes the morning-after run note.
 
 - **Reasoning models eat `max_tokens`.** Opus 5.5 and Grok 4.7 cannot have reasoning disabled ("Reasoning is mandatory"); Sonnet 5 reasons on its own when a prompt is hard (0 tokens on a one-liner, 2,048 on the weekly review). Unhandled, a 300-token Opus call ended `length` and the streamed version returned **nothing**. `tokenFields` in `lib/ai/openrouter.ts` (`REASONING_POLICY`) therefore adds thinking headroom ON TOP of `maxTokens` and excludes reasoning from the response, switches Sonnet 5's thinking OFF unless a task asks (`REASONING_FOR`), and steers Grok by `effort` because it ignores token budgets. Every `maxTokens` in the app means visible-answer length. Adding a new model: check whether it reasons before routing a task to it.
@@ -532,6 +534,9 @@ OPENAI_API_KEY=<for-embeddings>
 # Strava
 STRAVA_CLIENT_ID=<strava-app-id>
 STRAVA_CLIENT_SECRET=<strava-app-secret>
+
+# Fallback AI provider, used only when OpenRouter fails (see "Provider fallback")
+NANOGPT_API_KEY=<nanogpt-api-key>
 
 # intervals.icu (https://intervals.icu/settings -> Developer Settings)
 INTERVALS_API_KEY=<intervals-api-key>

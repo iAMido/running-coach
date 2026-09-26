@@ -60,3 +60,17 @@ test('plan generation does not switch thinking on for a model that does not need
   const f = tokenFields(MODEL_FOR.plan_generation, 28_000, REASONING_FOR.plan_generation);
   expect(f).toEqual({ max_tokens: 28_000 });
 });
+
+test('fallback: only OpenRouter-side failures switch to NanoGPT, never a malformed request', async () => {
+  const { shouldFallBack } = await import('@/lib/ai/openrouter');
+  for (const s of [null, 500, 502, 503, 429, 408, 402, 401, 403]) expect(shouldFallBack(s)).toBe(true);
+  for (const s of [400, 404, 422]) expect(shouldFallBack(s)).toBe(false);
+});
+
+test('fallback: NanoGPT gets the Claude caching flag (Opus 4.7 did not cache there without it)', async () => {
+  const { requestBody } = await import('@/lib/ai/openrouter');
+  const base = { model: 'x', messages: [] };
+  expect(requestBody('nanogpt', 'anthropic/claude-opus-4.7', base)).toEqual({ ...base, prompt_caching: { enabled: true } });
+  expect(requestBody('openrouter', 'anthropic/claude-opus-4.7', base)).toEqual(base);
+  expect(requestBody('nanogpt', 'x-ai/grok-4.7', base)).toEqual(base);
+});

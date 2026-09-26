@@ -6,6 +6,58 @@ import type { ChatMessage } from '@/lib/db/types';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
+/**
+ * Fallback provider: NanoGPT (https://nano-gpt.com/api), used only when
+ * OpenRouter itself fails (2026-09-27). Chosen because it is a second,
+ * independent route to the SAME models under the SAME ids at the SAME prices
+ * — measured: every MODEL_FOR model answers, streams, reasons and reports
+ * `usage.cost` through it unchanged, with the account set to zero-data-
+ * retention routes only. Active only when NANOGPT_API_KEY is set.
+ */
+const NANOGPT_API_URL = 'https://nano-gpt.com/api/v1/chat/completions';
+
+type Provider = 'openrouter' | 'nanogpt';
+
+/**
+ * Whether a failure is OpenRouter's (worth trying the second provider) or the
+ * request's own (would fail there too). Network errors, timeouts, 5xx, rate
+ * limits, 402 (OpenRouter credits exhausted) and 401/403 (key revoked) fall
+ * back; 400/404/422 — a malformed request or an unknown model — do not.
+ */
+export function shouldFallBack(status: number | null): boolean {
+  if (status === null) return true; // network error / no response
+  return status >= 500 || status === 429 || status === 408 || status === 402 || status === 401 || status === 403;
+}
+
+/**
+ * The same request body for either provider. NanoGPT needs one addition:
+ * `prompt_caching: { enabled: true }` — without it Opus 4.7 (the plan
+ * writers) never cached there (0 of 4,129 tokens read on a repeat call); with
+ * it the repeat read 4,123. OpenRouter needs no flag.
+ */
+export function requestBody(provider: Provider, model: string, base: Record<string, unknown>): Record<string, unknown> {
+  return provider === 'nanogpt' && model.startsWith('anthropic/')
+    ? { ...base, prompt_caching: { enabled: true } }
+    : base;
+}
+
+function providerRequest(provider: Provider, openRouterKey: string): { url: string; headers: Record<string, string> } | null {
+  if (provider === 'nanogpt') {
+    const key = process.env.NANOGPT_API_KEY;
+    if (!key) return null;
+    return { url: NANOGPT_API_URL, headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' } };
+  }
+  return {
+    url: OPENROUTER_API_URL,
+    headers: {
+      Authorization: `Bearer ${openRouterKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+      'X-Title': 'AI Running Coach',
+    },
+  };
+}
+
 export interface OpenRouterConfig {
   apiKey: string;
   model?: string;
@@ -110,8 +162,10 @@ export interface OpenRouterResponse {
   promptTokens?: number | null;
   /** Of `promptTokens`, how many were read from the prompt cache (billed at ~10%). */
   cachedTokens?: number | null;
-  /** What OpenRouter actually charged for the call, USD. */
+  /** What the provider actually charged for the call, USD. */
   costUsd?: number | null;
+  /** Which provider answered — 'nanogpt' means OpenRouter failed and the fallback served it. */
+  provider?: 'openrouter' | 'nanogpt';
 }
 
 /**
@@ -161,54 +215,64 @@ export async function callOpenRouter(
   const payloadMessages = cacheableSystemPrefix
     ? applySystemPrefix(messages, cacheableSystemPrefix, model.startsWith('anthropic/'))
     : messages;
+  const base = {
+    model,
+    ...tokenFields(model, maxTokens, reasoningTokens),
+    messages: payloadMessages,
+    // Usage accounting: both providers return the actual charge and cache
+    // reads, so cost is measured rather than estimated from token counts.
+    usage: { include: true },
+  };
 
+  const primary = await postChat('openrouter', apiKey, model, base);
+  if (primary.ok || !shouldFallBack(primary.status) || !process.env.NANOGPT_API_KEY) return primary.result;
+
+  console.warn(`OpenRouter failed (${primary.status ?? 'network'}: ${primary.result.error}); retrying ${model} on NanoGPT`);
+  const fallback = await postChat('nanogpt', apiKey, model, base);
+  if (fallback.ok) return fallback.result;
+  return {
+    content: '',
+    error: `OpenRouter failed (${primary.result.error}) and the NanoGPT fallback failed too (${fallback.result.error}).`,
+  };
+}
+
+/** One chat call to one provider. `status` is null when no HTTP response arrived. */
+async function postChat(
+  provider: Provider, openRouterKey: string, model: string, base: Record<string, unknown>,
+): Promise<{ ok: boolean; status: number | null; result: OpenRouterResponse }> {
+  const req = providerRequest(provider, openRouterKey);
+  if (!req) return { ok: false, status: null, result: { content: '', error: `${provider} is not configured` } };
+  const name = provider === 'nanogpt' ? 'NanoGPT' : 'OpenRouter';
   try {
-    const response = await fetch(OPENROUTER_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-        'X-Title': 'AI Running Coach',
-      },
-      body: JSON.stringify({
-        model,
-        ...tokenFields(model, maxTokens, reasoningTokens),
-        messages: payloadMessages,
-        // OpenRouter usage accounting: returns the actual charge and cache
-        // reads, so cost is measured rather than estimated from token counts.
-        usage: { include: true },
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const errorMessage = errorData.error?.message || `API error: ${response.status}`;
-      return { content: '', error: errorMessage };
+    const response = await fetch(req.url, { method: 'POST', headers: req.headers, body: JSON.stringify(requestBody(provider, model, base)) });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: any = await response.json().catch(() => ({}));
+    if (!response.ok || data.error) {
+      // OpenRouter sometimes answers 200 with an error body carrying the real code.
+      const code = typeof data.error?.code === 'number' ? data.error.code : response.ok ? 502 : response.status;
+      const message = (typeof data.error === 'string' ? data.error : data.error?.message) || `${name} error ${response.status}`;
+      return { ok: false, status: code, result: { content: '', error: message } };
     }
-
-    const data = await response.json();
-
-    if (data.error) {
-      return { content: '', error: data.error.message || 'Unknown error' };
-    }
-
     if (!data.choices || data.choices.length === 0) {
-      return { content: '', error: 'No response from model' };
+      return { ok: false, status: 502, result: { content: '', error: `No response from model (${name})` } };
     }
-
     return {
-      content: data.choices[0].message.content,
-      finishReason: data.choices[0].finish_reason ?? null,
-      completionTokens: data.usage?.completion_tokens ?? null,
-      reasoningTokensUsed: data.usage?.completion_tokens_details?.reasoning_tokens ?? null,
-      promptTokens: data.usage?.prompt_tokens ?? null,
-      cachedTokens: data.usage?.prompt_tokens_details?.cached_tokens ?? null,
-      costUsd: typeof data.usage?.cost === 'number' ? data.usage.cost : null,
+      ok: true,
+      status: response.status,
+      result: {
+        content: data.choices[0].message.content,
+        finishReason: data.choices[0].finish_reason ?? null,
+        completionTokens: data.usage?.completion_tokens ?? null,
+        reasoningTokensUsed: data.usage?.completion_tokens_details?.reasoning_tokens ?? data.usage?.reasoning_tokens ?? null,
+        promptTokens: data.usage?.prompt_tokens ?? null,
+        cachedTokens: data.usage?.prompt_tokens_details?.cached_tokens ?? data.usage?.cache_read_input_tokens ?? null,
+        costUsd: typeof data.usage?.cost === 'number' ? data.usage.cost : null,
+        provider,
+      },
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return { content: '', error: `Failed to call OpenRouter: ${message}` };
+    return { ok: false, status: null, result: { content: '', error: `Failed to call ${name}: ${message}` } };
   }
 }
 
@@ -229,22 +293,26 @@ export async function* streamOpenRouter(
     ? applySystemPrefix(messages, cacheableSystemPrefix, model.startsWith('anthropic/'))
     : messages;
 
-  const response = await fetch(OPENROUTER_API_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-      'X-Title': 'AI Running Coach',
-    },
-    body: JSON.stringify({
-      model,
-      ...tokenFields(model, maxTokens, reasoningTokens),
-      messages: payloadMessages,
-      stream: true,
-    }),
-  });
+  const base = { model, ...tokenFields(model, maxTokens, reasoningTokens), messages: payloadMessages, stream: true };
+  type Opened = Response | { status: number | null; error: string };
+  const open = async (provider: Provider): Promise<Opened> => {
+    const req = providerRequest(provider, apiKey);
+    if (!req) return { status: null, error: `${provider} is not configured` };
+    try {
+      return await fetch(req.url, { method: 'POST', headers: req.headers, body: JSON.stringify(requestBody(provider, model, base)) });
+    } catch (e) {
+      return { status: null, error: e instanceof Error ? e.message : 'network error' };
+    }
+  };
 
+  // Fallback happens only BEFORE the first token: once text has streamed, a
+  // switch would splice two different answers together.
+  let response: Opened = await open('openrouter');
+  if (!(response instanceof Response && response.ok) && process.env.NANOGPT_API_KEY && shouldFallBack(response.status)) {
+    console.warn(`OpenRouter stream failed (${response.status ?? 'network'}); retrying ${model} on NanoGPT`);
+    response = await open('nanogpt');
+  }
+  if (!(response instanceof Response)) throw new Error(`API error: ${response.error}`);
   if (!response.ok) {
     throw new Error(`API error: ${response.status}`);
   }

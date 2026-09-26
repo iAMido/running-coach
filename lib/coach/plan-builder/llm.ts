@@ -46,7 +46,9 @@ export async function ask(
   // Best-effort telemetry: one coach_calls row per model call, same table the
   // supervisor's weekly health audit already reads.
   logCoachCall({
-    user_id: userId, route: ROUTE, query_type: 'plan_generation', model: MODEL_FOR[task],
+    // Records the provider when the NanoGPT fallback answered, so a fallback
+    // day is visible in coach_calls rather than looking like a normal one.
+    user_id: userId, route: ROUTE, query_type: 'plan_generation', model: r.provider === 'nanogpt' ? `${MODEL_FOR[task]} (nanogpt)` : MODEL_FOR[task],
     context_tokens: r.promptTokens ?? Math.round((system.length + (sharedPrefix?.length ?? 0)) / 4), context_budget: null, ceiling_hit: false,
     cache_used: (r.cachedTokens ?? 0) > 0, preflight_ok: true, preflight_warnings: [`builder:${task}`], preflight_augmented: false,
     latency_ms: ms, status: r.error ? 'error' : r.finishReason === 'length' ? 'partial' : 'ok',
