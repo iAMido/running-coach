@@ -71,3 +71,5 @@ test-plan-raw.txt
 test-weekly-review-*.md
 .env*
 !.env.example
+test-plan-builder*.json
+test-plan-output*.json

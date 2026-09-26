@@ -44,7 +44,8 @@ export type PlanParseResult =
   | { ok: true; plan: Record<string, unknown>; strength: ExpansionResult }
   | { ok: false; reason: 'truncated' | 'unparseable' | 'incomplete'; message: string; weeksReturned: number | null };
 
-function extractJson(text: string): unknown {
+/** First JSON object in a model response, fenced or bare. Throws when there is none. */
+export function extractJson(text: string): unknown {
   const fenced = text.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
   if (fenced) return JSON.parse(fenced[1]);
   const first = text.indexOf('{');

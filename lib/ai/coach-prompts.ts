@@ -623,6 +623,54 @@ export function buildRaceDemandBlock(demand?: RaceDemand): string {
 }
 
 /**
+ * Plan-writing rules shared by the single-call generator and the staged
+ * builder's phase writers (lib/coach/plan-builder). One source, so the two
+ * generators cannot drift into prescribing different things.
+ */
+export const PLAN_STRENGTH_RULES = `### STRENGTH IS PART OF THE PLAN
+Every expert plan in the reference library schedules strength INSIDE the plan and
+progresses it by phase. Do the same — strength is not an optional add-on.
+
+- **Frequency by phase**: about 2 sessions/week in base and build, 1 in peak
+  (maintenance: less volume, keep the intensity), 0-1 light session in taper.
+- **Placement**: attach strength to one of the athlete's own training days via the
+  "strength" field — after an easy run, or after that day's quality session (keep
+  hard days hard, easy days easy). **Never on the long-run day, and avoid the day
+  before the long run.** Strength the day before a quality session is fine: it is
+  routine in the reference plans (Carmel-Kinneret places 25 of its 54 strength
+  sessions there). Never create a day he does not train in order to fit strength in.
+- **Progression**: foundation (bodyweight, clean single-leg patterns, hip and
+  trunk stability) → loaded single-leg and eccentric work (split squats, single-
+  leg RDLs, step-downs, loaded carries) → maintenance → light activation.
+- **Mountain races — eccentric strength IS descent training.** Step-downs and
+  slow lowering are the race's descents in miniature. Build them gradually and
+  include calf and foot work (heel raises, eccentric calf lowers, tibialis
+  raises) with this athlete's plantar fasciitis history in mind — progress load
+  slowly and say so.
+- **Load**: express as bodyweight, "moderate dumbbells", or RPE / reps in
+  reserve (e.g. "RPE 7, 2-3 reps in reserve"). NEVER invent a kilogram figure:
+  his strength numbers are unknown, and a made-up load is a guess dressed as
+  a prescription.
+- Keep sessions 20-40 minutes. 5-8 exercises.`;
+
+export const PLAN_TARGET_HR_RULES = `### WRITING target_hr — THE ZONE LABEL AND THE BPM MUST AGREE
+- Sustained easy running lives in **Z1-Z2**. Prescribe easy runs and long runs that way. Reserve a bare **Z1** for genuine recovery jogs and walk-backs only: Z1 tops out around 124 bpm for this athlete, so asking for Z1 across a 45-minute run is asking for near-walking, and the session will be missed every time it is prescribed.
+- The bpm range you write MUST sit inside the zone label you write — check it against the HR ZONES block above before emitting. "Z1 (115-135)" is wrong, because 135 is in Z2. Write "Z1-Z2 (115-135)", or "Z1 (110-124)" if you genuinely mean recovery.
+- The label is later compared against what the athlete actually ran. A label that disagrees with its own numbers produces a false verdict on a session they executed correctly.`;
+
+export const PLAN_DAY_ANCHOR_RULES = `### TRAINING DAY ANCHORS
+Use the "Training days" line in PLAN PARAMETERS above. Those are the days this
+athlete actually trains, stated by him for this plan.
+- Schedule only on those days. Never place a session on a day not listed.
+- Put the hardest quality session on the day he names for quality and the long
+  run on the day he names for it. If he named no roles, choose sensibly and say
+  which day you gave which role.
+- Israeli working week: Sunday is a WORKDAY and Friday-Saturday is the weekend.
+  Do not assume Sunday is free or that Saturday is the natural long-run day.
+- If the training days line says NOT SPECIFIED, say so and ask - do not invent
+  a schedule`;
+
+/**
  * Build enhanced prompt for plan generation with 3-layer context
  */
 export function buildEnhancedPlanGenerationPrompt(
@@ -707,31 +755,7 @@ ${hasRaceGoal ? `- Taper: Week ${durationWeeks} (1 week)` : ''}
 3. **Book Methodology**: Follow the periodization principles and intensity guidelines from the books
 4. **Reference Plans** (when present above): learn how comparable plans were BUILT — phase lengths, loading rhythm, how deep recovery weeks go, how climb and volume progress, and how strength is placed and progressed. Adapt the structure to this athlete; never copy sessions or days.
 
-### STRENGTH IS PART OF THE PLAN
-Every expert plan in the reference library schedules strength INSIDE the plan and
-progresses it by phase. Do the same — strength is not an optional add-on.
-
-- **Frequency by phase**: about 2 sessions/week in base and build, 1 in peak
-  (maintenance: less volume, keep the intensity), 0-1 light session in taper.
-- **Placement**: attach strength to one of the athlete's own training days via the
-  "strength" field — after an easy run, or after that day's quality session (keep
-  hard days hard, easy days easy). **Never on the long-run day, and avoid the day
-  before the long run.** Strength the day before a quality session is fine: it is
-  routine in the reference plans (Carmel-Kinneret places 25 of its 54 strength
-  sessions there). Never create a day he does not train in order to fit strength in.
-- **Progression**: foundation (bodyweight, clean single-leg patterns, hip and
-  trunk stability) → loaded single-leg and eccentric work (split squats, single-
-  leg RDLs, step-downs, loaded carries) → maintenance → light activation.
-- **Mountain races — eccentric strength IS descent training.** Step-downs and
-  slow lowering are the race's descents in miniature. Build them gradually and
-  include calf and foot work (heel raises, eccentric calf lowers, tibialis
-  raises) with this athlete's plantar fasciitis history in mind — progress load
-  slowly and say so.
-- **Load**: express as bodyweight, "moderate dumbbells", or RPE / reps in
-  reserve (e.g. "RPE 7, 2-3 reps in reserve"). NEVER invent a kilogram figure:
-  his strength numbers are unknown, and a made-up load is a guess dressed as
-  a prescription.
-- Keep sessions 20-40 minutes. 5-8 exercises.
+${PLAN_STRENGTH_RULES}
 
 ### OUTPUT FORMAT
 Return the plan as a JSON object with this structure:
@@ -818,22 +842,9 @@ IMPORTANT:
 - Omit "strength" on days without a strength session — never an empty value
 - The whole plan must fit in ONE response. Being concise is what makes that possible
 
-### WRITING target_hr — THE ZONE LABEL AND THE BPM MUST AGREE
-- Sustained easy running lives in **Z1-Z2**. Prescribe easy runs and long runs that way. Reserve a bare **Z1** for genuine recovery jogs and walk-backs only: Z1 tops out around 124 bpm for this athlete, so asking for Z1 across a 45-minute run is asking for near-walking, and the session will be missed every time it is prescribed.
-- The bpm range you write MUST sit inside the zone label you write — check it against the HR ZONES block above before emitting. "Z1 (115-135)" is wrong, because 135 is in Z2. Write "Z1-Z2 (115-135)", or "Z1 (110-124)" if you genuinely mean recovery.
-- The label is later compared against what the athlete actually ran. A label that disagrees with its own numbers produces a false verdict on a session they executed correctly.
+${PLAN_TARGET_HR_RULES}
 
-### TRAINING DAY ANCHORS
-Use the "Training days" line in PLAN PARAMETERS above. Those are the days this
-athlete actually trains, stated by him for this plan.
-- Schedule only on those days. Never place a session on a day not listed.
-- Put the hardest quality session on the day he names for quality and the long
-  run on the day he names for it. If he named no roles, choose sensibly and say
-  which day you gave which role.
-- Israeli working week: Sunday is a WORKDAY and Friday-Saturday is the weekend.
-  Do not assume Sunday is free or that Saturday is the natural long-run day.
-- If the training days line says NOT SPECIFIED, say so and ask - do not invent
-  a schedule`;
+${PLAN_DAY_ANCHOR_RULES}`;
 }
 
 /**

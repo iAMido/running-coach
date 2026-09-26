@@ -38,6 +38,18 @@ export const MODEL_FOR = {
    * This key also drives the season macro plan and the Saturday proposal.
    */
   plan_generation:      'anthropic/claude-opus-4.7',
+
+  /**
+   * Staged plan builder (lib/coach/plan-builder). The head coach — outline
+   * and the "does it all fit" review — writes little and reasons a lot, which
+   * is exactly where Opus 5.5's unbounded thinking is an asset rather than
+   * the time bomb it was for single-call generation. Phase writers produce
+   * the bulk JSON against the outline; Opus 4.7 wrote complete, well-formed
+   * plan JSON in every measured run.
+   */
+  plan_outline:         'anthropic/claude-opus-5.5',
+  plan_writer:          'anthropic/claude-opus-4.7',
+  plan_review:          'anthropic/claude-opus-5.5',
   // Adjustment is a smaller, bounded task than generation — at most a 4-week
   // window against an existing plan. Named here rather than left to
   // callOpenRouter's default, so the choice is visible and deliberate instead
@@ -120,6 +132,11 @@ export function modelFor(task: ModelTaskKey): string {
  */
 export const REASONING_FOR: Partial<Record<ModelTaskKey, number>> = {
   weekly_review:   8_000,
+  // Headroom for the head coach. Opus 5.5 overshoots budgets (14k thinking
+  // was measured against a 1k budget), so these are sized to what it
+  // actually uses, not to what we would like it to use.
+  plan_outline:    16_000,
+  plan_review:     12_000,
 };
 
 /**

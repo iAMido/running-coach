@@ -10,6 +10,10 @@ import { WorkoutCard, getWorkoutTagClass } from '@/components/coach/workout-card
 import { PushToWatch } from '@/components/coach/push-to-watch';
 import { PlanProposalCard } from '@/components/coach/plan-proposal-card';
 import { SeasonPlanPanel, type SeasonPlan } from '@/components/coach/season-plan';
+import { PlanBuildProgress } from '@/components/coach/plan-build-progress';
+import { PlanBuildReport } from '@/components/coach/plan-build-report';
+import type { PlanBuildView } from '@/lib/coach/plan-builder/view';
+import type { BuildReport } from '@/lib/coach/plan-builder/types';
 
 const planTypes = [
   { value: 'half-marathon', label: 'Half Marathon' },
@@ -96,12 +100,13 @@ export default function TrainingPlanPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>('generate');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  // Streaming progress
-  const [streamChars, setStreamChars] = useState(0);
-  const [streamPreview, setStreamPreview] = useState('');
+  // Staged build progress (see lib/coach/plan-builder)
+  const [build, setBuild] = useState<PlanBuildView | null>(null);
 
   useEffect(() => {
     fetchPlan();
+    resumeBuild();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchPlan = async () => {
@@ -130,16 +135,65 @@ export default function TrainingPlanPage() {
 
   const isViewingCurrentWeek = viewingWeek === calculatedCurrentWeek;
 
+  /**
+   * Drive a staged build to completion: one request per stage, so no single
+   * request approaches the server's time limit. `busy` means another tab (or
+   * an earlier request still running) holds the stage — wait and re-read
+   * instead of paying for the same model call twice.
+   */
+  const runBuild = async (initial: PlanBuildView) => {
+    let current = initial;
+    setBuild(current);
+    while (current.stage !== 'done' && current.stage !== 'failed') {
+      let response: Response;
+      if (current.busy) {
+        await new Promise((r) => setTimeout(r, 5000));
+        response = await fetch(`/api/coach/plans/build?id=${current.id}`);
+      } else {
+        response = await fetch('/api/coach/plans/build', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ buildId: current.id }),
+        });
+      }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.build) throw new Error(data.error || `Build step failed (${response.status})`);
+      current = data.build as PlanBuildView;
+      setBuild(current);
+    }
+    if (current.stage === 'failed') throw new Error(current.error || 'The plan build failed. Your current plan is unchanged.');
+    if (!current.plan) throw new Error('The build finished without a plan');
+    setActivePlan(current.plan);
+    setCalculatedCurrentWeek(1);
+    setViewingWeek(1);
+    setSuccessMessage('Your training plan has been built and checked.');
+    setActiveTab('current');
+  };
+
+  /** Pick up a build left running by a reload or a closed tab. */
+  const resumeBuild = async () => {
+    try {
+      const response = await fetch('/api/coach/plans/build');
+      if (!response.ok) return;
+      const { build: open } = await response.json();
+      if (!open) return;
+      setGenerating(true);
+      setActiveTab('generate');
+      await runBuild(open);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resume the plan build');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const handleGenerate = async () => {
     setGenerating(true);
     setError(null);
-    setStreamChars(0);
-    setStreamPreview('');
+    setBuild(null);
 
     try {
-      // Stream the generation so the user sees progress live instead of
-      // staring at a spinner for 30-60s. Each SSE chunk extends streamPreview.
-      const response = await fetch('/api/coach/plans/generate/stream', {
+      const response = await fetch('/api/coach/plans/build', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -156,8 +210,7 @@ export default function TrainingPlanPage() {
           // then a valid standalone plan.
           ...(season ? { macroPlanId: season.id, blockNumber: parseInt(blockNumber, 10) } : {}),
           notes,
-          // Rich intake — server reads into PLAN GENERATION INTAKE block.
-          // Each field is optional; omit empty strings so Zod accepts them.
+          // Rich intake. Each field is optional; omit empty strings so Zod accepts them.
           ...(raceDate ? { raceDate } : {}),
           ...(targetTime ? { targetTime } : {}),
           ...(raceDistanceKm ? { raceDistanceKm: parseFloat(raceDistanceKm) } : {}),
@@ -169,54 +222,9 @@ export default function TrainingPlanPage() {
           ...(limitations ? { limitations } : {}),
         }),
       });
-
-      if (!response.ok || !response.body) {
-        const errBody = await response.json().catch(() => ({}));
-        throw new Error(errBody.error || `Stream failed (${response.status})`);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let finalPlan: TrainingPlan | null = null;
-      let totalChars = 0;
-      const previewWindow: string[] = [];
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const events = buffer.split('\n\n');
-        buffer = events.pop() || '';
-        for (const raw of events) {
-          const eventLine = raw.split('\n').find(l => l.startsWith('event:'));
-          const dataLine = raw.split('\n').find(l => l.startsWith('data:'));
-          if (!eventLine || !dataLine) continue;
-          const eventName = eventLine.slice(6).trim();
-          let data: unknown;
-          try { data = JSON.parse(dataLine.slice(5).trim()); } catch { continue; }
-          if (eventName === 'token') {
-            const text = (data as { text: string }).text;
-            totalChars += text.length;
-            setStreamChars(totalChars);
-            previewWindow.push(text);
-            if (previewWindow.length > 200) previewWindow.shift();
-            setStreamPreview(previewWindow.join(''));
-          } else if (eventName === 'done') {
-            finalPlan = (data as { plan: TrainingPlan }).plan;
-          } else if (eventName === 'error') {
-            throw new Error((data as { message: string }).message);
-          }
-        }
-      }
-
-      if (!finalPlan) throw new Error('Stream ended without a plan');
-
-      setActivePlan(finalPlan);
-      setCalculatedCurrentWeek(1);
-      setViewingWeek(1);
-      setSuccessMessage('Your training plan has been generated successfully!');
-      setActiveTab('current');
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.build) throw new Error(data.error || `Could not start the build (${response.status})`);
+      await runBuild(data.build as PlanBuildView);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate plan');
     } finally {
@@ -528,6 +536,10 @@ export default function TrainingPlanPage() {
                   competing strength programmes on one screen. Older plans have
                   no strength field, so they keep the panel as before. */}
               {!planHasStrength && <StrengthWorkout weekNumber={viewingWeek} totalWeeks={totalWeeks} />}
+
+              {(activePlan.plan_json as { build_report?: BuildReport }).build_report && (
+                <PlanBuildReport report={(activePlan.plan_json as { build_report: BuildReport }).build_report} />
+              )}
             </>
           ) : (
             <div className="rc-card">
@@ -878,32 +890,10 @@ export default function TrainingPlanPage() {
               style={{ background: 'var(--rc-blue)', color: '#fff' }}
             >
               <Sparkles className="w-4 h-4" />
-              {generating ? 'Generating Plan...' : 'Generate Plan'}
+              {generating ? (build?.label ? `${build.label}…` : 'Starting…') : 'Generate Plan'}
             </button>
 
-            {generating && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="animate-pulse rc-mono" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.08em' }}>
-                    STREAMING · {streamChars.toLocaleString()} chars
-                  </span>
-                  <span className="rc-mono" style={{ color: 'var(--rc-ink-4)' }}>
-                    {duration} weeks · {planTypes.find(p => p.value === planType)?.label || planType}
-                  </span>
-                </div>
-                <div
-                  className="rounded-lg p-3 max-h-56 overflow-y-auto text-[11px] rc-mono whitespace-pre-wrap"
-                  style={{
-                    background: 'var(--rc-surface-2)',
-                    border: '1px solid var(--rc-line)',
-                    color: 'var(--rc-ink-3)',
-                    lineHeight: 1.45,
-                  }}
-                >
-                  {streamPreview || 'Waiting for first tokens…'}
-                </div>
-              </div>
-            )}
+            {build && (generating || build.stage === 'failed') && <PlanBuildProgress build={build} />}
           </div>
         </div>
         </>
