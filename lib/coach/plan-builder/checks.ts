@@ -391,6 +391,14 @@ export function checkPlan(weeks: PlanWeek[], ctx: CheckContext): Violation[] {
       } else if (runs.length > 1 && longIdx > 0 && DAYS.indexOf(day as (typeof DAYS)[number]) === longIdx - 1) {
         add({ rule: 'strength_placement', severity: 'error', week: n, day,
           message: `Strength on ${day}, the day before the long run (${longDay}).` });
+      } else {
+        // Keep hard days hard (athlete's decision, 2026-09-27): no strength the
+        // day before a quality session — put it after that session instead.
+        const next = workouts[DAYS[DAYS.indexOf(day as (typeof DAYS)[number]) + 1]];
+        if (next && isQuality(next)) {
+          add({ rule: 'strength_placement', severity: 'error', week: n, day,
+            message: `Strength on ${day}, the day before ${next.type} on ${DAYS[DAYS.indexOf(day as (typeof DAYS)[number]) + 1]}. Move it to straight after that session.` });
+        }
       }
     }
     const o = ctx.outline?.weeks.find((x) => x.week === n);

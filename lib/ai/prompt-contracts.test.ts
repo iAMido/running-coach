@@ -256,11 +256,12 @@ test('strength is programmed INSIDE the plan, with evidence-based placement', ()
   expect(p).toContain('STRENGTH IS PART OF THE PLAN');
   // The one rule every reference plan agrees on.
   expect(p).toContain('Never on the long-run day');
-  // Found by generating a real plan: an earlier rule forbade strength the day
-  // before a quality session. The model placed it there anyway — and the
-  // expert plans supplied as evidence do exactly that (Carmel-Kinneret: 25 of
-  // 54 strength sessions). The rule was stricter than every source, so it went.
-  expect(p).not.toContain('within 24 hours BEFORE a quality');
+  // Athlete's decision, 2026-09-27: keep hard days hard. The reference plans
+  // do place strength the day before quality (Carmel-Kinneret 25 of 54), but
+  // the head coach's review objected to it in every staged build and the fix
+  // loop kept moving it — so loaded strength goes after the quality session.
+  expect(p).toContain("day's quality session");
+  expect(p).toContain('never the day before a quality session');
   // A made-up load is a guess dressed as a prescription.
   expect(p).toContain('NEVER invent a kilogram figure');
 });

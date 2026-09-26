@@ -633,12 +633,13 @@ progresses it by phase. Do the same — strength is not an optional add-on.
 
 - **Frequency by phase**: about 2 sessions/week in base and build, 1 in peak
   (maintenance: less volume, keep the intensity), 0-1 light session in taper.
-- **Placement**: attach strength to one of the athlete's own training days via the
-  "strength" field — after an easy run, or after that day's quality session (keep
-  hard days hard, easy days easy). **Never on the long-run day, and avoid the day
-  before the long run.** Strength the day before a quality session is fine: it is
-  routine in the reference plans (Carmel-Kinneret places 25 of its 54 strength
-  sessions there). Never create a day he does not train in order to fit strength in.
+- **Placement — keep hard days hard**: attach strength to one of the athlete's own
+  training days via the "strength" field. Put loaded strength **straight after that
+  day's quality session**, or after an easy run that is NOT the day before a quality
+  session or the long run. **Never on the long-run day, never the day before the long
+  run, and never the day before a quality session** — the next day's key session
+  must start on fresh legs. Light activation or mobility may go anywhere. Never
+  create a day he does not train in order to fit strength in.
 - **Progression**: foundation (bodyweight, clean single-leg patterns, hip and
   trunk stability) → loaded single-leg and eccentric work (split squats, single-
   leg RDLs, step-downs, loaded carries) → maintenance → light activation.
@@ -1197,5 +1198,6 @@ IMPORTANT:
   Omitting a field silently deletes a target the athlete is training toward
 - If you MOVE a session, strength moves with the day it was attached to only if
   the new placement still respects the strength rules: never on the long-run
-  day, and avoid the day before the long run`;
+  day, never the day before the long run or a quality session — after the
+  quality session on the same day is right`;
 }

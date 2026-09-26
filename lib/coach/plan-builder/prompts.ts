@@ -207,7 +207,7 @@ Rules:
 - A workout's "distance" values must add up to the week's "total_km" (±10%) — add them up before you write the total.
 - Hit each week's targets: totals within ±10%, long run within ±15%.
 - Put the long run on the long-run day from the day roles. Keep quality sessions on the quality day. Never two hard days back to back.
-- Attach each week's strength sessions to training days with "strength": "<id>" — exactly the ids listed for that week. Never on the long-run day or the day before it.
+- Attach each week's strength sessions to training days with "strength": "<id>" — exactly the ids listed for that week. Loaded strength goes straight after the quality session on the same day. Never on the long-run day, the day before it, or the day before a quality session.
 ${hasElev ? `- Every week has "total_elevation_gain_m" and every run has "elevation_gain_m"; they must add up to the week total (±15%).
 - **Incline metres are arithmetic, not an estimate:** metres = speed (km/h) × 1000 × grade% / 100 × minutes / 60. 20 min at 10% and 5.5 km/h = 183 m; 5x5 min at 12% and 5 km/h = 250 m. Write minutes, grade and speed in the description, put the computed metres in "elevation_gain_m" (plus any outdoor climb), and SIZE the session so the week stays on its climbing target — cut minutes, not grade. A checker recomputes every description.
 - A trail loop or out-and-back climbs what it descends.

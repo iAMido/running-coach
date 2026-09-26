@@ -65,6 +65,13 @@ test('strength on the long-run day or the day before it is an error', () => {
   expect(rules(v)).toContain('strength_placement');
 });
 
+test('strength the day before a quality session is an error — it goes after the session', () => {
+  const w = week(1, 30, {}, { Sunday: run('Easy Run', 6, { strength: 'base' as never }) }); // Monday is Tempo
+  expect(rules(checkPlan([w, week(2, 32), week(3, 34)], ctx))).toContain('strength_placement');
+  const after = week(1, 30, {}, { Monday: run('Tempo', 7.5, { strength: 'base' as never }) });
+  expect(rules(checkPlan([after, week(2, 32), week(3, 34)], ctx))).not.toContain('strength_placement');
+});
+
 test('an undefined strength id is an error, not a silent drop', () => {
   const w = week(1, 30, {}, { Wednesday: run('Easy Run', 6, { strength: 'ghost' as never }) });
   expect(rules(checkPlan([w, week(2, 32), week(3, 34)], ctx))).toContain('strength_reference');
