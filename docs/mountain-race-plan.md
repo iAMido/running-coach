@@ -35,7 +35,7 @@ Schemas:      public = CalTrack (a different app, same project) — do not touch
               runcoach = this app — everything below lives here
 ```
 
-Old RunCoach project `ucjsnpnlxklaadqolpkx` is **paused** — if a Supabase MCP tool defaults to it, override with the ref above explicitly.
+Old RunCoach project `ucjsnpnlxklaadqolpkx` was **deleted** on 2026-10-04. Any tool or env var still pointing at it is broken — use the ref above.
 
 Supabase MCP tools (`mcp__f9ae2d57...` / `mcp__supabase__*`, names vary by session) take `project_id: "tlnqkxwlrewbtufnqiwi"` — pass it every time.
 
