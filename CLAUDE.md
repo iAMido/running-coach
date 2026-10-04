@@ -32,7 +32,7 @@ bunx shadcn@latest add <component>  # Add shadcn/ui component
 - **Server Components by default** unless marked `'use client'`
 - **API Routes** use `export const runtime = 'nodejs'` for external API calls
 - **Vercel Cron** for scheduled Strava sync
-- **One Supabase project, two schemas** (post-consolidation, May 2026): the CalTrack project (`tlnqkxwlrewbtufnqiwi`) hosts both apps. CalTrack's tables live in the `public` schema; RunCoach's tables live in the `runcoach` schema. The two `lib/db/supabase*` clients are configured with different `db.schema` settings to route queries to the right place. The old RunCoach project (`ucjsnpnlxklaadqolpkx`) is paused.
+- **One Supabase project, two schemas** (post-consolidation, May 2026): the CalTrack project (`tlnqkxwlrewbtufnqiwi`) hosts both apps. CalTrack's tables live in the `public` schema; RunCoach's tables live in the `runcoach` schema. The two `lib/db/supabase*` clients are configured with different `db.schema` settings to route queries to the right place. The old RunCoach project (`ucjsnpnlxklaadqolpkx`) was deleted on 2026-10-04 — every app, env var and MCP call must use `tlnqkxwlrewbtufnqiwi`.
 
 ### Directory Structure
 ```
