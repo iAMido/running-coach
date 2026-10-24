@@ -94,3 +94,63 @@ export async function getGarminFeedStatus(userId: string): Promise<GarminFeedSta
     latestReadingDay: withReadings[0]?.day ?? null,
   };
 }
+
+/**
+ * The athlete's own normal for the Garmin-only signals — what every reading is
+ * compared against. Never Garmin's generic bands (the same reason Friel's
+ * decoupling bands were rejected: calibrated on other people).
+ *
+ * Below MIN_GARMIN_BASELINE_SAMPLES a field's baseline is null, and readers must
+ * say "no baseline yet" rather than call a value high or low.
+ */
+export interface GarminBaselines {
+  bbWakeMedian: number | null;
+  /** 10th percentile: "below your usual range" starts here. */
+  bbWakeP10: number | null;
+  stressMedian: number | null;
+  deepSleepMedianSecs: number | null;
+  sampleCount: number;
+  windowDays: number;
+}
+
+export const MIN_GARMIN_BASELINE_SAMPLES = 10;
+
+/** Nearest-rank percentile of an unsorted list; null when empty. */
+export function percentile(values: number[], p: number): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const rank = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
+  return sorted[rank];
+}
+
+export function garminBaselinesFrom(
+  rows: Pick<GarminDailyWellness, 'body_battery_at_wake' | 'stress_avg' | 'sleep_deep_secs'>[],
+  windowDays: number,
+): GarminBaselines {
+  const nums = (k: 'body_battery_at_wake' | 'stress_avg' | 'sleep_deep_secs') =>
+    rows.map((r) => r[k]).filter((v): v is number => typeof v === 'number');
+  const enough = (xs: number[]) => xs.length >= MIN_GARMIN_BASELINE_SAMPLES;
+  const bb = nums('body_battery_at_wake');
+  const stress = nums('stress_avg');
+  const deep = nums('sleep_deep_secs');
+  return {
+    bbWakeMedian: enough(bb) ? percentile(bb, 50) : null,
+    bbWakeP10: enough(bb) ? percentile(bb, 10) : null,
+    stressMedian: enough(stress) ? percentile(stress, 50) : null,
+    deepSleepMedianSecs: enough(deep) ? percentile(deep, 50) : null,
+    sampleCount: bb.length,
+    windowDays,
+  };
+}
+
+/** Baselines over the `windowDays` BEFORE today, so today's reading is never part of its own normal. */
+export async function getGarminBaselines(userId: string, windowDays = 28): Promise<GarminBaselines> {
+  const { data, error } = await supabase
+    .from('garmin_daily_wellness')
+    .select('body_battery_at_wake,stress_avg,sleep_deep_secs')
+    .eq('user_id', userId)
+    .gte('day', userDateStrDaysAgo(windowDays))
+    .lt('day', userDateStr());
+  if (error) throw new Error(`Failed to read garmin baselines: ${error.message}`);
+  return garminBaselinesFrom((data ?? []) as GarminDailyWellness[], windowDays);
+}

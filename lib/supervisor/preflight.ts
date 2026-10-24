@@ -38,6 +38,12 @@ export interface PreflightInput {
    * "not looked at" and "confirmed stale" are different states.
    */
   latestWellnessDay?: string | null;
+  /**
+   * A Garmin feed fault from `garminFeedProblem` (expired key, sync failing,
+   * key about to expire), or null when healthy or not connected. Undefined =
+   * not checked, no warning.
+   */
+  garminFeedProblem?: string | null;
 }
 
 /** Beyond this, the recovery picture is too old to reason from. */
@@ -51,7 +57,7 @@ export function validateContext(input: PreflightInput): PreflightResult {
   const warnings: PreflightWarning[] = [];
   const augmentations: string[] = [];
 
-  const { context, queryType, plan, weekRuns, latestWellnessDay } = input;
+  const { context, queryType, plan, weekRuns, latestWellnessDay, garminFeedProblem } = input;
   const user = context.userContext;
   const coach = context.coachContext;
   const book = context.bookContext;
@@ -87,6 +93,12 @@ export function validateContext(input: PreflightInput): PreflightResult {
   // Recovery feed freshness. `undefined` means the caller did not look; only a
   // checked-and-stale feed warrants a warning, otherwise every route that does
   // not care about wellness would emit a false positive.
+  // Garmin recovery feed. A `warn` (counted in Coach Health) because it is
+  // pull-only with a key that expires: without a check it fails silently.
+  if (garminFeedProblem) {
+    warnings.push({ code: 'garmin_feed_problem', message: garminFeedProblem, severity: 'warn' });
+  }
+
   if (latestWellnessDay !== undefined) {
     if (latestWellnessDay === null) {
       warnings.push({

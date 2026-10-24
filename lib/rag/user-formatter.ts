@@ -3,6 +3,7 @@ import { getAthleteProfile } from '@/lib/db/profile';
 import { getActivePlan } from '@/lib/db/plans';
 import { getRecentFeedback, getWeeklySummary } from '@/lib/db/feedback';
 import { getRecentWellness, getWellnessBaselines, type WellnessBaselines } from '@/lib/db/wellness';
+import { getGarminBaselines, getRecentGarminWellness, type GarminBaselines } from '@/lib/db/garmin-wellness';
 import { calculateCurrentWeek, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
 import { daysBetweenDateStr, nowInUserTz, userDateStr } from '@/lib/utils/user-time';
 import { formatPace } from '@/lib/utils/pace';
@@ -19,7 +20,7 @@ import { buildEfficiencySummary, formatEfficiency, type EfRun } from '@/lib/util
 import { formatZoneDiscipline } from '@/lib/utils/zone-discipline';
 import { plannedWorkoutForRunDate } from '@/lib/ai/run-reaction';
 import { supabase } from '@/lib/db/supabase';
-import type { Run, Lap, RunFeedback, WeeklySummary, AthleteProfile, TrainingPlan, Workout, DailyWellness } from '@/lib/db/types';
+import type { Run, Lap, RunFeedback, WeeklySummary, AthleteProfile, TrainingPlan, Workout, DailyWellness, GarminDailyWellness } from '@/lib/db/types';
 import type { FormattedUserContext } from './types';
 
 type RunWithLaps = Run & { laps?: Lap[] };
@@ -96,6 +97,22 @@ export async function formatUserContext(
     }
   } catch (err) {
     console.error('user-formatter: recovery block unavailable:', err);
+  }
+
+  // 2c. Garmin-only recovery signals (body battery, HRV status, sleep stages,
+  // stress). Separate block, separately best-effort: not connected is normal.
+  try {
+    const [garminDays, garminBaselines] = await Promise.all([
+      getRecentGarminWellness(userId, 6),
+      getGarminBaselines(userId),
+    ]);
+    const garminText = formatGarminRecovery(garminDays, garminBaselines);
+    if (garminText) {
+      sections.push(garminText);
+      totalChars += garminText.length;
+    }
+  } catch (err) {
+    console.error('user-formatter: garmin recovery block unavailable:', err);
   }
 
   // 2c. Aerobic efficiency. Sits next to recovery because it answers "is the
@@ -827,6 +844,104 @@ function formatRecovery(days: DailyWellness[], baselines: WellnessBaselines): st
 
   const missing = 7 - days.length;
   if (missing > 0) lines.push(`- Note: only ${days.length} of the last 7 days have recovery data.`);
+
+  return lines.join('\n');
+}
+
+/**
+ * Garmin-only recovery signals for the coach.
+ *
+ * Every value is placed against THIS athlete's own 28-day distribution
+ * (`GarminBaselines`), never Garmin's generic bands; with too little history
+ * the block says so instead of calling a value high or low. HRV, resting HR,
+ * sleep duration and sleep score are deliberately absent — the block above
+ * already states them from daily_wellness, and the two were measured identical.
+ *
+ * Observations only: none of this drives the readiness verdict yet (plan step 7).
+ */
+export function formatGarminRecovery(days: GarminDailyWellness[], baselines: GarminBaselines): string {
+  const withData = days.filter((d) => d.sleep_secs != null || d.body_battery_max != null || d.hrv_status != null);
+  if (withData.length === 0) return '';
+
+  const latest = withData[0];
+  const age = daysBetweenDateStr(latest.day, userDateStr());
+  const asOf = age <= 0 ? 'today' : age === 1 ? 'yesterday' : `${age} days ago`;
+  const h = (secs: number) => `${(secs / 3600).toFixed(1)}h`;
+
+  const lines: string[] = [
+    '## Garmin recovery signals (from the watch via Garmin)',
+    `- Compared with this athlete's own last ${baselines.windowDays} days, never with Garmin's generic bands. Context for the advice, not a verdict on its own.`,
+  ];
+
+  // Body battery at wake — the morning's starting charge.
+  if (typeof latest.body_battery_at_wake === 'number') {
+    const bb = latest.body_battery_at_wake;
+    let place = 'no personal baseline yet — do not call it high or low';
+    if (baselines.bbWakeMedian !== null && baselines.bbWakeP10 !== null) {
+      place =
+        bb < baselines.bbWakeP10 ? `BELOW his usual range (median ${baselines.bbWakeMedian}, 10th percentile ${baselines.bbWakeP10})`
+        : bb < baselines.bbWakeMedian ? `below his median of ${baselines.bbWakeMedian}, inside his usual range`
+        : `at or above his median of ${baselines.bbWakeMedian}`;
+    }
+    lines.push(`- Body battery at wake (${latest.day}, ${asOf}): ${bb} — ${place}.`);
+  } else {
+    lines.push(`- Body battery at wake (${latest.day}): not measured.`);
+  }
+  const bbTrend = [...days].reverse().map((d) => (typeof d.body_battery_at_wake === 'number' ? String(d.body_battery_at_wake) : '–'));
+  if (bbTrend.filter((v) => v !== '–').length > 1) {
+    lines.push(`- Body battery at wake, oldest to newest: ${bbTrend.join(' → ')}`);
+  }
+
+  // HRV status: Garmin's 7-day average against Garmin's personal band. A trend, not one night.
+  if (latest.hrv_status) {
+    let run = 0;
+    for (const d of withData) {
+      if (d.hrv_status !== latest.hrv_status) break;
+      run++;
+    }
+    const band =
+      typeof latest.hrv_baseline_low === 'number' && typeof latest.hrv_baseline_high === 'number'
+        ? ` — 7-day average ${latest.hrv_weekly_avg ?? '?'} vs his balanced band ${latest.hrv_baseline_low}–${latest.hrv_baseline_high}`
+        : '';
+    const streak = run > 1 ? ` for ${run} days running${run >= withData.length ? ' (at least)' : ''}` : '';
+    lines.push(`- HRV status (Garmin, 7-day average vs personal baseline): ${latest.hrv_status}${streak}${band}.`);
+  }
+
+  // Sleep composition — duration and score are in the block above.
+  if (typeof latest.sleep_secs === 'number') {
+    const parts = [
+      typeof latest.sleep_deep_secs === 'number' ? `deep ${h(latest.sleep_deep_secs)}` : null,
+      typeof latest.sleep_rem_secs === 'number' ? `REM ${h(latest.sleep_rem_secs)}` : null,
+      typeof latest.sleep_light_secs === 'number' ? `light ${h(latest.sleep_light_secs)}` : null,
+      typeof latest.sleep_awake_secs === 'number'
+        ? `awake ${h(latest.sleep_awake_secs)}${typeof latest.sleep_awake_count === 'number' ? ` (${latest.sleep_awake_count} wakes)` : ''}`
+        : null,
+    ].filter(Boolean);
+    const deepVs =
+      typeof latest.sleep_deep_secs === 'number' && baselines.deepSleepMedianSecs !== null
+        ? `; his median deep sleep is ${h(baselines.deepSleepMedianSecs)}`
+        : '';
+    const need =
+      typeof latest.sleep_need_mins === 'number'
+        ? `; Garmin's sleep need ${h(latest.sleep_need_mins * 60)} vs ${h(latest.sleep_secs)} slept`
+        : '';
+    if (parts.length) lines.push(`- Sleep stages (night of ${latest.day}): ${parts.join(' · ')}${deepVs}${need}.`);
+    const physio = [
+      typeof latest.sleep_avg_hr === 'number' ? `sleeping HR ${Math.round(latest.sleep_avg_hr)}` : null,
+      typeof latest.sleep_respiration_avg === 'number' ? `respiration ${latest.sleep_respiration_avg}/min` : null,
+      typeof latest.sleep_spo2_avg === 'number' ? `SpO2 ${latest.sleep_spo2_avg}%` : null,
+      typeof latest.sleep_stress_avg === 'number' ? `overnight stress ${Math.round(latest.sleep_stress_avg)}` : null,
+    ].filter(Boolean);
+    if (physio.length) lines.push(`- Overnight: ${physio.join(' · ')}.`);
+  }
+
+  // All-day stress: the newest COMPLETE day, since today's is still accumulating.
+  const stressDay = withData.find((d) => d.day !== userDateStr() && typeof d.stress_avg === 'number');
+  if (stressDay && typeof stressDay.stress_avg === 'number') {
+    const vs = baselines.stressMedian !== null ? ` vs his median ${baselines.stressMedian}` : '';
+    const q = stressDay.stress_qualifier ? ` (${stressDay.stress_qualifier})` : '';
+    lines.push(`- All-day stress (${stressDay.day}): average ${stressDay.stress_avg}${q}${vs}.`);
+  }
 
   return lines.join('\n');
 }
