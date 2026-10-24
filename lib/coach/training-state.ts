@@ -29,6 +29,8 @@ import { getActivePlan } from '@/lib/db/plans';
 import { getAthleteProfile } from '@/lib/db/profile';
 import { getClimbBaseline, type ClimbBaseline } from '@/lib/db/runs';
 import { getRecentWellness } from '@/lib/db/wellness';
+import { getGarminFeedStatus } from '@/lib/db/garmin-wellness';
+import { garminFeedGaps } from '@/lib/garmin/feed';
 import { readinessForUser, type ReadinessForUser } from '@/lib/coach/readiness-service';
 import { buildEfficiencySummary, type EfRun, type EfficiencySummary } from '@/lib/utils/efficiency';
 import { medianOf, percentileOf } from '@/lib/utils/decoupling';
@@ -349,6 +351,10 @@ export async function buildTrainingState(
   if (load.ctl === null) gaps.push('No CTL/ATL in the last 7 days — training load trend unavailable.');
 
   if (!plan) gaps.push('No active training plan — nothing to compare execution against.');
+
+  // Garmin-only recovery signals: say when they are missing, so "no body
+  // battery mentioned" can never be read as "body battery is fine".
+  gaps.push(...garminFeedGaps(await getGarminFeedStatus(userId).catch(() => null)));
 
   return {
     generatedAt: new Date().toISOString(),

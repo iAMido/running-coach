@@ -7,6 +7,7 @@ import { getRecentFeedback, getWeeklySummary, getCurrentWeekStart } from '@/lib/
 import { calculateFatigueScore } from '@/lib/rag/user-formatter';
 import { sumVert, vertPerKm } from '@/lib/utils/elevation';
 import { readinessForUser } from '@/lib/coach/readiness-service';
+import { getRecentGarminWellness } from '@/lib/db/garmin-wellness';
 
 export async function GET() {
   const auth = await getAuthenticatedUser();
@@ -107,6 +108,10 @@ export async function GET() {
     const plannedWeek = plannedVolumeForCurrentWeek(planWithWeekInfo);
     const fitness = await fitnessTrend(userId);
     const loadRamp = await loadRampTrend(userId);
+    // Garmin-only signals for the Recovery tile. Best-effort; null when not connected.
+    const garminLatest = await getRecentGarminWellness(userId, 2)
+      .then((rows) => rows.find((r) => r.body_battery_at_wake != null || r.hrv_status != null) ?? null)
+      .catch(() => null);
 
     return NextResponse.json({
       totalRuns: totalRuns || 0,
@@ -135,6 +140,14 @@ export async function GET() {
                 : null,
             sleepScore: recovery.sleepScore ?? null,
             ageDays: recoveryAgeDays,
+            /** Garmin: body battery at wake and HRV status (7-day avg vs personal band). */
+            garmin: garminLatest
+              ? {
+                  day: garminLatest.day,
+                  bodyBatteryAtWake: garminLatest.body_battery_at_wake ?? null,
+                  hrvStatus: garminLatest.hrv_status ?? null,
+                }
+              : null,
           }
         : null,
       /** 7-day TRIMP against the trailing 28-day weekly average. */

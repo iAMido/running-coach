@@ -29,6 +29,7 @@ const WARNING_MEANING: Record<string, string> = {
   no_coach_workouts: "Your previous coach's familiar sessions were not found for a plan.",
   no_wellness_data: 'No recovery data (HRV, sleep, resting HR) has been synced.',
   stale_wellness_data: 'The newest recovery data is several days old.',
+  garmin_feed_problem: 'The Garmin recovery feed needs attention: key expiring or expired, or sync failing.',
   user_context_too_small: 'Very little of your profile or recent activity reached the coach.',
   no_active_plan_for_modification: 'A plan change was requested in chat but there is no active plan to change.',
 };

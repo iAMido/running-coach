@@ -19,6 +19,8 @@ import {
 import { TOKEN_BUDGETS_PER_QUERY } from '@/lib/rag/types';
 import { MODEL_FOR } from '@/lib/ai/model-registry';
 import { getLatestRecoveryReading } from '@/lib/db/wellness';
+import { getGarminFeedStatus } from '@/lib/db/garmin-wellness';
+import { garminFeedProblem } from '@/lib/garmin/feed';
 
 // Detect if user wants to modify their training plan
 function detectPlanModificationIntent(query: string): boolean {
@@ -214,11 +216,16 @@ export async function POST(request: NextRequest) {
       latestWellnessDay = undefined;
     }
 
+    const garminProblem = await getGarminFeedStatus(userId)
+      .then((status) => garminFeedProblem(status))
+      .catch(() => undefined);
+
     const preflight = supervisorValidate({
       context,
       queryType,
       plan: activePlan,
       latestWellnessDay,
+      garminFeedProblem: garminProblem,
     });
     if (preflight.augmentedSystemSuffix) {
       systemPrompt = systemPrompt + preflight.augmentedSystemSuffix;
