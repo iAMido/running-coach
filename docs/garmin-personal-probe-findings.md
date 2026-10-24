@@ -44,7 +44,7 @@ Step 0 of [[garmin-wellness-plan]]. Measured with `scripts/probe-garmin-personal
 > [!important] Consequence for the plan (D3)
 > intervals.icu currently has **no gaps** on the overlapping fields in this window (the ~12% HRV absence was over a full year). Gap-filling is therefore not a reason to merge. **Decision: no merging.** intervals.icu keeps `hrv` / `resting_hr` / `sleep_secs` / `sleep_score` as the only source for those values. Garmin contributes **only fields intervals.icu does not have.** That removes the riskiest part of the plan (two HRV definitions in one baseline).
 >
-> One check remains: whether Garmin's `lastNightAvg` equals intervals.icu's `hrv` on the same calendar date. It matters because Garmin's HRV **status and baseline band** are computed on Garmin's number. If the two differ by a day, the coach would see a "LOW" status next to an HRV value from another night. The probe's `--compare` mode prints the table for this.
+> ✅ Checked (see below): identical. Original note: whether Garmin's `lastNightAvg` equals intervals.icu's `hrv` on the same calendar date. It matters because Garmin's HRV **status and baseline band** are computed on Garmin's number. If the two differ by a day, the coach would see a "LOW" status next to an HRV value from another night. The probe's `--compare` mode prints the table for this.
 
 ## Fields the integration will store
 
@@ -58,7 +58,7 @@ Garmin-only, all at ≥75% coverage:
 
 ## Still open
 
-- [ ] `--compare`: Garmin vs intervals.icu on the same dates (HRV, resting HR, sleep). Also shows the day attribution.
+- [x] `--compare` (2026-10-24, 14 days 10-11..10-24): **identical on 14/14 days for all four fields**: HRV, resting HR, sleep hours (to 0.01 h), sleep score. Both sources file the night under the **wake date** (e.g. sleep 10-23 00:34 → 07:14 is `2026-10-23`). The two sources are the same Garmin numbers, so Garmin's HRV `status` / `baseline` band sits next to the correct value with no conversion.
 - [ ] Parameters for `dailySleepSummariesByDate` (from Swagger). Without them a 1-year backfill means 365 sleep calls.
 - [ ] Rate limit: 30 sequential sleep calls at 250 ms spacing gave no 429. A year-long backfill is untested.
 - [ ] History depth: run with `--days 365`.
