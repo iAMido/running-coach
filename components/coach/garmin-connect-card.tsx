@@ -155,11 +155,16 @@ export function GarminConnectCard() {
             });
             return;
           }
+          // Garmin's Retry-After is short (6-22 s seen) but the limit behaves like a
+          // budget over a longer window: a second import hit it again ~120 calls in.
+          // So wait the LONGER of Retry-After and an exponential backoff (30 s,
+          // 1, 2, 4, 8 min) — ~15 min in total before giving up.
           const untilMs = Date.parse(data.cooldownUntil ?? '');
-          const waitMs = Math.min(MAX_WAIT_MS, Math.max(5_000, Number.isFinite(untilMs) ? untilMs - Date.now() + 2_000 : 60_000));
+          const retryAfterMs = Number.isFinite(untilMs) ? untilMs - Date.now() + 2_000 : 0;
+          const waitMs = Math.min(MAX_WAIT_MS, Math.max(retryAfterMs, 30_000 * 2 ** attempt));
           setProgress({
             done: i, total: windows.length, days, finished: false,
-            message: `Garmin asked for a pause — resuming in ${Math.ceil(waitMs / 1000)} s`,
+            message: `Garmin asked for a pause — resuming in ${waitMs >= 60_000 ? `${Math.round(waitMs / 60_000)} min` : `${Math.ceil(waitMs / 1000)} s`} (attempt ${attempt + 1} of ${MAX_RETRIES_PER_WINDOW})`,
           });
           await new Promise((r) => setTimeout(r, waitMs));
         }
