@@ -7,11 +7,15 @@ import { BODY_BATTERY_MAX_DAYS } from '@/lib/garmin/client';
 import { syncGarminWellnessForUser } from '@/lib/garmin/sync';
 import { daysBetweenDateStr, userDateStr } from '@/lib/utils/user-time';
 
+/** Sleep is one call per night; a history import spaces them wider than the cron does. */
+const IMPORT_SLEEP_SPACING_MS = 1000;
+
 /**
  * Import ONE window of Garmin history (≤ 28 days). The connect card loops it
- * oldest-first, so a year is ~13 requests of ~10 s each (sleep costs one call
- * per night) — each well inside the function timeout, and a stop part-way
- * keeps everything already imported.
+ * oldest-first, so a year is ~13 requests of ~35 s each (sleep costs one call
+ * per night, spaced 1 s apart) — each well inside the function timeout, and a
+ * stop part-way keeps everything already imported. When Garmin rate-limits,
+ * the result carries `cooldownUntil` and the card waits and retries the window.
  *
  * Same code path as the cron (`syncGarminWellnessForUser`), so a backfilled
  * day is indistinguishable from a synced one. The CLI equivalent is
@@ -38,7 +42,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await syncGarminWellnessForUser(auth.userId, { from, to });
+    // Slower than the cron's 250 ms: a history import is hundreds of sleep calls
+    // in a row, and 250 ms drew a 429 about 400 calls in (2026-10-24).
+    const result = await syncGarminWellnessForUser(auth.userId, { from, to, sleepSpacingMs: IMPORT_SLEEP_SPACING_MS });
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Import failed' }, { status: 500 });

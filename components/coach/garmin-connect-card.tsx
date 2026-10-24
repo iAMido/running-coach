@@ -117,26 +117,52 @@ export function GarminConnectCard() {
 
   // One request per 28-day window, oldest first. Stopping part-way keeps every
   // window already imported; re-running simply re-syncs them.
+  //
+  // Garmin rate-limits a long import (a 429 about 400 calls in, with a
+  // Retry-After of ~20 s). The response then carries `cooldownUntil`: wait for
+  // it and retry the SAME window, since the rate-limited part (usually sleep)
+  // was not written.
   const importHistory = async () => {
     const windows = historyWindows(Number(importMonths));
+    const MAX_RETRIES_PER_WINDOW = 5;
+    const MAX_WAIT_MS = 10 * 60_000;
     setBusy(true);
     let days = 0;
     setProgress({ done: 0, total: windows.length, days: 0, message: null, finished: false });
     try {
       for (let i = 0; i < windows.length; i++) {
         const [from, to] = windows[i];
-        const res = await fetch('/api/garmin/backfill', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from, to }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || data.skipped) {
-          const reason = data.error || (data.skipped === 'cooldown' ? 'Garmin asked us to slow down — try again in an hour' : data.skipped);
-          setProgress({ done: i, total: windows.length, days, message: `Stopped at ${from}: ${reason}`, finished: true });
-          return;
+        for (let attempt = 0; ; attempt++) {
+          const res = await fetch('/api/garmin/backfill', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ from, to }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || (data.skipped && data.skipped !== 'cooldown')) {
+            setProgress({ done: i, total: windows.length, days, message: `Stopped at ${from}: ${data.error || data.skipped}`, finished: true });
+            return;
+          }
+          const rateLimited = data.skipped === 'cooldown' || (data.errors ?? []).some((e: string) => e.includes('429'));
+          if (!rateLimited) {
+            days += data.daysUpserted ?? 0;
+            break;
+          }
+          if (attempt >= MAX_RETRIES_PER_WINDOW) {
+            setProgress({
+              done: i, total: windows.length, days, finished: true,
+              message: `Stopped at ${from}: Garmin kept rate-limiting. Run the import again later; finished months are kept.`,
+            });
+            return;
+          }
+          const untilMs = Date.parse(data.cooldownUntil ?? '');
+          const waitMs = Math.min(MAX_WAIT_MS, Math.max(5_000, Number.isFinite(untilMs) ? untilMs - Date.now() + 2_000 : 60_000));
+          setProgress({
+            done: i, total: windows.length, days, finished: false,
+            message: `Garmin asked for a pause — resuming in ${Math.ceil(waitMs / 1000)} s`,
+          });
+          await new Promise((r) => setTimeout(r, waitMs));
         }
-        days += data.daysUpserted ?? 0;
         setProgress({ done: i + 1, total: windows.length, days, message: null, finished: false });
       }
       setProgress({ done: windows.length, total: windows.length, days, message: null, finished: true });
@@ -289,7 +315,7 @@ export function GarminConnectCard() {
                 <div className="space-y-2 rounded-md border p-3">
                   <p className="text-sm font-medium">Import history</p>
                   <p className="text-xs text-muted-foreground">
-                    Fills older days so recovery can be compared against your own normal. About 10 seconds per month.
+                    Fills older days so recovery can be compared against your own normal. About 35 seconds per month; keep this page open.
                   </p>
                   <div className="flex gap-2">
                     <select
@@ -308,6 +334,9 @@ export function GarminConnectCard() {
                       {progress && !progress.finished ? `Importing ${progress.done}/${progress.total}…` : 'Import'}
                     </Button>
                   </div>
+                  {progress?.message && !progress.finished && (
+                    <p className="text-xs text-muted-foreground">{progress.message}</p>
+                  )}
                   {progress?.finished && (
                     <p className="text-xs text-muted-foreground">
                       {progress.message ?? `Done: ${progress.days} days with Garmin data imported.`}

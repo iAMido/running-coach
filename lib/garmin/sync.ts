@@ -35,6 +35,8 @@ export interface GarminSyncResult {
   components: { hrv: boolean; summaries: boolean; sleep: boolean; bodyBattery: boolean };
   errors: string[];
   skipped?: 'not_connected' | 'cooldown' | 'key_expired';
+  /** Set when Garmin rate-limited this run or an earlier one: when it is safe to try again. */
+  cooldownUntil?: string;
 }
 
 export interface GarminSyncOptions {
@@ -106,7 +108,7 @@ export async function syncGarminWellnessForUser(
     return { ...result, skipped: 'key_expired' };
   }
   if (token.cooldown_until && Date.parse(token.cooldown_until) > Date.now()) {
-    return { ...result, skipped: 'cooldown' };
+    return { ...result, skipped: 'cooldown', cooldownUntil: token.cooldown_until };
   }
 
   const client = garminClientFromToken(token);
@@ -165,13 +167,14 @@ export async function syncGarminWellnessForUser(
   const anySucceeded =
     Object.values(result.components).some(Boolean) && !result.errors.some((e) => e.startsWith('upsert:'));
   const limited = rateLimited as GarminRateLimitedError | null;
+  if (limited) {
+    result.cooldownUntil = new Date(Date.now() + (limited.retryAfterSec ?? DEFAULT_COOLDOWN_SEC) * 1000).toISOString();
+  }
   await updateGarminToken(userId, {
     last_sync_at: new Date().toISOString(),
     ...(anySucceeded ? { last_success_at: new Date().toISOString() } : {}),
     last_error: result.errors.length ? result.errors.join(' | ').slice(0, 1000) : null,
-    ...(limited
-      ? { cooldown_until: new Date(Date.now() + (limited.retryAfterSec ?? DEFAULT_COOLDOWN_SEC) * 1000).toISOString() }
-      : {}),
+    ...(result.cooldownUntil ? { cooldown_until: result.cooldownUntil } : {}),
   });
 
   return result;
