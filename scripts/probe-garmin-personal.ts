@@ -82,7 +82,7 @@ function coverage(label: string, rows: Record<string, unknown>[] | undefined, ex
   }
   const counts = new Map<string, number>();
   for (const row of rows) {
-    for (const [k, v] of Object.entries(row ?? {})) {
+    for (const [k, v] of Object.entries(flatten(row ?? {}))) {
       if (v !== null && v !== undefined && v !== '') counts.set(k, (counts.get(k) ?? 0) + 1);
       else if (!counts.has(k)) counts.set(k, 0);
     }
@@ -90,6 +90,25 @@ function coverage(label: string, rows: Record<string, unknown>[] | undefined, ex
   console.log(`  coverage ${label}: ${rows.length} rows / ${expectedDays} days`);
   const cells = [...counts.entries()].map(([k, n]) => `${k} ${n}`);
   for (let i = 0; i < cells.length; i += 4) console.log(`    ${cells.slice(i, i + 4).join(' · ')}`);
+}
+
+/**
+ * One level of nesting flattened to `parent.child`, so a v2 daily summary's
+ * `bodyBattery: {...}` is counted by the values inside it, not by the wrapper
+ * existing. Arrays are left whole (present = non-empty).
+ */
+function flatten(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row)) {
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      for (const [k2, v2] of Object.entries(v as Record<string, unknown>)) {
+        out[`${k}.${k2}`] = v2 && typeof v2 === 'object' && !Array.isArray(v2) ? '[object]' : v2;
+      }
+    } else {
+      out[k] = Array.isArray(v) && v.length === 0 ? null : v;
+    }
+  }
+  return out;
 }
 
 async function main() {
@@ -216,6 +235,15 @@ async function main() {
     }
   }
 
+  // Official Swagger (2026-10-24) lists a dedicated stress range endpoint.
+  const stress = await get('stress_range', `/usersummary-service/stats/stress/daily/${oldest}/${newest}`);
+  if (Array.isArray(stress)) coverage('stress', stress as Record<string, unknown>[], days);
+  else if (stress && typeof stress === 'object') {
+    const inner = Object.values(stress).find(Array.isArray) as Record<string, unknown>[] | undefined;
+    coverage('stress', inner, days);
+  }
+
+  await get('hr_zones', `/biometric-service/heartRateZones/v2`);
   await get('user_settings', `/userprofile-service/userprofile/settings`);
 
   console.log(`\nRaw responses in ${outDir} — contains health data, do not commit.`);

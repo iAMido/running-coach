@@ -60,30 +60,45 @@ tags: [runcoach, garmin, wellness, readiness, plan]
 | Personal use only, "not intended for commercial applications serving multiple end users" | ✅ | Garmin FAQ. This app has one athlete, so it fits |
 | Whether the terms allow passing data to LLM providers | ❓ | **you, by reading the T&C** — see §5 |
 
-**Endpoints reported (host `personal.connectapi.garmin.com`):**
+**Endpoints — official Swagger (Garmin Connect Personal API 1.0.0, OAS3, seen 2026-10-24), host `personal.connectapi.garmin.com`:**
 
 ```
-/activitylist-service/activities/search/activities
-/activity-service/activity/{id}
-/activity-service/activity/{id}/workouts
-/download-service/files/activity/{id}                 # original FIT (zip)
-/usersummary-service/stats/steps/daily/{s}/{e}
-/usersummary-service/v2/dailysummaries
-/wellness-service/wellness/bodyBattery/reports/daily
-/userprofile-service/userprofile/settings
-/hrv-service/hrv/{date}
-/hrv-service/hrv/daily/{from}/{to}
-/sleep-service/sleep/dailySleep
-/sleep-service/sleep/dailySleepSummariesByDate
-/wellnessactivity-service/activity/summary/range/{from}/{until}
-/weight-service/weight/range/{s}/{e}
-/dailyHeartRate
-/heartRateZones/v2
-/fitnessage/v2/{date}
-/nutrition-service/food/logs/{date}
-/periodichealth-service/menstrualcycle/dayview/{date}
-/goal-service/goal/user/effective/weightgoal/{s}/{e}
+activity-service         GET /activity-service/activity/{activityId}
+                         GET /activity-service/activity/{activityId}/workouts
+activitylist-service     GET /activitylist-service/activities/search/activities
+biometric-service        GET /biometric-service/heartRateZones/v2
+download-service         GET /download-service/files/activity/{activityId}          # original FIT (zip)
+fitnessage-service       GET /fitnessage-service/fitnessage/v2/{calendarDate}
+goal-service             GET /goal-service/goal/user/effective/weightgoal/{startDate}/{endDate}
+hrv-service              GET /hrv-service/hrv/{calendarDate}
+                         GET /hrv-service/hrv/daily/{fromDate}/{toDate}
+nutrition-service        GET /nutrition-service/food/logs/{date}
+periodichealth-service   GET /periodichealth-service/menstrualcycle/summary/{calendarDate}
+                         GET /periodichealth-service/menstrualcycle/dayview/{calendarDate}
+sleep-service            GET /sleep-service/sleep/dailySleep
+                         GET /sleep-service/sleep/dailySleepSummariesByDate
+userprofile-service      GET /userprofile-service/userprofile/settings
+usersummary-service      GET /usersummary-service/stats/hydration/daily/{startDate}/{endDate}
+                         GET /usersummary-service/stats/steps/daily/{startDate}/{endDate}
+                         GET /usersummary-service/stats/stress/daily/{startDate}/{endDate}
+                         GET /usersummary-service/usersummary/daily
+                         GET /usersummary-service/v2/dailysummaries
+weight-service           GET /weight-service/weight/all/{startDate}/{endDate}
+                         GET /weight-service/weight/range/{startDate}/{endDate}
+wellness-service         GET /wellness-service/wellness/bodyBattery/reports/daily
+                         GET /wellness-service/wellness/daily/spo2acclimation/{calendarDate}
+                         GET /wellness-service/wellness/dailyHeartRate
+wellnessactivity-service GET /wellnessactivity-service/activity/summary/range/{fromDate}/{untilDate}
 ```
+
+Notable schemas: `UserDailySummaryV2DTO` carries `StressV2DTO`, `BodyBatteryV2DTO` (+ activity events), `RespirationV2DTO`, `PulseOxV2DTO`, `HeartRateV2DTO`, `IntensityMinutesV2DTO`, `JetLagV2DTO`; `HrvSummaryDTO` + `BaselineScoreDTO`; `DailySleepDTO` + `SleepScoreItem` + `SleepNeedDTO`; `BodyBatteryDynamicFeedbackEventDTO`. No training readiness / training status anywhere — confirmed.
+
+**Measured 2026-10-24 (first probe run, 60 days):**
+- Token exchange works; `Accept: application/json` on it returns **406** — send no Accept header.
+- ✅ activities (20 returned for `limit=50`), activity detail, workouts, FIT (115 KB zip), HRV range (60 days in one call), HRV day, dailySleep, v2 dailysummaries (60 days in one call), user settings.
+- Activity summary carries `avgGradeAdjustedSpeed` (m/s) and `averageRunningCadenceInStepsPerMinute` (true spm — `toCadenceSpm`'s <120 guard leaves it alone).
+- `dailySleep` carries stages, scores, avg sleeping HR, SpO2 (avg/low/high), respiration (avg/low/high), `avgSleepStress`, `awakeCount`, `sleepNeed`.
+- ❌ `bodyBattery/reports/daily` with a 60-day range → **400** (range limit or param names; body battery may come from v2 daily summaries instead).
 
 ---
 
