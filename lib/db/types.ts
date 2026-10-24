@@ -448,7 +448,7 @@ export interface DashboardStats {
     sleepHours: number | null;
     sleepScore: number | null;
     /** Garmin's own read, or null when Garmin is not connected. Provenance, not a verdict. */
-    garmin?: { day: string; bodyBatteryAtWake: number | null; hrvStatus: string | null } | null;
+    garmin?: { day: string; morningBodyBattery: number | null; hrvStatus: string | null } | null;
     /**
      * Age of these readings in calendar days. 0 = this morning, 1 = yesterday.
      *

@@ -863,7 +863,10 @@ export function formatGarminRecovery(days: GarminDailyWellness[], baselines: Gar
   const withData = days.filter((d) => d.sleep_secs != null || d.body_battery_max != null || d.hrv_status != null);
   if (withData.length === 0) return '';
 
-  const latest = withData[0];
+  // The newest COMPLETED night: today's row exists from midnight, and before
+  // waking its body-battery peak is still the overnight low. A sleep record
+  // only exists once the night is over.
+  const latest = withData.find((d) => d.sleep_secs != null) ?? withData[0];
   const age = daysBetweenDateStr(latest.day, userDateStr());
   const asOf = age <= 0 ? 'today' : age === 1 ? 'yesterday' : `${age} days ago`;
   const h = (secs: number) => `${(secs / 3600).toFixed(1)}h`;
@@ -873,23 +876,25 @@ export function formatGarminRecovery(days: GarminDailyWellness[], baselines: Gar
     `- Compared with this athlete's own last ${baselines.windowDays} days, never with Garmin's generic bands. Context for the advice, not a verdict on its own.`,
   ];
 
-  // Body battery at wake — the morning's starting charge.
-  if (typeof latest.body_battery_at_wake === 'number') {
-    const bb = latest.body_battery_at_wake;
+  // Morning body battery = the day's peak, which equals the at-wake reading on
+  // 95% of measured days (see GarminBaselines).
+  if (typeof latest.body_battery_max === 'number') {
+    const bb = latest.body_battery_max;
     let place = 'no personal baseline yet — do not call it high or low';
-    if (baselines.bbWakeMedian !== null && baselines.bbWakeP10 !== null) {
+    if (baselines.bbPeakMedian !== null && baselines.bbPeakP10 !== null) {
       place =
-        bb < baselines.bbWakeP10 ? `BELOW his usual range (median ${baselines.bbWakeMedian}, 10th percentile ${baselines.bbWakeP10})`
-        : bb < baselines.bbWakeMedian ? `below his median of ${baselines.bbWakeMedian}, inside his usual range`
-        : `at or above his median of ${baselines.bbWakeMedian}`;
+        bb < baselines.bbPeakP10 ? `BELOW his usual range (median ${baselines.bbPeakMedian}, 10th percentile ${baselines.bbPeakP10})`
+        : bb < baselines.bbPeakMedian ? `below his median of ${baselines.bbPeakMedian}, inside his usual range`
+        : `at or above his median of ${baselines.bbPeakMedian}`;
     }
-    lines.push(`- Body battery at wake (${latest.day}, ${asOf}): ${bb} — ${place}.`);
+    lines.push(`- Morning body battery (${latest.day}, ${asOf}): ${bb} — ${place}.`);
   } else {
-    lines.push(`- Body battery at wake (${latest.day}): not measured.`);
+    lines.push(`- Morning body battery (${latest.day}): not measured.`);
   }
-  const bbTrend = [...days].reverse().map((d) => (typeof d.body_battery_at_wake === 'number' ? String(d.body_battery_at_wake) : '–'));
+  const trendDays = [...days].reverse().filter((d) => d.day <= latest.day);
+  const bbTrend = trendDays.map((d) => (typeof d.body_battery_max === 'number' ? String(d.body_battery_max) : '–'));
   if (bbTrend.filter((v) => v !== '–').length > 1) {
-    lines.push(`- Body battery at wake, oldest to newest: ${bbTrend.join(' → ')}`);
+    lines.push(`- Morning body battery, oldest to newest: ${bbTrend.join(' → ')}`);
   }
 
   // HRV status: Garmin's 7-day average against Garmin's personal band. A trend, not one night.

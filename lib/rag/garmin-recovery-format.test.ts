@@ -7,7 +7,7 @@ import type { GarminDailyWellness } from '@/lib/db/types';
 import { garminFeedGaps, garminFeedProblem } from '@/lib/garmin/feed';
 
 const baselines: GarminBaselines = {
-  bbWakeMedian: 85, bbWakeP10: 75, stressMedian: 26, deepSleepMedianSecs: 3_900, sampleCount: 28, windowDays: 28,
+  bbPeakMedian: 85, bbPeakP10: 75, stressMedian: 26, deepSleepMedianSecs: 3_900, sampleCount: 28, windowDays: 28,
 };
 
 function day(daysAgo: number, over: Partial<GarminDailyWellness> = {}): GarminDailyWellness {
@@ -26,18 +26,18 @@ test('nothing connected or nothing measured -> no block at all', () => {
 });
 
 test('body battery is placed against HIS distribution: below p10 says BELOW his usual range', () => {
-  const out = formatGarminRecovery([day(1, { body_battery_at_wake: 64 })], baselines);
-  expect(out).toContain('Body battery at wake');
+  const out = formatGarminRecovery([day(1, { body_battery_max: 64 })], baselines);
+  expect(out).toContain('Morning body battery');
   expect(out).toContain('64 — BELOW his usual range (median 85, 10th percentile 75)');
 });
 
 test('without enough history the block refuses to call a value high or low', () => {
-  const thin = { ...baselines, bbWakeMedian: null, bbWakeP10: null };
-  expect(formatGarminRecovery([day(1, { body_battery_at_wake: 40 })], thin)).toContain('no personal baseline yet');
+  const thin = { ...baselines, bbPeakMedian: null, bbPeakP10: null };
+  expect(formatGarminRecovery([day(1, { body_battery_max: 40 })], thin)).toContain('no personal baseline yet');
 });
 
 test('a missing body battery reads "not measured", never as a low value', () => {
-  expect(formatGarminRecovery([day(1, { body_battery_at_wake: null })], baselines)).toContain('not measured');
+  expect(formatGarminRecovery([day(1, { body_battery_max: null })], baselines)).toContain('not measured');
 });
 
 test('HRV status reports the streak — LOW for 3 days is a trend, not one night', () => {
@@ -63,12 +63,12 @@ test('HRV value, resting HR and sleep score are not repeated (daily_wellness own
 });
 
 test('baselines: null below 10 samples; median and p10 from his own values', () => {
-  const few = garminBaselinesFrom(Array.from({ length: 9 }, () => ({ body_battery_at_wake: 80, stress_avg: 20, sleep_deep_secs: 3600 })), 28);
-  expect(few.bbWakeMedian).toBeNull();
+  const few = garminBaselinesFrom(Array.from({ length: 9 }, () => ({ body_battery_max: 80, stress_avg: 20, sleep_deep_secs: 3600 })), 28);
+  expect(few.bbPeakMedian).toBeNull();
   const vals = [60, 70, 75, 80, 82, 85, 88, 90, 92, 95];
-  const b = garminBaselinesFrom(vals.map((v) => ({ body_battery_at_wake: v, stress_avg: 25, sleep_deep_secs: 3600 })), 28);
-  expect(b.bbWakeMedian).toBe(82);
-  expect(b.bbWakeP10).toBe(60);
+  const b = garminBaselinesFrom(vals.map((v) => ({ body_battery_max: v, stress_avg: 25, sleep_deep_secs: 3600 })), 28);
+  expect(b.bbPeakMedian).toBe(82);
+  expect(b.bbPeakP10).toBe(60);
   expect(percentile([], 50)).toBeNull();
 });
 
@@ -100,4 +100,14 @@ test('feed: an expiring key is a problem 14 days out but not yet a gap', () => {
   expect(garminFeedGaps(expiring, NOW)).toEqual([]);
   expect(garminFeedProblem(expiring, NOW)).toContain('10 days');
   expect(garminFeedGaps({ ...healthy, keyDaysLeft: -1 }, NOW)[0]).toContain('expired');
+});
+
+test('before waking, today\'s partial row is skipped: the newest COMPLETED night is reported', () => {
+  const out = formatGarminRecovery(
+    [day(0, { sleep_secs: null, body_battery_max: 22 }), day(1, { body_battery_max: 93 })],
+    baselines,
+  );
+  expect(out).toContain('Morning body battery (' + userDateStrDaysAgo(1));
+  expect(out).toContain(': 93');
+  expect(out).not.toContain(': 22');
 });

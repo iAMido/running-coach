@@ -104,9 +104,16 @@ export async function getGarminFeedStatus(userId: string): Promise<GarminFeedSta
  * say "no baseline yet" rather than call a value high or low.
  */
 export interface GarminBaselines {
-  bbWakeMedian: number | null;
+  /**
+   * Morning body battery = the day's PEAK (`body_battery_max`). Measured
+   * 2026-10-24: the peak equals the at-wake reading on 129/136 days (within 3
+   * on 135) — body battery tops out at waking — and exists on all 731 imported
+   * days, while the at-wake reading needs Garmin's 6-point intraday series,
+   * which carries no levels before ~April 2026.
+   */
+  bbPeakMedian: number | null;
   /** 10th percentile: "below your usual range" starts here. */
-  bbWakeP10: number | null;
+  bbPeakP10: number | null;
   stressMedian: number | null;
   deepSleepMedianSecs: number | null;
   sampleCount: number;
@@ -124,18 +131,18 @@ export function percentile(values: number[], p: number): number | null {
 }
 
 export function garminBaselinesFrom(
-  rows: Pick<GarminDailyWellness, 'body_battery_at_wake' | 'stress_avg' | 'sleep_deep_secs'>[],
+  rows: Pick<GarminDailyWellness, 'body_battery_max' | 'stress_avg' | 'sleep_deep_secs'>[],
   windowDays: number,
 ): GarminBaselines {
-  const nums = (k: 'body_battery_at_wake' | 'stress_avg' | 'sleep_deep_secs') =>
+  const nums = (k: 'body_battery_max' | 'stress_avg' | 'sleep_deep_secs') =>
     rows.map((r) => r[k]).filter((v): v is number => typeof v === 'number');
   const enough = (xs: number[]) => xs.length >= MIN_GARMIN_BASELINE_SAMPLES;
-  const bb = nums('body_battery_at_wake');
+  const bb = nums('body_battery_max');
   const stress = nums('stress_avg');
   const deep = nums('sleep_deep_secs');
   return {
-    bbWakeMedian: enough(bb) ? percentile(bb, 50) : null,
-    bbWakeP10: enough(bb) ? percentile(bb, 10) : null,
+    bbPeakMedian: enough(bb) ? percentile(bb, 50) : null,
+    bbPeakP10: enough(bb) ? percentile(bb, 10) : null,
     stressMedian: enough(stress) ? percentile(stress, 50) : null,
     deepSleepMedianSecs: enough(deep) ? percentile(deep, 50) : null,
     sampleCount: bb.length,
@@ -143,11 +150,15 @@ export function garminBaselinesFrom(
   };
 }
 
-/** Baselines over the `windowDays` BEFORE today, so today's reading is never part of its own normal. */
-export async function getGarminBaselines(userId: string, windowDays = 28): Promise<GarminBaselines> {
+/**
+ * Baselines over the `windowDays` BEFORE today, so today's reading is never part
+ * of its own normal. 90 days, not 28: a 10th percentile of 28 values is the
+ * 3rd-lowest day, which is noise; with the history imported 90 are available.
+ */
+export async function getGarminBaselines(userId: string, windowDays = 90): Promise<GarminBaselines> {
   const { data, error } = await supabase
     .from('garmin_daily_wellness')
-    .select('body_battery_at_wake,stress_avg,sleep_deep_secs')
+    .select('body_battery_max,stress_avg,sleep_deep_secs')
     .eq('user_id', userId)
     .gte('day', userDateStrDaysAgo(windowDays))
     .lt('day', userDateStr());

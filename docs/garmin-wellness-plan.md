@@ -1,7 +1,7 @@
 ---
 title: Garmin Personal API → RunCoach wellness
 project: RunCoach
-status: steps 0-6, 8, 9 shipped; step 7 (readiness rules) pending measurement
+status: steps 0-6, 8, 9 shipped; step 7 measured and deferred (too few outcomes)
 created: 2026-10-24
 updated: 2026-10-24
 repo: iAMido/running-coach

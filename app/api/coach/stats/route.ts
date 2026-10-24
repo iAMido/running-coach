@@ -110,7 +110,8 @@ export async function GET() {
     const loadRamp = await loadRampTrend(userId);
     // Garmin-only signals for the Recovery tile. Best-effort; null when not connected.
     const garminLatest = await getRecentGarminWellness(userId, 2)
-      .then((rows) => rows.find((r) => r.body_battery_at_wake != null || r.hrv_status != null) ?? null)
+      // Newest completed night: before waking, today's peak is still the overnight low.
+      .then((rows) => rows.find((r) => r.sleep_secs != null) ?? null)
       .catch(() => null);
 
     return NextResponse.json({
@@ -144,7 +145,8 @@ export async function GET() {
             garmin: garminLatest
               ? {
                   day: garminLatest.day,
-                  bodyBatteryAtWake: garminLatest.body_battery_at_wake ?? null,
+                  // The day's peak = the at-wake value on 95% of measured days.
+                  morningBodyBattery: garminLatest.body_battery_max ?? null,
                   hrvStatus: garminLatest.hrv_status ?? null,
                 }
               : null,
