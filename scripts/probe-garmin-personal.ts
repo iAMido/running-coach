@@ -70,6 +70,28 @@ function describe(body: unknown): string {
   return typeof body;
 }
 
+/**
+ * Per-field presence across days: `key n/expected`. Present = not null/undefined
+ * and not an empty string. A zero counts as present here — whether 0 is a real
+ * reading or a placeholder is for the mapper to decide, per field.
+ */
+function coverage(label: string, rows: Record<string, unknown>[] | undefined, expectedDays: number) {
+  if (!rows || rows.length === 0) {
+    console.log(`  coverage ${label}: no rows`);
+    return;
+  }
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    for (const [k, v] of Object.entries(row ?? {})) {
+      if (v !== null && v !== undefined && v !== '') counts.set(k, (counts.get(k) ?? 0) + 1);
+      else if (!counts.has(k)) counts.set(k, 0);
+    }
+  }
+  console.log(`  coverage ${label}: ${rows.length} rows / ${expectedDays} days`);
+  const cells = [...counts.entries()].map(([k, n]) => `${k} ${n}`);
+  for (let i = 0; i < cells.length; i += 4) console.log(`    ${cells.slice(i, i + 4).join(' · ')}`);
+}
+
 async function main() {
   const apiKey = process.env.GARMIN_PERSONAL_API_KEY;
   if (!apiKey) throw new Error('GARMIN_PERSONAL_API_KEY is not set');
@@ -138,12 +160,62 @@ async function main() {
     console.log('  no running activity in window — widen --days');
   }
 
-  await get('hrv_range', `/hrv-service/hrv/daily/${oldest}/${newest}`);
+  // ---- Coverage: how many days actually carry each field (the Step 0 go/no-go).
+  const hrv = (await get('hrv_range', `/hrv-service/hrv/daily/${oldest}/${newest}`)) as
+    | { hrvSummaries?: Record<string, unknown>[] }
+    | null;
+  coverage('HRV', hrv?.hrvSummaries, days);
   await get('hrv_today', `/hrv-service/hrv/${newest}`);
-  await get('sleep_daily', `/sleep-service/sleep/dailySleep?date=${newest}`);
-  await get('body_battery', `/wellness-service/wellness/bodyBattery/reports/daily?startDate=${oldest}&endDate=${newest}`);
-  await get('daily_summaries', `/usersummary-service/v2/dailysummaries?startDate=${oldest}&endDate=${newest}`);
-  await get('hr_zones', `/heartRateZones/v2`);
+
+  const summaries = (await get(
+    'daily_summaries',
+    `/usersummary-service/v2/dailysummaries?startDate=${oldest}&endDate=${newest}`,
+  )) as { data?: Record<string, unknown>[] } | null;
+  coverage('daily summaries', summaries?.data, days);
+
+  // Sleep: try a range endpoint first; otherwise one call per day (what a sync would have to do).
+  const sleepRange = await get(
+    'sleep_range',
+    `/sleep-service/sleep/dailySleepSummariesByDate?startDate=${oldest}&endDate=${newest}`,
+  );
+  if (Array.isArray(sleepRange)) coverage('sleep (range)', sleepRange as Record<string, unknown>[], days);
+  const sleepDays = Math.min(days, Number(argValue('--sleep-days') ?? 30));
+  const nights: Record<string, unknown>[] = [];
+  let sleepFailures = 0;
+  for (let i = 0; i < sleepDays; i++) {
+    const date = isoDay(new Date(Date.now() - i * 86_400_000));
+    const res = await fetch(`${BASE}/sleep-service/sleep/dailySleep?date=${date}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: '*/*' },
+    });
+    if (!res.ok) {
+      sleepFailures++;
+      if (res.status === 429) {
+        console.log(`  sleep per-day: 429 after ${i} calls — stopping`);
+        break;
+      }
+      continue;
+    }
+    const text = await res.text();
+    if (text.trim()) nights.push(JSON.parse(text));
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  fs.writeFileSync(path.join(outDir, 'sleep_per_day.json'), JSON.stringify(nights, null, 2));
+  console.log(`  sleep per-day: ${nights.length} responses, ${sleepFailures} failures over ${sleepDays} days`);
+  coverage('sleep (per day)', nights, sleepDays);
+
+  // Body battery: 60 days got a 400. Find the range (or parameter names) it accepts.
+  for (const span of [28, 7, 1]) {
+    const from = isoDay(new Date(Date.now() - (span - 1) * 86_400_000));
+    const bb = await get(
+      `body_battery_${span}d`,
+      `/wellness-service/wellness/bodyBattery/reports/daily?startDate=${from}&endDate=${newest}`,
+    );
+    if (Array.isArray(bb)) {
+      coverage(`body battery (${span}d)`, bb as Record<string, unknown>[], span);
+      break;
+    }
+  }
+
   await get('user_settings', `/userprofile-service/userprofile/settings`);
 
   console.log(`\nRaw responses in ${outDir} — contains health data, do not commit.`);
