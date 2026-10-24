@@ -1,7 +1,7 @@
 ---
 title: Garmin Personal API → RunCoach wellness
 project: RunCoach
-status: step 0 done — GO
+status: step 0 done (GO); PR 1 built — steps 1-5, 8, 9
 created: 2026-10-24
 updated: 2026-10-24
 repo: iAMido/running-coach

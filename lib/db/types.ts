@@ -555,6 +555,70 @@ export interface IntervalsToken {
  * Form is deliberately not stored: it is ctl - atl, derived at read time so it
  * cannot drift out of agreement with its inputs.
  */
+/** `runcoach.garmin_tokens`. `api_key` and `access_token` are encrypted blobs. */
+export interface GarminToken {
+  id: string;
+  user_id: string;
+  api_key: string;
+  /** YYYY-MM-DD. Entered at connect time; Garmin does not report it. */
+  key_expires_at: string;
+  access_token?: string | null;
+  access_token_expires_at?: string | null;
+  last_sync_at?: string | null;
+  last_success_at?: string | null;
+  last_error?: string | null;
+  cooldown_until?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/**
+ * `runcoach.garmin_daily_wellness` — Garmin-only recovery data.
+ *
+ * hrv_last_night / resting_hr / sleep_secs / sleep_score duplicate
+ * `DailyWellness` (measured identical) and must not feed baselines:
+ * `daily_wellness` owns those four.
+ */
+export interface GarminDailyWellness {
+  id: string;
+  user_id: string;
+  /** YYYY-MM-DD, the wake date. */
+  day: string;
+  body_battery_min?: number | null;
+  body_battery_max?: number | null;
+  body_battery_charged?: number | null;
+  body_battery_drained?: number | null;
+  body_battery_at_wake?: number | null;
+  stress_avg?: number | null;
+  stress_max?: number | null;
+  stress_qualifier?: string | null;
+  stress_high_secs?: number | null;
+  sleep_secs?: number | null;
+  sleep_score?: number | null;
+  sleep_deep_secs?: number | null;
+  sleep_light_secs?: number | null;
+  sleep_rem_secs?: number | null;
+  sleep_awake_secs?: number | null;
+  sleep_awake_count?: number | null;
+  sleep_stress_avg?: number | null;
+  sleep_avg_hr?: number | null;
+  sleep_respiration_avg?: number | null;
+  sleep_spo2_avg?: number | null;
+  sleep_need_mins?: number | null;
+  sleep_need_baseline_mins?: number | null;
+  sleep_start?: string | null;
+  sleep_end?: string | null;
+  hrv_last_night?: number | null;
+  hrv_weekly_avg?: number | null;
+  hrv_baseline_low?: number | null;
+  hrv_baseline_high?: number | null;
+  hrv_status?: string | null;
+  resting_hr?: number | null;
+  raw?: unknown;
+  synced_at?: string;
+  created_at?: string;
+}
+
 export interface DailyWellness {
   id: string;
   user_id: string;

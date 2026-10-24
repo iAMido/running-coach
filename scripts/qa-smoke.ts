@@ -112,6 +112,20 @@ async function main() {
   const expected = trig.some((t) => t.urgent) || trig.length >= 2;
   check('hysteresis matches the rule', shouldPropose(trig) === expected, shouldPropose(trig) ? 'would propose' : 'no change');
 
+  console.log('\n== garmin ==');
+  const { getGarminFeedStatus } = await import('../lib/db/garmin-wellness');
+  try {
+    const g = await getGarminFeedStatus(userId);
+    check('garmin connected', g.connected);
+    if (g.connected) {
+      check('garmin key > 14 days from expiry', (g.keyDaysLeft ?? -1) > 14, `${g.keyDaysLeft} days left`);
+      check('garmin readings on >= 5 of last 7 days', g.daysWithReadings7d >= 5, `${g.daysWithReadings7d}/7, latest ${g.latestReadingDay}`);
+      check('garmin last sync had no error', !g.lastError, g.lastError ?? '');
+    }
+  } catch (e) {
+    check('garmin status readable', false, e instanceof Error ? e.message : String(e));
+  }
+
   console.log('\n== intervals.icu ==');
   const { intervalsClientFromEnv } = await import('../lib/intervals/client');
   const { userDateStr, userDateStrDaysAgo } = await import('../lib/utils/user-time');

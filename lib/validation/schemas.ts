@@ -272,6 +272,15 @@ export const intervalsConnectSchema = z.object({
     .optional(),
 });
 
+// Garmin Personal API key. Garmin offers 30/90/180/365-day keys and never
+// reports the expiry back, so the athlete states it; the app warns from 14 days out.
+export const garminConnectSchema = z.object({
+  apiKey: z.string().trim().min(20).max(1024),
+  keyExpiresAt: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expiry must be a date (YYYY-MM-DD)'),
+});
+
 // Review analysis validation
 export const reviewAnalysisSchema = z.object({
   overallFeeling: rating.optional(),
