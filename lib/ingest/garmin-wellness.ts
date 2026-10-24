@@ -295,7 +295,20 @@ export function mergeGarminDays(userId: string, days: string[], fetched: GarminF
       const wakeMs = sleep.get(day)?.columns.sleep_end ? Date.parse(sleep.get(day)!.columns.sleep_end!) : null;
       row.body_battery_at_wake = bodyBatteryAtWake(batteryByDay.get(day), wakeMs);
       const report = batteryByDay.get(day);
-      if (report) row.raw.bodyBattery = { charged: report.charged, drained: report.drained };
+      if (report) {
+        // Shape of the intraday series, kept so a null at-wake value can be
+        // explained without re-fetching: no series at all, a series that does
+        // not reach wake time, or descriptors under unexpected keys.
+        const values = report.bodyBatteryValuesArray ?? [];
+        row.raw.bodyBattery = {
+          charged: report.charged,
+          drained: report.drained,
+          values: values.length,
+          firstRow: values[0] ?? null,
+          lastRow: values.at(-1) ?? null,
+          descriptors: (report.bodyBatteryValueDescriptorDTOList ?? []).map((d) => d.bodyBatteryValueDescriptorKey ?? null),
+        };
+      }
     }
     return row;
   });
