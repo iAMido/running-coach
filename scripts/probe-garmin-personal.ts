@@ -246,6 +246,34 @@ async function main() {
   await get('hr_zones', `/biometric-service/heartRateZones/v2`);
   await get('user_settings', `/userprofile-service/userprofile/settings`);
 
+  // --compare N: Garmin's values for the fields intervals.icu also stores, per day,
+  // so they can be checked against runcoach.daily_wellness on the same dates.
+  // Prints numbers only — your own data, shared on purpose.
+  if (argv.includes('--compare')) {
+    const n = Number(argValue('--compare') ?? 14) || 14;
+    const hrvBy = new Map((hrv?.hrvSummaries ?? []).map((h) => [h.calendarDate as string, h]));
+    const sumBy = new Map((summaries?.data ?? []).map((d) => [d.calendarDate as string, d]));
+    const sleepBy = new Map(nights.map((s) => [s.calendarDate as string, s]));
+    console.log(`\ncompare (last ${n} days): date | hrv lastNightAvg | hrv status | resting HR | sleep h | sleep score | sleep start→end (local)`);
+    for (let i = 0; i < n; i++) {
+      const date = isoDay(new Date(Date.now() - i * 86_400_000));
+      const h = hrvBy.get(date);
+      const d = sumBy.get(date) as { heartRate?: { restingValue?: number } } | undefined;
+      const sl = sleepBy.get(date) as
+        | { sleepTimeSeconds?: number; sleepScores?: { overall?: { value?: number } | number };
+            sleepStartTimestampLocal?: number; sleepEndTimestampLocal?: number }
+        | undefined;
+      const overall = sl?.sleepScores?.overall;
+      const score = typeof overall === 'object' ? overall?.value : overall;
+      const hm = (ms?: number) => (typeof ms === 'number' ? new Date(ms).toISOString().slice(5, 16).replace('T', ' ') : '-');
+      console.log(
+        `  ${date} | ${h?.lastNightAvg ?? '-'} | ${h?.status ?? '-'} | ${d?.heartRate?.restingValue ?? '-'} | ` +
+          `${typeof sl?.sleepTimeSeconds === 'number' ? (sl.sleepTimeSeconds / 3600).toFixed(2) : '-'} | ${score ?? '-'} | ` +
+          `${hm(sl?.sleepStartTimestampLocal)}→${hm(sl?.sleepEndTimestampLocal)}`,
+      );
+    }
+  }
+
   console.log(`\nRaw responses in ${outDir} — contains health data, do not commit.`);
 }
 

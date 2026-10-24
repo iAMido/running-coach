@@ -1,7 +1,7 @@
 ---
 title: Garmin Personal API → RunCoach wellness
 project: RunCoach
-status: plan
+status: step 0 done — GO
 created: 2026-10-24
 updated: 2026-10-24
 repo: iAMido/running-coach
@@ -110,10 +110,8 @@ Notable schemas: `UserDailySummaryV2DTO` carries `StressV2DTO`, `BodyBatteryV2DT
 > [!important] D2 — merge in one place only
 > Only `lib/db/wellness.ts` reads `garmin_daily_wellness`. Readiness, the coach context, training-state and the UI keep calling the same functions as today. The same pattern as `training-state.ts` and `readinessForUser`: one assembly point, so the coach and the app cannot reason from different numbers.
 
-> [!important] D3 — overlapping fields are decided by measurement
-> For `hrv`, `resting_hr`, `sleep_secs` and `sleep_score`, Step 0 compares the two sources day by day.
-> - **Agree (≥95% of days identical after rounding)** → intervals.icu stays the source; Garmin only fills days intervals.icu has none (HRV is missing about 12% of the year). Every merged value records its `source`.
-> - **Disagree** → no merging. The HRV baseline must come from a single definition. A mixed definition is how zones and decoupling were corrupted.
+> [!important] D3 — no merging of overlapping fields (decided by measurement, 2026-10-24)
+> In the measured 60-day window intervals.icu has `hrv`, `resting_hr`, `sleep_secs` and `sleep_score` on **61/61** days, so there are no gaps to fill. intervals.icu stays the **only** source for those four. Garmin contributes only what intervals.icu lacks: body battery, stress, sleep stages and components, HRV status/baseline band, respiration, SpO2, sleep need. One check remains: Garmin's `lastNightAvg` should equal intervals.icu's `hrv` on the same date. Otherwise Garmin's HRV status would sit next to another night's value. See [[garmin-personal-probe-findings]].
 
 > [!important] D4 — no new cron
 > There are already 4 crons on Hobby, and the 4th is unconfirmed. The Garmin sync is a separate best-effort block **inside** `/api/cron/intervals-sync` plus the existing sync-on-open (`/api/intervals/sync` + `claimAutoSync`). A Garmin failure is recorded in `errors[]` and never fails the intervals.icu sync.
