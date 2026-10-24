@@ -43,6 +43,7 @@ export async function upsertGarminWellnessDays(rows: GarminWellnessRow[]): Promi
   return rows.length;
 }
 
+/** Rows from `days` days ago through today — `days + 1` calendar days, like `getRecentWellness`. */
 export async function getRecentGarminWellness(userId: string, days = 7): Promise<GarminDailyWellness[]> {
   const { data, error } = await supabase
     .from('garmin_daily_wellness')
@@ -79,7 +80,8 @@ export async function getGarminFeedStatus(userId: string): Promise<GarminFeedSta
       cooldownUntil: null, daysWithReadings7d: 0, latestReadingDay: null,
     };
   }
-  const recent = await getRecentGarminWellness(userId, 7).catch(() => [] as GarminDailyWellness[]);
+  // Today plus the 6 days before it — `getRecentGarminWellness(n)` spans n+1 calendar days.
+  const recent = await getRecentGarminWellness(userId, 6).catch(() => [] as GarminDailyWellness[]);
   const withReadings = recent.filter((d) => d.sleep_secs != null || d.body_battery_max != null);
   return {
     connected: true,
