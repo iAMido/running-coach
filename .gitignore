@@ -74,3 +74,4 @@ test-weekly-review-*.md
 test-plan-builder*.json
 test-plan-output*.json
 test-season*.json
+garmin-probe/
