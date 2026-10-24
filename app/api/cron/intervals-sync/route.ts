@@ -9,7 +9,8 @@ import {
   syncIntervalsForUser,
   type IntervalsSyncResult,
 } from '@/lib/intervals/sync';
-import type { IntervalsToken } from '@/lib/db/types';
+import { syncGarminWellnessForUser, type GarminSyncResult } from '@/lib/garmin/sync';
+import type { GarminToken, IntervalsToken } from '@/lib/db/types';
 
 /**
  * Scheduled intervals.icu sync.
@@ -50,13 +51,10 @@ export async function GET(request: NextRequest) {
   try {
     const { data: tokens } = await supabase.from('intervals_tokens').select('user_id');
 
-    if (!tokens || tokens.length === 0) {
-      return NextResponse.json({ message: 'No intervals.icu tokens found' });
-    }
 
     const results: (Partial<IntervalsSyncResult> & { userId: string; error?: string })[] = [];
 
-    for (const row of tokens as Pick<IntervalsToken, 'user_id'>[]) {
+    for (const row of (tokens ?? []) as Pick<IntervalsToken, 'user_id'>[]) {
       // Single-user today, but one athlete's bad credential must not cost
       // everyone else their sync.
       try {
@@ -71,7 +69,20 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, daysBack, results });
+    // Garmin wellness rides on this cron rather than a cron of its own. Its own
+    // loop over its own token rows, after intervals.icu, so a Garmin failure can
+    // never cost the activity sync.
+    const garmin: (Partial<GarminSyncResult> & { userId: string; error?: string })[] = [];
+    const { data: garminTokens } = await supabase.from('garmin_tokens').select('user_id');
+    for (const row of (garminTokens ?? []) as Pick<GarminToken, 'user_id'>[]) {
+      try {
+        garmin.push(await syncGarminWellnessForUser(row.user_id));
+      } catch (err) {
+        garmin.push({ userId: row.user_id, error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    return NextResponse.json({ success: true, daysBack, results, garmin });
   } catch (error) {
     console.error('Cron intervals sync error:', error);
     return NextResponse.json({ error: 'Sync failed' }, { status: 500 });

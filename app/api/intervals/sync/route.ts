@@ -11,6 +11,7 @@ import {
   type SyncClaim,
 } from '@/lib/intervals/sync';
 import { IntervalsApiError } from '@/lib/intervals/client';
+import { GARMIN_ON_OPEN_DAYS_BACK, syncGarminWellnessForUser } from '@/lib/garmin/sync';
 
 /**
  * Manual "Sync Now", and — when `ifStaleMinutes` is passed — the automatic
@@ -61,10 +62,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'intervals.icu not connected' }, { status: 400 });
     }
 
+    // Garmin wellness runs alongside, under the same claim, so opening the app
+    // in the morning also brings in last night's body battery and sleep. It
+    // never throws into this route: a Garmin failure is reported, not fatal.
+    const garminRun = syncGarminWellnessForUser(userId, {
+      daysBack: isAutomatic ? GARMIN_ON_OPEN_DAYS_BACK : daysBack,
+    }).catch((err) => ({ error: err instanceof Error ? err.message : String(err) }));
+
     let result;
     try {
       result = await syncIntervalsForUser(userId, connection.client, { daysBack });
     } catch (err) {
+      await garminRun;
       // A failed sync must not leave a timestamp claiming it succeeded, which
       // would also suppress the next automatic attempt for the whole window.
       if (claim) await releaseAutoSyncClaim(userId, claim);
@@ -79,6 +88,7 @@ export async function POST(request: NextRequest) {
       wellnessDaysUpserted: result.wellnessDaysUpserted,
       dateCorrected: result.dateCorrected,
       errors: result.errors,
+      garmin: await garminRun,
     });
   } catch (error) {
     // The client's messages already name the real cause (a 403 is the

@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RefreshCw, Link2, Unlink, CheckCircle, AlertCircle, Upload, FileUp, ExternalLink, ShieldAlert } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
+import { GarminConnectCard } from '@/components/coach/garmin-connect-card';
 
 interface UploadResult {
   success: boolean;
@@ -418,6 +419,10 @@ export default function IntervalsSyncPage() {
             )}
           </CardContent>
         </Card>
+
+        <div className="lg:col-span-2">
+          <GarminConnectCard />
+        </div>
 
         {/* Manual Upload — carried over unchanged */}
         <Card className="lg:col-span-2">

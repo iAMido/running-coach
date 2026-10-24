@@ -16,6 +16,7 @@ export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
+import { getGarminFeedStatus, GARMIN_KEY_WARN_DAYS } from '@/lib/db/garmin-wellness';
 
 interface CoverageRow {
   user_id: string;
@@ -162,6 +163,28 @@ async function buildReportForUser(userId: string, weekStart: Date): Promise<stri
   }
   if (ai.topWarningCodes.length > 0) {
     lines.push(`\nMost common preflight warnings: ${ai.topWarningCodes.map(w => `\`${w.code}\` (${w.count})`).join(', ')}`);
+  }
+  lines.push('');
+
+  // 5. Garmin recovery feed. Pull-only with a key that expires, so it breaks
+  // silently unless something reads it every week.
+  const garmin = await getGarminFeedStatus(userId).catch(() => null);
+  lines.push('## Garmin recovery feed');
+  if (!garmin || !garmin.connected) {
+    lines.push('- Not connected (body battery, stress, sleep stages and HRV status unavailable).');
+  } else {
+    const lastOk = garmin.lastSuccessAt ? garmin.lastSuccessAt.slice(0, 16).replace('T', ' ') : 'never';
+    lines.push(`- Last successful sync: **${lastOk}** UTC`);
+    lines.push(`- Days with readings (last 7): **${garmin.daysWithReadings7d}/7**`);
+    lines.push(`- Key expires ${garmin.keyExpiresAt} (${garmin.keyDaysLeft} days)`);
+    if (garmin.keyDaysLeft !== null && garmin.keyDaysLeft < 0) {
+      lines.push('\n> 🔴 Garmin Personal API key has EXPIRED. Create a new one and paste it on /coach/intervals.');
+    } else if (garmin.keyDaysLeft !== null && garmin.keyDaysLeft <= GARMIN_KEY_WARN_DAYS) {
+      lines.push(`\n> ⚠️ Garmin key expires in ${garmin.keyDaysLeft} days — rotate it on /coach/intervals.`);
+    }
+    if (garmin.daysWithReadings7d < 5) {
+      lines.push(`\n> 🔴 Only ${garmin.daysWithReadings7d}/7 days carry Garmin readings.${garmin.lastError ? ` Last error: ${garmin.lastError}` : ''}`);
+    }
   }
   lines.push('');
 
