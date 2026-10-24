@@ -389,7 +389,7 @@ export default function CoachDashboard() {
             const g = r?.garmin;
             const garminNote = g
               ? [
-                  g.bodyBatteryAtWake != null ? `battery ${g.bodyBatteryAtWake} at wake` : null,
+                  g.morningBodyBattery != null ? `morning battery ${g.morningBodyBattery}` : null,
                   g.hrvStatus ? `HRV status ${g.hrvStatus.toLowerCase()}` : null,
                 ].filter(Boolean).join(' · ') || null
               : null;
