@@ -43,7 +43,9 @@ function isoDay(d: Date): string {
 async function exchangeKey(apiKey: string): Promise<string> {
   const res = await fetch(`${BASE}${TOKEN_PATH}`, {
     method: 'POST',
-    headers: { Authorization: `ApiKey ${apiKey}`, Accept: 'application/json' },
+    // No Accept header: the token comes back as text, and `Accept: application/json`
+    // gets a 406 (measured 2026-10-24). Garmin's own curl example sends none.
+    headers: { Authorization: `ApiKey ${apiKey}` },
   });
   const text = await res.text();
   if (!res.ok) throw new Error(`token exchange ${res.status}: ${text.slice(0, 300)}`);
@@ -85,7 +87,7 @@ async function main() {
 
   async function get(name: string, pathAndQuery: string, binary = false): Promise<unknown> {
     const res = await fetch(`${BASE}${pathAndQuery}`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: binary ? '*/*' : 'application/json' },
+      headers: { Authorization: `Bearer ${token}`, Accept: '*/*' },
     });
     if (!res.ok) {
       console.log(`✗ ${name.padEnd(22)} ${res.status} ${pathAndQuery}`);
@@ -97,7 +99,14 @@ async function main() {
       console.log(`✓ ${name.padEnd(22)} ${buf.length} bytes (${res.headers.get('content-type')})`);
       return buf;
     }
-    const body = await res.json();
+    const text = await res.text();
+    let body: unknown;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      console.log(`? ${name.padEnd(22)} ${res.status} not JSON (${res.headers.get('content-type')}): ${text.slice(0, 120)}`);
+      return null;
+    }
     fs.writeFileSync(path.join(outDir, `${name}.json`), JSON.stringify(body, null, 2));
     console.log(`✓ ${name.padEnd(22)} ${describe(body)}`);
     return body;
