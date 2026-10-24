@@ -153,12 +153,17 @@ export async function syncGarminWellnessForUser(
   });
 
   try {
-    result.daysUpserted = await upsertGarminWellnessDays(mergeGarminDays(userId, days, fetched));
+    // A day no endpoint said anything about (before the watch, or a history
+    // import reaching past it) gets no row: an all-null row reads as "synced,
+    // nothing measured" when the truth is "nothing to sync".
+    const rows = mergeGarminDays(userId, days, fetched).filter((r) => Object.keys(r.raw).length > 0);
+    result.daysUpserted = await upsertGarminWellnessDays(rows);
   } catch (err) {
     result.errors.push(`upsert: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  const anySucceeded = Object.values(result.components).some(Boolean) && result.daysUpserted > 0;
+  const anySucceeded =
+    Object.values(result.components).some(Boolean) && !result.errors.some((e) => e.startsWith('upsert:'));
   const limited = rateLimited as GarminRateLimitedError | null;
   await updateGarminToken(userId, {
     last_sync_at: new Date().toISOString(),

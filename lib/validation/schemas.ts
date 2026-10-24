@@ -281,6 +281,13 @@ export const garminConnectSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expiry must be a date (YYYY-MM-DD)'),
 });
 
+// One window of a Garmin history import. 28 days is the body battery endpoint's
+// measured limit, and keeps each request well inside the function timeout.
+export const garminBackfillSchema = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
 // Review analysis validation
 export const reviewAnalysisSchema = z.object({
   overallFeeling: rating.optional(),
