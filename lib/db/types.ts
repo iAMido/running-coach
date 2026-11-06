@@ -207,6 +207,30 @@ export interface Workout {
    * days, and the race.
    */
   strength?: PlannedStrength | null;
+  /**
+   * The session as watch steps: warm-up, work / recovery reps, cool-down
+   * (2026-11-06). Pushed to intervals.icu as a structured workout. Absent =
+   * one steady step from duration + target_hr, as before.
+   */
+  steps?: PlanStep[] | null;
+}
+
+/**
+ * One step of a structured session. `hr` uses the plan's own form
+ * ("Z1-Z2 (120-140)" or just "Z2"); omit it for walk-downs and jog
+ * recoveries. `cue` is a few words shown on the watch ("Hard uphill").
+ */
+export interface PlanStep {
+  kind: 'warmup' | 'steady' | 'work' | 'recovery' | 'cooldown' | 'repeat';
+  /** Duration in minutes (warm-up, cool-down, steady blocks). */
+  min?: number;
+  /** Duration in seconds (short reps and recoveries). */
+  sec?: number;
+  hr?: string;
+  cue?: string;
+  /** kind 'repeat' only. */
+  reps?: number;
+  steps?: PlanStep[];
 }
 
 export interface PlannedStrength {

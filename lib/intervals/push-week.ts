@@ -141,7 +141,9 @@ export function previewWeek(
       continue;
     }
 
-    const pct = /- \d+m ([\d.]+-[\d.]+% HR)/.exec(translated.description)?.[1] ?? null;
+    // What the watch will show, in one line: the steady % range, or the step
+    // structure ("10m warm-up · 6× (45s hard uphill / 90s walk down) · …").
+    const pct = translated.summary || null;
     // Climb in the event NAME as well as the body: on a calendar the name is
     // all the athlete sees without opening the event, and on a mountain plan
     // the vert is the number that says what the session actually is.

@@ -273,9 +273,9 @@ export function PushToWatch({
                   {row.description ? (
                     <>
                       <div className="rc-mono text-[12px]" style={{ color: 'var(--rc-ink)', fontVariantNumeric: 'tabular-nums' }}>
-                        {row.minutes} min · {row.bpmLow}–{row.bpmHigh} bpm
+                        {row.minutes} min{row.bpmLow != null && row.bpmHigh != null ? ` · ${row.bpmLow}–${row.bpmHigh} bpm` : ''}
                       </div>
-                      <div className="rc-mono text-[10.5px] mt-0.5" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.04em' }}>
+                      <div className="rc-mono text-[10.5px] mt-0.5 max-w-[260px] ml-auto" style={{ color: 'var(--rc-ink-3)', letterSpacing: '0.04em' }}>
                         sent as {row.pctLabel}
                       </div>
                       {row.beyondWatchHorizon && (

@@ -12,10 +12,12 @@
 
 import {
   PLAN_DAY_ANCHOR_RULES,
+  PLAN_STEPS_RULES,
   PLAN_STRENGTH_RULES,
   PLAN_TARGET_HR_RULES,
 } from '@/lib/ai/coach-prompts';
 import type { PlanWeek } from '@/lib/db/types';
+import { describePlanSteps } from '@/lib/coach/plan-steps';
 import { formatResearch } from './prepare';
 import { weekOneLabel } from './dates';
 import type { BuildRequest, CoherenceIssue, OutlineWeek, PlanOutline, PreparedStage, Violation } from './types';
@@ -221,6 +223,8 @@ ${hasElev ? `- Every week has "total_elevation_gain_m" and every run has "elevat
 
 ${PLAN_TARGET_HR_RULES}
 
+${PLAN_STEPS_RULES}
+
 ${PLAN_DAY_ANCHOR_RULES}
 
 Return ONLY this JSON object — your weeks and nothing else:
@@ -236,6 +240,7 @@ Return ONLY this JSON object — your weeks and nothing else:
           "type": "Tempo", "duration": "50 min", "distance": "9 km",${hasElev ? ' "elevation_gain_m": 60,' : ''}
           "target_hr": "Z3-Z4 (143-168)", "target_pace": "5:30-5:45/km",
           "description": "WU 15min | 3x8min Z4, 2min jog | CD 10min",
+          "steps": [{ "kind": "warmup", "min": 15, "hr": "Z1-Z2 (115-140)", "cue": "Easy jog" }, { "kind": "repeat", "reps": 3, "steps": [{ "kind": "work", "min": 8, "hr": "Z4 (155-168)", "cue": "Threshold" }, { "kind": "recovery", "min": 2, "cue": "Jog" }] }, { "kind": "cooldown", "min": 5, "hr": "Z1 (100-124)" }],
           "indoor_alternative": { "type": "Treadmill", "equipment": "treadmill", "description": "1% grade, same structure" },
           "source": "…"
         },
@@ -277,6 +282,8 @@ export function renderPlanCompact(weeks: PlanWeek[]): string {
         (x.elevation_gain_m != null ? ` +${x.elevation_gain_m}m` : '') +
         (x.target_hr ? ` ${x.target_hr}` : '') +
         (x.description ? ` — ${x.description}` : '') +
+        // The watch steps, so the reviewer can check them against the session.
+        (x.steps?.length ? ` [steps: ${describePlanSteps(x.steps)}]` : '') +
         (s ? ` [strength: ${typeof s === 'string' ? s : (s as { name?: string }).name}]` : '') +
         // Shown so the reviewer does not report a missing indoor alternative
         // that is present — it did exactly that before this was rendered.

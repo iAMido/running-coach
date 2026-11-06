@@ -5,6 +5,8 @@ import { autoSyncPlanToWatch } from '@/lib/intervals/auto-sync';
 import { supabase } from '@/lib/db/supabase';
 import { callOpenRouter } from '@/lib/ai/openrouter';
 import { buildCoachSystemPrompt, buildPlanAdjustmentPrompt, COACH_STATIC_BLOCK } from '@/lib/ai/coach-prompts';
+import { carryForwardSteps } from '@/lib/coach/plan-steps';
+import type { Workout } from '@/lib/db/types';
 import { buildTrainingState, formatTrainingState } from '@/lib/coach/training-state';
 import { MODEL_FOR } from '@/lib/ai/model-registry';
 import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
@@ -247,6 +249,10 @@ function carryForwardElevation(
       if (workout.strength == null && before.strength != null && workout.type === before.type) {
         workout.strength = before.strength;
       }
+      // Watch steps: kept only when the session is unchanged (same type and
+      // duration) — a changed session must not run the old session's steps.
+      const kept = carryForwardSteps(workout as unknown as Workout, before as unknown as Workout);
+      if (kept.steps && workout.steps == null) workout.steps = kept.steps;
     }
   }
   return merged;
