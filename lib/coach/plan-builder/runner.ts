@@ -72,6 +72,28 @@ export async function latestOpenBuild(userId: string, kind: BuildKind = 'block')
   return (data as PlanBuildRow) ?? null;
 }
 
+/**
+ * An unfinished build of this season phase from the last hour. Starting a
+ * phase that is already being built returns this instead of a second build:
+ * on 2026-11-06 a season revision built phase 1 twice, 3 s apart (two page
+ * drivers of the same season build each started the phase), and a misleading
+ * "Build phase 1" button started a third — ~$3 and a replaced plan each.
+ */
+export async function openPhaseBuild(
+  userId: string, macroPlanId: string, phaseNumber: number, extensionWeeks?: number,
+): Promise<PlanBuildRow | null> {
+  const { data } = await supabase.from('plan_builds').select('*')
+    .eq('user_id', userId).eq('dry_run', false).eq('kind', 'block')
+    .eq('request->>macroPlanId', macroPlanId)
+    .eq('request->>phaseNumber', String(phaseNumber))
+    .not('stage', 'in', '(done,failed)')
+    .gte('updated_at', new Date(Date.now() - 3_600_000).toISOString())
+    .order('created_at', { ascending: false });
+  const rows = (data ?? []) as PlanBuildRow[];
+  const ext = extensionWeeks ?? null;
+  return rows.find((r) => ((r.request as { extensionWeeks?: number }).extensionWeeks ?? null) === ext) ?? null;
+}
+
 async function claim(row: PlanBuildRow): Promise<boolean> {
   const now = new Date();
   const { data } = await supabase.from('plan_builds')

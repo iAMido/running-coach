@@ -26,7 +26,7 @@ import { macroPlanGenerationSchema, planGenerationSchema, validateInput } from '
 import { getActiveMacroPlan } from '@/lib/coach/macro-plan';
 import { getAthleteProfile } from '@/lib/db/profile';
 import { parseTrainingDays } from '@/lib/coach/training-state';
-import { advance, createBuild, getBuild, latestOpenBuild } from '@/lib/coach/plan-builder/runner';
+import { advance, createBuild, getBuild, latestOpenBuild, openPhaseBuild } from '@/lib/coach/plan-builder/runner';
 import { toView } from '@/lib/coach/plan-builder/view';
 import { describeSeasonForRevision } from '@/lib/coach/plan-builder/season-intake';
 import { userDateStr } from '@/lib/utils/user-time';
@@ -125,7 +125,10 @@ export async function POST(request: NextRequest) {
           const req = await phaseBuildRequest(auth.userId!, fields);
           const v = validateInput(planGenerationSchema, req);
           if (!v.success) throw new ValidationError(v.error);
-          return createBuild(auth.userId!, v.data);
+          // Already being built (another tab, a remounted panel, a double
+          // click): join that build rather than pay for and save a second plan.
+          const open = await openPhaseBuild(auth.userId!, v.data.macroPlanId!, v.data.phaseNumber!, v.data.extensionWeeks);
+          return open ?? createBuild(auth.userId!, v.data);
         })()
       : kind === 'season'
       ? await (async () => {

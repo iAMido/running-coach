@@ -132,6 +132,11 @@ export function recommend(
 ): Recommendation {
   const name = current.entry.phase.name;
   if (current.weekOfPhase === null) {
+    // Built, but its first Sunday has not come yet: nothing to do. Offering
+    // "Build phase 1" here built the same phase again (found 2026-11-06).
+    if (current.built) {
+      return { kind: 'on_track', message: `${name} is built and starts on ${current.entry.start}. Your plan is under Current plan.` };
+    }
     return { kind: 'not_started', message: `${name} has not started. Build it to begin the season.` };
   }
   const measured = statuses.filter((s) => s.current !== null);
