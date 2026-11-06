@@ -75,6 +75,36 @@ export function PushToWatch({
   const [pushing, setPushing] = useState(false);
   const [result, setResult] = useState<PushResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Auto-sync: the current and next week go to the watch on their own.
+  const [auto, setAuto] = useState<{ autoPush: boolean; pushes: { week_number: number; pushed_at: string; created: number; errors: string[] | null }[] } | null>(null);
+  const [autoBusy, setAutoBusy] = useState(false);
+  const [autoNote, setAutoNote] = useState<string | null>(null);
+
+  const loadAuto = () =>
+    fetch('/api/intervals/auto-sync')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.connected) setAuto({ autoPush: d.autoPush, pushes: d.pushes ?? [] }); })
+      .catch(() => {});
+
+  useEffect(() => { loadAuto(); }, []);
+
+  const runAuto = async (body: Record<string, unknown>) => {
+    setAutoBusy(true);
+    setAutoNote(null);
+    try {
+      const r = await fetch('/api/intervals/auto-sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const d = await r.json().catch(() => ({}));
+      const res = d.result as { status: string; reason?: string } | undefined;
+      if (res) {
+        setAutoNote(res.status === 'pushed' ? 'Sent to your calendar — the watch picks it up on its next sync.'
+          : res.status === 'unchanged' ? 'Already up to date on your calendar.'
+          : res.reason ?? `Auto-sync: ${res.status}`);
+      }
+      await loadAuto();
+    } finally {
+      setAutoBusy(false);
+    }
+  };
 
   useEffect(() => {
     fetch('/api/intervals/connect')
@@ -155,6 +185,30 @@ export function PushToWatch({
           </button>
         )}
       </div>
+
+      {auto && (
+        <div className="mt-4 flex items-center justify-between gap-3 flex-wrap text-[12.5px] p-3 rounded-xl"
+          style={{ background: 'var(--rc-surface-2)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink-2)' }}>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={auto.autoPush} disabled={autoBusy} onChange={(e) => runAuto({ autoPush: e.target.checked })} />
+            <span>
+              <strong>Auto-sync</strong> — this week and next go to your watch on their own, and again whenever the plan changes.
+              {auto.autoPush && (() => {
+                const p = auto.pushes.find((x) => x.week_number === weekNumber);
+                return p ? <span style={{ color: 'var(--rc-ink-3)' }}> Week {weekNumber} sent {new Date(p.pushed_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}{p.errors?.length ? ' (with errors — will retry)' : ''}.</span> : null;
+              })()}
+            </span>
+          </label>
+          {auto.autoPush && (
+            <button type="button" disabled={autoBusy} onClick={() => runAuto({ run: true })}
+              className="rc-mono text-[10.5px] font-medium px-3 py-1.5 rounded-full disabled:opacity-40"
+              style={{ background: 'var(--rc-surface)', border: '1px solid var(--rc-line)', color: 'var(--rc-ink-2)', letterSpacing: '0.06em' }}>
+              {autoBusy ? 'SYNCING…' : 'SYNC NOW'}
+            </button>
+          )}
+          {autoNote && <p className="w-full text-[12px]" style={{ color: 'var(--rc-ink-3)' }}>{autoNote}</p>}
+        </div>
+      )}
 
       {error && (
         <div

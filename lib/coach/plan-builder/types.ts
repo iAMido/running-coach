@@ -7,6 +7,7 @@ import type { z } from 'zod';
 import type { macroPlanGenerationSchema, planGenerationSchema } from '@/lib/validation/schemas';
 import type { PlanWeek, PlannedStrength } from '@/lib/db/types';
 import type { MacroPhase } from '@/lib/coach/macro-plan';
+import type { PlacedEvent, SeasonEvent, TuneUpSlot } from '@/lib/coach/season-events';
 
 export type BuildRequest = z.infer<typeof planGenerationSchema>;
 export type SeasonRequest = z.infer<typeof macroPlanGenerationSchema>;
@@ -21,6 +22,8 @@ export interface SeasonDraft {
   phases: MacroPhase[];
   /** Season-level decisions (poles, fuelling, altitude) stated, not implied. */
   decisions: string[];
+  /** Training races the season needs — slots the athlete fills with real events. */
+  tune_up_slots?: TuneUpSlot[];
 }
 
 export type BuildStage =
@@ -95,6 +98,10 @@ export interface PreparedStage {
   research: Research;
   /** Days the plan may use, rendered for prompts ("Sunday, Monday (quality)"). */
   trainingDaysText: string | null;
+  /** Training races on his calendar inside this plan (absent on older builds). */
+  events?: PlacedEvent[];
+  /** Every planned race from the start on — the season designs around them. */
+  seasonEvents?: SeasonEvent[];
 }
 
 export interface OutlinePhase {

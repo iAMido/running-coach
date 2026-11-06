@@ -19,6 +19,8 @@ import { extractJson } from '@/lib/coach/plan-output';
 import { supabase } from '@/lib/db/supabase';
 import { ask, Meter } from './llm';
 import { formatResearch, prepare } from './prepare';
+import { formatEventsForSeason, parseTuneUpSlots } from '@/lib/coach/season-events';
+import { replaceCoachSlots } from '@/lib/db/season-events';
 import { formatSeasonIntake, intakeFromRequest, type SeasonIntakeInput } from './season-intake';
 import { checkSeason, normalizeSeason, renderSeason, type SeasonCheckContext } from './season-checks';
 import type {
@@ -81,6 +83,8 @@ ${prep.race.text}
 
 ${formatSeasonIntake(req as SeasonIntakeInput)}
 
+${formatEventsForSeason(prep.seasonEvents ?? [])}
+
 ${formatResearch(prep.research)}
 
 ${buildMacroPlanPrompt({
@@ -131,9 +135,12 @@ A taper phase needs only a goal and "form" as its KPI.`;
 
 type StageResult = Partial<PlanBuildRow>;
 
-function parseSeason(text: string, goalName: string): { season: SeasonDraft | null; problem: string | null } {
+function parseSeason(text: string, goalName: string, horizonWeeks: number): { season: SeasonDraft | null; problem: string | null } {
   try {
-    const n = normalizeSeason(extractJson(text), goalName);
+    const raw = extractJson(text);
+    const n = normalizeSeason(raw, goalName);
+    // Training-race slots ride beside the phases; normalizeSeason ignores them.
+    if (n.season) n.season.tune_up_slots = parseTuneUpSlots((raw as { tune_up_slots?: unknown })?.tune_up_slots, horizonWeeks);
     return n.season ? { season: n.season, problem: null } : { season: null, problem: n.fatal.join('; ') };
   } catch (e) {
     return { season: null, problem: `unreadable season (${e instanceof Error ? e.message : 'parse error'})` };
@@ -148,7 +155,7 @@ async function redesign(row: PlanBuildRow, season: SeasonDraft, problems: string
     'Rewrite the season fixing EVERY problem listed, changing as little else as possible. Keep the same JSON shape, including "decisions". Return only the JSON.',
     8_000, meter, seasonContext(req, row.prepared!));
   if (r.error || r.finishReason === 'length') return null;
-  return parseSeason(r.content, req.goalName).season;
+  return parseSeason(r.content, req.goalName, req.horizonWeeks).season;
 }
 
 /** Rule errors → redesign → recheck, up to MAX_REPAIR_ROUNDS. */
@@ -193,6 +200,7 @@ Goal: ${season.goal_name} · ${req.horizonWeeks}-week horizon${req.raceDate ? ` 
 Rationale: ${season.rationale}
 Decisions: ${season.decisions.join(' | ') || 'none stated'}
 ${renderSeason(season)}
+Training-race slots: ${(season.tune_up_slots ?? []).map((s) => `wk ${s.week}+${s.window_weeks} ${s.priority} ${s.distance_km ?? '?'} km/${s.elevation_gain_m ?? '?'} m — ${s.purpose}`).join(' | ') || 'none'}
 
 ## ALREADY FOUND BY MEASUREMENT — do not repeat these
 ${remaining.map((v) => `- ${v.week ? `P${v.week}: ` : ''}${v.message}`).join('\n') || '- nothing'}
@@ -205,6 +213,7 @@ Read it as one season and answer:
 4. **Against the athlete and the race** — does phase 1 start from his measured load? Does the peak prepare him for THIS race's gradient and climb? Are his plantar-fasciitis history, poles, fuelling and altitude handled? Does the season end correctly (race week and taper, or a clean hand-over)?
 5. **The briefs** — could a coach who sees ONLY a phase's brief build the right plan from it? Do the KPIs measure the phase's goal (not something easier to count), and does each phase's hand-over match what the next phase assumes?
 6. **What he told you** — does the season honour every stated limitation, give an honest answer on the target time, and (on a revision) make the change he asked for?
+7. **Training races** — do the slots serve their phases (a test before an exit, a race rehearsal), sit where recovery from them costs nothing important, stay out of the taper, and fit around the races he already has?
 
 Severity: "must_fix" ONLY for problems that would hurt him or leave him unprepared — name the phases and say exactly what to change. Everything else is a "note". At most 6 issues. If it fits, say so.
 
@@ -224,7 +233,7 @@ export async function runSeasonStage(row: PlanBuildRow): Promise<StageResult> {
 
   switch (row.stage) {
     case 'created': {
-      const prepared = await prepare(row.user_id, seasonAsBlockRequest(req));
+      const prepared = await prepare(row.user_id, seasonAsBlockRequest(req), { forSeason: true });
       note('prepare');
       return { stage: 'prepared', prepared, timings };
     }
@@ -234,7 +243,7 @@ export async function runSeasonStage(row: PlanBuildRow): Promise<StageResult> {
         8_000, meter, seasonContext(req, row.prepared!));
       note('design', { tokens: r.completionTokens ?? undefined, thinking: r.reasoningTokensUsed ?? undefined });
       const problem = r.error ?? (r.finishReason === 'length' ? 'the season was cut off at the length limit' : null);
-      const parsed = problem ? { season: null, problem } : parseSeason(r.content, req.goalName);
+      const parsed = problem ? { season: null, problem } : parseSeason(r.content, req.goalName, req.horizonWeeks);
       if (parsed.season) return { stage: 'outlined', season: parsed.season, timings, error: null };
       attempts.design = (attempts.design ?? 0) + 1;
       if (attempts.design >= MAX_ATTEMPTS) return { stage: 'failed', error: `Season design failed twice: ${parsed.problem}`, attempts, timings };
@@ -306,6 +315,10 @@ export async function runSeasonStage(row: PlanBuildRow): Promise<StageResult> {
       });
       if (!saved) throw new Error('saving the season failed; the previous season is still active');
       await supabase.from('macro_plans').update({ build_report: report }).eq('id', saved.id);
+      // The coach's training-race slots replace the previous season's unfilled
+      // ones; slots he already filled with a real event stay his.
+      await replaceCoachSlots(row.user_id, saved.id, saved.start_date ?? row.prepared!.startDate, row.season!.tune_up_slots ?? [])
+        .catch((e) => console.error('season events: slots not saved:', e));
       note('save');
       return { stage: 'done', macro_plan_id: saved.id, timings };
     }

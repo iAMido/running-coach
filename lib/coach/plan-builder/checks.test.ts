@@ -168,3 +168,15 @@ test('writers keep athlete and previous-coach layers, drop only the general book
   expect(out).not.toContain('books');
   expect(athleteAndCoachLayers('no layers here')).toBe('no layers here');
 });
+
+test('training race: the event must be that day\'s session, and may sit outside his days', () => {
+  const events = [{ week: 2, day: 'Saturday', name: 'Hills 15K' }];
+  // Missing race on its Saturday → error.
+  expect(rules(checkPlan([week(1, 30), week(2, 32), week(3, 34)], { ...ctx, events }))).toContain('race_day');
+  // Race on Saturday replacing Friday's long run: no race_day, no training_days error.
+  const raceWeek = week(2, 32, {}, { Friday: run('Rest', 0), Saturday: run('Race', 15, { description: 'Hills 15K — C race' }) });
+  delete (raceWeek.workouts as Record<string, Workout>).Friday;
+  const r = rules(checkPlan([week(1, 30), raceWeek, week(3, 34)], { ...ctx, events }));
+  expect(r).not.toContain('race_day');
+  expect(r).not.toContain('training_days');
+});

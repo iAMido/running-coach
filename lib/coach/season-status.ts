@@ -11,6 +11,8 @@ import { getActivePlan } from '@/lib/db/plans';
 import { buildTrainingState, parseTrainingDays } from '@/lib/coach/training-state';
 import { readinessForUser } from '@/lib/coach/readiness-service';
 import { userDateStr } from '@/lib/utils/user-time';
+import { listEvents } from '@/lib/db/season-events';
+import { formatEventsForReview } from '@/lib/coach/season-events';
 import { evaluateKpis, formatKpiStatus, loadKpiData, type KpiStatus } from '@/lib/coach/phase-kpis';
 import {
   currentPhase, raceSlackWeeks, recommend, timelineOf,
@@ -57,8 +59,19 @@ export async function seasonStatus(userId: string): Promise<SeasonStatus | null>
   return { macro, current, statuses, recommendation, timeline, raceSlackWeeks: slack };
 }
 
-/** The KPI table for the weekly reviewer / Saturday proposal, or '' when there is no active phase. */
+/**
+ * The KPI table and training races for the weekly reviewer / Saturday
+ * proposal, or '' when there is neither.
+ */
 export async function kpiBlockFor(userId: string): Promise<string> {
+  const [kpis, races] = await Promise.all([
+    kpiTableFor(userId),
+    listEvents(userId).then((e) => formatEventsForReview(e, userDateStr())).catch(() => ''),
+  ]);
+  return [kpis, races].filter(Boolean).join('\n\n');
+}
+
+async function kpiTableFor(userId: string): Promise<string> {
   try {
     const s = await seasonStatus(userId);
     if (!s?.current || s.current.weekOfPhase === null || s.statuses.length === 0) return '';

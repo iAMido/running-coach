@@ -10,6 +10,7 @@ import { WorkoutCard, getWorkoutTagClass } from '@/components/coach/workout-card
 import { PushToWatch } from '@/components/coach/push-to-watch';
 import { PlanProposalCard } from '@/components/coach/plan-proposal-card';
 import { SeasonPlanPanel, type SeasonPlan } from '@/components/coach/season-plan';
+import { SeasonEventsPanel } from '@/components/coach/season-events';
 import { PlanBuildProgress } from '@/components/coach/plan-build-progress';
 import { PlanBuildReport } from '@/components/coach/plan-build-report';
 import type { PlanBuildView } from '@/lib/coach/plan-builder/view';
@@ -569,6 +570,11 @@ export default function TrainingPlanPage() {
           a SECOND driver — which built phase 1 twice (2026-11-06). */}
       <div hidden={activeTab !== 'season'}>
         <SeasonPlanPanel onLoaded={handleSeasonLoaded} onPlanBuilt={fetchPlan} />
+        <SeasonEventsPanel
+          plan={activePlan ? { start_date: activePlan.start_date ?? null, duration_weeks: activePlan.duration_weeks } : null}
+          refreshKey={season?.id ?? null}
+          onPlanChanged={fetchPlan}
+        />
       </div>
 
       {/* New plan Tab */}
