@@ -78,3 +78,12 @@ test('recommend: before the last 2 weeks it is only a progress report, unless ev
   // An unmeasured KPI is never a pass.
   expect(recommend(early, [status(false, null)], opts).kind).toBe('on_track');
 });
+
+test('recommend: a phase built but not yet started is on track, never "build it"', () => {
+  const opts = { isLastPhase: false, readiness: 'GO' as const, raceSlackWeeks: 4 };
+  const built = currentPhase(season({ phase_progress: [progress(1, { status: 'active', start_date: '2026-11-08', plan_ids: ['a'] }), progress(2), progress(3)] }), '2026-11-06')!;
+  expect(built.weekOfPhase).toBeNull();
+  expect(recommend(built, [], opts).kind).toBe('on_track');
+  const unbuilt = currentPhase(season({ phase_progress: [progress(1), progress(2), progress(3)] }), '2026-11-06')!;
+  expect(recommend(unbuilt, [], opts).kind).toBe('not_started');
+});

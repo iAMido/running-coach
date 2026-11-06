@@ -564,9 +564,12 @@ export default function TrainingPlanPage() {
 
       {/* Season Tab — the season at a glance, its current phase, and where
           it is adjusted. Kept apart from building a single plan. */}
-      {activeTab === 'season' && (
+      {/* Always mounted, only hidden: a running season build is driven from
+          this panel, and unmounting it on a tab switch then remounting started
+          a SECOND driver — which built phase 1 twice (2026-11-06). */}
+      <div hidden={activeTab !== 'season'}>
         <SeasonPlanPanel onLoaded={handleSeasonLoaded} onPlanBuilt={fetchPlan} />
-      )}
+      </div>
 
       {/* New plan Tab */}
       {activeTab === 'generate' && (
