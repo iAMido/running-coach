@@ -659,6 +659,21 @@ export const PLAN_TARGET_HR_RULES = `### WRITING target_hr — THE ZONE LABEL AN
 - The bpm range you write MUST sit inside the zone label you write — check it against the HR ZONES block above before emitting. "Z1 (115-135)" is wrong, because 135 is in Z2. Write "Z1-Z2 (115-135)", or "Z1 (110-124)" if you genuinely mean recovery.
 - The label is later compared against what the athlete actually ran. A label that disagrees with its own numbers produces a false verdict on a session they executed correctly.`;
 
+/**
+ * Structured steps — what reaches the watch as a real workout (warm-up, reps,
+ * cool-down). Shared by the staged writers, the legacy generator and plan
+ * adjust so they emit one shape. Rendered by lib/intervals/workout-format.ts.
+ */
+export const PLAN_STEPS_RULES = `### "steps" — THE SESSION AS THE WATCH WILL RUN IT
+Every run carries "steps": the exact sequence the athlete's watch will guide him through.
+- Kinds: "warmup", "steady", "work", "recovery", "cooldown", and "repeat" (with "reps" and its own "steps" of work/recovery — never a repeat inside a repeat).
+- Durations: "min" for warm-ups, cool-downs and steady blocks; "sec" for short reps and recoveries. Steps must add up to the session's "duration" (±10%).
+- "hr" in the same form as target_hr ("Z1-Z2 (115-135)"), and the label must agree with its bpm. Omit "hr" on walk-downs, jog recoveries and strides.
+- "cue": 1-4 plain words shown on the watch ("Hard uphill", "Walk down", "Easy jog") — no numbers.
+- Work reps under 2 minutes are run by effort (HR lags): still give their "hr", the watch shows the cue instead.
+- An easy or long run is one "steady" step (add a short "warmup" only if the session needs one). Quality sessions are warm-up → repeat block(s) → cool-down.
+Example: [{"kind":"warmup","min":10,"hr":"Z1-Z2 (115-135)","cue":"Easy jog"},{"kind":"repeat","reps":6,"steps":[{"kind":"work","sec":45,"hr":"Z3-Z4 (150-165)","cue":"Hard uphill"},{"kind":"recovery","sec":90,"cue":"Walk down"}]},{"kind":"cooldown","min":10,"hr":"Z1 (100-124)"}]`;
+
 export const PLAN_DAY_ANCHOR_RULES = `### TRAINING DAY ANCHORS
 Use the "Training days" line in PLAN PARAMETERS above. Those are the days this
 athlete actually trains, stated by him for this plan.
@@ -801,6 +816,7 @@ Return the plan as a JSON object with this structure:
           "target_hr": "Z1-Z2 (120-140)",
           "target_pace": "6:30-7:00/km",
           "description": "WU: 10min easy | Main: 25min easy | CD: 10min easy | Purpose: Aerobic base",
+          "steps": [{ "kind": "steady", "min": 45, "hr": "Z1-Z2 (120-140)", "cue": "Easy" }],
           "indoor_alternative": {
             "type": "Incline treadmill",
             "equipment": "treadmill",
@@ -844,6 +860,8 @@ IMPORTANT:
 - The whole plan must fit in ONE response. Being concise is what makes that possible
 
 ${PLAN_TARGET_HR_RULES}
+
+${PLAN_STEPS_RULES}
 
 ${PLAN_DAY_ANCHOR_RULES}`;
 }
@@ -1178,6 +1196,7 @@ Return a JSON object with this structure:
           "target_pace": "Pace range",
           "description": "Full workout description",
           "elevation_gain_m": 120,
+          "steps": [{ "kind": "warmup", "min": 10, "hr": "Z1-Z2 (115-135)", "cue": "Easy jog" }, { "kind": "repeat", "reps": 5, "steps": [{ "kind": "work", "min": 3, "hr": "Z4 (155-168)", "cue": "Strong" }, { "kind": "recovery", "min": 2, "cue": "Jog" }] }, { "kind": "cooldown", "min": 10, "hr": "Z1 (100-124)" }],
           "indoor_alternative": { "type": "...", "equipment": "...", "duration": "...", "description": "..." },
           "strength": { "name": "...", "duration_minutes": 30, "exercises": [ { "exercise": "...", "sets": 3, "reps": "8-10", "each_side": true, "load": "RPE 7" } ] }
         }
@@ -1194,10 +1213,14 @@ IMPORTANT:
 - Be conservative with injured athletes
 - Adjust ONLY weeks ${currentWeek} to ${lastWeek}. Do not rewrite the rest of the plan
 - PRESERVE every field each workout already carries, including
-  elevation_gain_m, indoor_alternative, strength and the week's total_elevation_gain_m.
+  elevation_gain_m, indoor_alternative, strength, steps and the week's total_elevation_gain_m.
   Omitting a field silently deletes a target the athlete is training toward
+- Every run you write or change carries "steps" that match its new duration and
+  intensity (rules below) — a changed session must not keep the old session's steps
 - If you MOVE a session, strength moves with the day it was attached to only if
   the new placement still respects the strength rules: never on the long-run
   day, never the day before the long run or a quality session — after the
-  quality session on the same day is right`;
+  quality session on the same day is right
+
+${PLAN_STEPS_RULES}`;
 }

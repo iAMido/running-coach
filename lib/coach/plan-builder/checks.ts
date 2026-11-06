@@ -21,6 +21,7 @@
 import type { PlanWeek, Workout } from '@/lib/db/types';
 import type { ZoneBands } from '@/lib/utils/zones';
 import { TREADMILL_VERT_TABLE, treadmillVertPerHour } from '@/lib/utils/elevation';
+import { checkWorkoutSteps, flatPlanSteps } from '@/lib/coach/plan-steps';
 import type { CoherenceIssue, PlanOutline, Violation } from './types';
 
 export const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
@@ -490,6 +491,26 @@ export function checkPlan(weeks: PlanWeek[], ctx: CheckContext): Violation[] {
           add({ rule: 'hr_label', severity: outside > HR_TOLERANCE.error ? 'error' : 'warn', week: n, day,
             message: `"${w.target_hr}" — ${t.bpm[0]}-${t.bpm[1]} bpm is outside Z${t.zones[0]}${t.zones.length > 1 ? `-Z${t.zones[t.zones.length - 1]}` : ''} (${lo}-${hi}).` });
         }
+        // The same rule for every step: a step's label is what the watch
+        // alert and the zone check read.
+        for (const st of flatPlanSteps(w.steps)) {
+          const sh = parseTargetHr(st.hr);
+          if (!sh?.bpm) continue;
+          const sb = sh.zones.map((z) => ctx.zones![`z${z}` as keyof ZoneBands]);
+          const slo = Math.min(...sb.map((b) => b.low)), shi = Math.max(...sb.map((b) => b.high));
+          const sOut = Math.max(slo - sh.bpm[0], sh.bpm[1] - shi);
+          if (sOut > HR_TOLERANCE.warn) {
+            add({ rule: 'hr_label', severity: sOut > HR_TOLERANCE.error ? 'error' : 'warn', week: n, day,
+              message: `step "${st.hr}" — ${sh.bpm[0]}-${sh.bpm[1]} bpm is outside its label (${slo}-${shi}).` });
+          }
+        }
+      }
+    }
+
+    // --- watch steps -------------------------------------------------------------
+    for (const [day, w] of runs) {
+      for (const p of checkWorkoutSteps(w)) {
+        add({ rule: 'steps', severity: p.severity, week: n, day, message: `${w.type} on ${day}: ${p.message}` });
       }
     }
   });

@@ -149,7 +149,7 @@ export async function proposeForUser(userId: string, weekStart: string): Promise
     'Rules:',
     '- Change only what the triggers justify. An unrelated rewrite is worse than no change, because it spends the trust every future proposal depends on.',
     '- Keep the training days. Never schedule onto a day not already in use.',
-    '- Preserve every field the current weeks carry, including total_elevation_gain_m, elevation_gain_m and indoor_alternative.',
+    '- Preserve every field the current weeks carry, including total_elevation_gain_m, elevation_gain_m, indoor_alternative, strength and steps. A run you change gets new "steps" (warmup / repeat of work+recovery / cooldown, min or sec, hr, a short cue) that add up to its new duration.',
     '- If a trigger reflects missing DATA rather than a training problem, say so and propose nothing for it.',
     '- Cut vert before km when load must come down.',
     '- If a PHASE KPI is behind, prefer the change that moves it — and name the KPI in the summary.',
