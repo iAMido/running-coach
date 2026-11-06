@@ -7,7 +7,8 @@
 
 export const runtime = 'nodejs';
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
+import { autoSyncPlanToWatch } from '@/lib/intervals/auto-sync';
 import { supabase } from '@/lib/db/supabase';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { getActivePlan } from '@/lib/db/plans';
@@ -123,5 +124,6 @@ export async function POST(request: NextRequest) {
     .update({ status: 'accepted', decided_at: new Date().toISOString() })
     .eq('id', proposal.id);
 
+  after(() => autoSyncPlanToWatch(auth.userId!, 'proposal_accepted').then(() => undefined));
   return NextResponse.json({ ok: true, status: 'accepted', weeksChanged: weeks.length });
 }

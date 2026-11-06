@@ -215,6 +215,12 @@ export interface CheckContext {
    * head coach set them; a week above them is the plan overruling the season.
    */
   phaseRanges?: { km: [number, number] | null; vert: [number, number] | null } | null;
+  /**
+   * Training races on his calendar inside this plan. The event must BE that
+   * day's session, and it may fall outside his usual days — an event's date is
+   * not his to move.
+   */
+  events?: { week: number; day: string; name: string }[] | null;
 }
 
 function over(value: number, ref: number, t: { warnPct: number; warnAbs: number; errorPct: number; errorAbs: number }): Severity | null {
@@ -256,9 +262,20 @@ export function checkPlan(weeks: PlanWeek[], ctx: CheckContext): Violation[] {
         continue;
       }
       const scheduled = isRun(w) || !!strengthOf(w);
-      if (ctx.allowedDays && scheduled && !ctx.allowedDays.includes(day)) {
+      const eventDay = (ctx.events ?? []).some((e) => e.week === n && e.day === day);
+      if (ctx.allowedDays && scheduled && !eventDay && !ctx.allowedDays.includes(day)) {
         add({ rule: 'training_days', severity: 'error', week: n, day,
           message: `${w.type} on ${day}, which is not one of his training days (${ctx.allowedDays.join(', ')}).` });
+      }
+    }
+
+    // --- training races ------------------------------------------------------
+    for (const e of (ctx.events ?? []).filter((x) => x.week === n)) {
+      const w = workouts[e.day];
+      const text = `${w?.type ?? ''} ${w?.description ?? ''} ${w?.notes ?? ''}`.toLowerCase();
+      if (!w || !(/race/.test(text) || text.includes(e.name.toLowerCase()))) {
+        add({ rule: 'race_day', severity: 'error', week: n, day: e.day,
+          message: `${e.name} is on ${e.day} of week ${n}; that day's session must be the race (type "Race", the event in the description).` });
       }
     }
 

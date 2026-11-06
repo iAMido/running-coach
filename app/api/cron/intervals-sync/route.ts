@@ -9,6 +9,7 @@ import {
   syncIntervalsForUser,
   type IntervalsSyncResult,
 } from '@/lib/intervals/sync';
+import { autoSyncPlanToWatch } from '@/lib/intervals/auto-sync';
 import { syncGarminWellnessForUser, type GarminSyncResult } from '@/lib/garmin/sync';
 import type { GarminToken, IntervalsToken } from '@/lib/db/types';
 
@@ -64,6 +65,10 @@ export async function GET(request: NextRequest) {
           continue;
         }
         results.push(await syncIntervalsForUser(row.user_id, connection.client, { daysBack }));
+        // Keep this week and next on the watch: next week arrives as this one
+        // ends, and a plan changed anywhere is re-pushed. Never fails the sync.
+        const watch = await autoSyncPlanToWatch(row.user_id, 'cron');
+        results[results.length - 1] = { ...results[results.length - 1], watch } as (typeof results)[number];
       } catch (err) {
         results.push({ userId: row.user_id, error: err instanceof Error ? err.message : String(err) });
       }

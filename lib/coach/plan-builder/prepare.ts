@@ -28,6 +28,8 @@ import { daysBetweenDateStr, userDateStr, userDateStrDaysAgo } from '@/lib/utils
 import type { AthleteProfile } from '@/lib/db/types';
 import type { AthleteBrief, BuildRequest, PreparedStage, RaceBrief, Research } from './types';
 import { planStartSunday } from './dates';
+import { plannedEventsBetween } from '@/lib/db/season-events';
+import { formatEventsForPlan, placedEvents } from '@/lib/coach/season-events';
 
 export { planStartSunday, weekOneLabel } from './dates';
 
@@ -282,7 +284,7 @@ async function resolveMacroContext(
   return { ...none, macroText: formatMacroPlan(macro, seasonWeek), macroPlanId: macro.id, macroPhase: phaseForWeek(macro, seasonWeek)?.name ?? null };
 }
 
-export async function prepare(userId: string, req: BuildRequest): Promise<PreparedStage> {
+export async function prepare(userId: string, req: BuildRequest, opts: { forSeason?: boolean } = {}): Promise<PreparedStage> {
   const profile = await getAthleteProfile(userId);
   // One training-state assembly feeds both briefs: the climb baseline in the
   // race gap is the same "his climbing" the athlete brief reports.
@@ -293,15 +295,26 @@ export async function prepare(userId: string, req: BuildRequest): Promise<Prepar
   const weekOneSoFar = partial && partial.weekStart === startDate && partial.runs > 0
     ? { runs: partial.runs, km: partial.km } : null;
   const race = understandRace(req, hasElevation ? state.climb : undefined, startDate);
-  const [athlete, researched] = await Promise.all([
+  const [athlete, researched, allEvents] = await Promise.all([
     assessAthlete(userId, req, state, profile),
     research(userId, req, race, profile),
+    // Training races: a block shapes its weeks around them; a season designs
+    // around every one from its start on.
+    plannedEventsBetween(userId, startDate, '9999-12-31').catch(() => []),
   ]);
+  const events = placedEvents(allEvents, startDate, req.durationWeeks);
+  if (!opts.forSeason && events.length) race.text = `${race.text}
+
+${formatEventsForPlan(events)}`;
 
   const days = athlete.allowedDays;
   const trainingDaysText = days
     ? (req.trainingDayNotes ? `${days.join(', ')} (${req.trainingDayNotes})` : days.join(', '))
     : null;
 
-  return { startDate, weekOneSoFar, athlete, race, research: researched, trainingDaysText };
+  return {
+    startDate, weekOneSoFar, athlete, race, research: researched, trainingDaysText,
+    events: opts.forSeason ? [] : events,
+    seasonEvents: opts.forSeason ? allEvents : undefined,
+  };
 }

@@ -18,7 +18,8 @@ export const runtime = 'nodejs';
 // cannot be switched off. Stated explicitly rather than inherited.
 export const maxDuration = 300;
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
+import { autoSyncPlanToWatch } from '@/lib/intervals/auto-sync';
 import { z } from 'zod';
 import { supabase } from '@/lib/db/supabase';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
@@ -115,6 +116,8 @@ export async function POST(request: NextRequest) {
     const next = advanceSchema.safeParse(body);
     if (next.success) {
       const { row, busy } = await advance(auth.userId, next.data.buildId);
+      // A new plan is saved: put its first two weeks on the watch.
+      if (row.stage === 'done' && row.plan_id) after(() => autoSyncPlanToWatch(auth.userId!, 'plan_built').then(() => undefined));
       return NextResponse.json({ build: await view(row, busy) });
     }
     // { kind: 'season', ...season fields } starts a season build; anything

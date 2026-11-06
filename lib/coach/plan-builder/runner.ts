@@ -135,6 +135,7 @@ function checkContext(row: PlanBuildRow, zones: CheckContext['zones']): CheckCon
     zones,
     strengthLibrary: Object.keys(row.outline?.strength_sessions ?? {}),
     phaseRanges: prep.research.phaseRanges ?? null,
+    events: (prep.events ?? []).map((e) => ({ week: e.week, day: e.day, name: e.name })),
   };
 }
 

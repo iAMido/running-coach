@@ -157,6 +157,19 @@ export const macroPlanGenerationSchema = z.object({
   changeRequest: safeText.max(2000).optional(),
 });
 
+/** A training race or event the athlete adds, or a coach slot he fills. */
+export const seasonEventSchema = z.object({
+  name: safeString.min(1).max(200).optional(),
+  event_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  priority: z.enum(['A', 'B', 'C']).optional(),
+  distance_km: z.number().positive().max(500).nullable().optional(),
+  elevation_gain_m: z.number().int().min(0).max(30000).nullable().optional(),
+  purpose: safeText.max(500).nullable().optional(),
+  url: z.string().url().max(500).nullable().optional(),
+  notes: safeText.max(1000).nullable().optional(),
+  status: z.enum(['planned', 'done', 'skipped']).optional(),
+});
+
 export const planSaveSchema = z.object({
   plan_type: safeString.max(100),
   plan_json: z.record(z.string(), z.unknown()),

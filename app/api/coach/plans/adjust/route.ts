@@ -1,6 +1,7 @@
 export const runtime = 'nodejs';
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
+import { autoSyncPlanToWatch } from '@/lib/intervals/auto-sync';
 import { supabase } from '@/lib/db/supabase';
 import { callOpenRouter } from '@/lib/ai/openrouter';
 import { buildCoachSystemPrompt, buildPlanAdjustmentPrompt, COACH_STATIC_BLOCK } from '@/lib/ai/coach-prompts';
@@ -173,6 +174,9 @@ export async function POST(request: NextRequest) {
 
       if (updateError) {
         console.error('Failed to update plan:', updateError);
+      } else {
+        // The changed weeks replace what is on the watch.
+        after(() => autoSyncPlanToWatch(userId, 'plan_adjust').then(() => undefined));
       }
 
       return NextResponse.json({
