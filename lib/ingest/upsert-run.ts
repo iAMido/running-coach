@@ -52,7 +52,7 @@ import { formatPace, calculatePace } from '@/lib/utils/pace';
 import { computeZonePercentsFromStream, type ZoneBands } from '@/lib/utils/zones';
 import { computeDecoupling } from '@/lib/utils/decoupling';
 import { vertPerKm } from '@/lib/utils/elevation';
-import { generateRunReaction, plannedWorkoutForRunDate } from '@/lib/ai/run-reaction';
+import { generateRunReaction, plannedWorkoutForRunDate, tomorrowFor } from '@/lib/ai/run-reaction';
 import type { AthleteProfile, TrainingPlan } from '@/lib/db/types';
 
 // ------------------------------------------------------------------ types
@@ -414,8 +414,10 @@ async function attachCoachNote(
       avgHr: run.avgHr ?? null,
       runType,
       zonePercents: zonesForClassifier(zones) ?? null,
+      zoneBands: ctx.zoneBands,
       plannedWorkout: workout,
       planPhase: phase,
+      tomorrow: tomorrowFor(plan, run.date),
     });
     if (note) {
       await supabase.from('runs').update({ coach_notes: note }).eq('id', runId);

@@ -284,6 +284,8 @@ The strength extractor handles four encodings in precedence order (`strength_exe
 
 **Morning-after coach note:** both Strava sync paths (manual + cron) call `generateRunReaction` (`lib/ai/run-reaction.ts`, Haiku) after importing a run — a two-sentence coach reaction judged against the plan's workout for that date (`plannedWorkoutForRunDate`), stored in `runs.coach_notes`. Dashboard shows it for 36h. Always best-effort; never fails the sync.
 
+**The run note states only facts computed in code (2026-11-08).** The first note after the plan went live called avg HR 129 "Z3" (his Z2 is 124-143) and said "tomorrow's easy" before a hill session — because the prompt never carried his zone bands or tomorrow's session yet asked about both. `buildRunFacts` (`lib/ai/run-reaction.ts`, pure) now resolves the avg-HR zone, the gap to today's target and tomorrow (`tomorrowFor`: rest / easy / quality / unknown); `checkNote` rejects a note naming a zone the facts do not support or a tomorrow they contradict, one retry with the problem stated, then no note. **Any prompt that asks the model to judge zones or the plan must be GIVEN the bands and the plan — never left to infer them.**
+
 **Readiness verdict:** `/api/coach/stats` returns `readiness: { verdict: GO|EASY|REST, reasons, fatigueScore }` computed by `lib/utils/readiness.ts` (pure function — fatigue score + yesterday's zone distribution + today's planned workout). Dashboard hero renders it as a colored badge. No LLM involved; the chat coach reads the same signals so app and coach stay consistent.
 
 **Stats aggregates:** lifetime totals come from the `runcoach.run_totals(p_user_id)` RPC (count + sum in one call) — do not reintroduce the select-all-rows-and-reduce pattern.
