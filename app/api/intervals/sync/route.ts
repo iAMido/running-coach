@@ -12,6 +12,7 @@ import {
 } from '@/lib/intervals/sync';
 import { IntervalsApiError } from '@/lib/intervals/client';
 import { GARMIN_ON_OPEN_DAYS_BACK, syncGarminWellnessForUser } from '@/lib/garmin/sync';
+import { syncGarminActivitiesForUser } from '@/lib/garmin/activity-sync';
 
 /**
  * Manual "Sync Now", and — when `ifStaleMinutes` is passed — the automatic
@@ -80,6 +81,11 @@ export async function POST(request: NextRequest) {
       throw err;
     }
 
+    // After intervals.icu, so a run it just delivered is matched, not imported
+    // twice. Picks up any run Garmin has that intervals.icu does not, and puts
+    // the watch's climb on recent runs. Never throws.
+    const garminActivities = await syncGarminActivitiesForUser(userId, { daysBack: isAutomatic ? 3 : daysBack });
+
     return NextResponse.json({
       success: true,
       skipped: false,
@@ -89,6 +95,7 @@ export async function POST(request: NextRequest) {
       dateCorrected: result.dateCorrected,
       errors: result.errors,
       garmin: await garminRun,
+      garminActivities,
     });
   } catch (error) {
     // The client's messages already name the real cause (a 403 is the

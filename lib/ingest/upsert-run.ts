@@ -87,7 +87,8 @@ export interface HrStream {
   time: number[] | null;
 }
 
-export type DataSource = 'strava_sync' | 'intervals_sync' | 'fit_upload' | 'garmin';
+/** 'garmin' = the legacy Garmin export rows; 'garmin_api' = imported from the Garmin Personal API. */
+export type DataSource = 'strava_sync' | 'intervals_sync' | 'fit_upload' | 'garmin' | 'garmin_api';
 
 export interface NormalizedRun {
   /** Stored as `filename`, e.g. "strava_1234" or "icu_i172834288". */
@@ -647,8 +648,22 @@ async function enrichExisting(
   }
 
   // Backfill laps only when the row has none — never duplicate an existing set.
+  // One exception: a row first imported from Garmin carries the watch's laps,
+  // which have no grade-adjusted pace. When intervals.icu delivers the same run
+  // its laps replace them (they carry GAP, so decoupling becomes computable).
+  // Only when the incoming set has at least as many laps: on 2026-11-08
+  // intervals.icu detected ONE segment where the watch recorded five 1-km laps,
+  // and swapping would have thrown the lap detail away for nothing (decoupling
+  // needs 6 laps anyway).
   let lapsWritten = 0;
-  if ((await countLaps(existing.id)) === 0) {
+  const garminRow = existing.filename?.startsWith('garmin_') && ctx.identityIsAuthoritative;
+  if (garminRow) {
+    const incoming = await resolve(run.laps);
+    if (incoming && incoming.length > 0 && incoming.length >= (await countLaps(existing.id))) {
+      await supabase.from('laps').delete().eq('run_id', existing.id);
+      lapsWritten = await writeLaps(existing.id, { ...run, laps: incoming });
+    }
+  } else if ((await countLaps(existing.id)) === 0) {
     lapsWritten = await writeLaps(existing.id, run);
   }
 
@@ -668,4 +683,53 @@ async function enrichExisting(
     matchedBy,
     dateCorrected: patch.date != null,
   };
+}
+
+// ------------------------------------------------------------ watch climb
+
+/**
+ * Put the watch's barometric climb on a run and re-classify it (2026-11-09).
+ *
+ * From WATCH_CLIMB_FROM the athlete chose the watch over intervals.icu's
+ * map-corrected climb, which flattened his rolling local terrain (11 m of
+ * relief on a route the watch traced climbing 38 m). Applied once per run —
+ * `elevation_source = 'watch'` marks it done — and never to a run the athlete
+ * corrected by hand (treadmill entry) or to anything before the switch.
+ *
+ * Re-classifies because the hill gate reads climb per km: a run classified on
+ * the map's number would otherwise keep a label the stored climb contradicts.
+ */
+export async function applyWatchClimb(
+  runId: string,
+  climb: { gain: number | null; loss: number | null },
+  profile: AthleteProfile | null,
+): Promise<boolean> {
+  if (climb.gain == null) return false;
+  const { data } = await supabase
+    .from('runs')
+    .select('distance_km,duration_min,avg_hr,max_hr,workout_name,elevation_source,manual_edit,is_treadmill,pct_z1,pct_z2,pct_z3,pct_z4,pct_z5,pct_z6')
+    .eq('id', runId)
+    .maybeSingle();
+  const row = data as (ExistingRunRow & { elevation_source: string | null; manual_edit: unknown; is_treadmill: boolean | null }) | null;
+  if (!row || row.elevation_source === 'watch' || row.manual_edit || row.is_treadmill) return false;
+
+  const zones = row.pct_z1 != null
+    ? { z1: row.pct_z1, z2: row.pct_z2 ?? 0, z3: row.pct_z3 ?? 0, z4: row.pct_z4 ?? 0, z5: row.pct_z5 ?? 0, z6: row.pct_z6 ?? 0 }
+    : undefined;
+  const runType = classifyRun({
+    distanceKm: row.distance_km ?? 0,
+    avgHr: row.avg_hr ?? undefined,
+    maxHr: row.max_hr ?? undefined,
+    durationMin: row.duration_min ?? 0,
+    workoutName: row.workout_name,
+    profile,
+    zonePercents: zones,
+    elevationGainM: climb.gain,
+  });
+
+  const { error } = await supabase
+    .from('runs')
+    .update({ elevation_gain_m: climb.gain, elevation_loss_m: climb.loss, elevation_source: 'watch', run_type: runType })
+    .eq('id', runId);
+  return !error;
 }

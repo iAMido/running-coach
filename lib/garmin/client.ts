@@ -24,6 +24,7 @@ import type {
   GarminDailySummary,
   GarminHrvRange,
   GarminHrvSummary,
+  GarminActivitySummary,
 } from '@/lib/garmin/types';
 
 export const GARMIN_BASE_URL = 'https://personal.connectapi.garmin.com';
@@ -138,8 +139,8 @@ export class GarminClient {
     return (await this.exchangeToken()).token;
   }
 
-  /** GET returning parsed JSON, or null for an empty body (a day with nothing recorded). */
-  private async get<T>(path: string): Promise<T | null> {
+  /** Authorised GET; retries once on 401 with a fresh token. Throws on any other failure. */
+  private async request(path: string): Promise<Response> {
     for (let attempt = 0; attempt < 2; attempt++) {
       const token = await this.ensureToken();
       const response = await this.fetchWithTimeout(`${GARMIN_BASE_URL}${path}`, {
@@ -156,12 +157,40 @@ export class GarminClient {
         const bare = path.split('?')[0];
         throw new GarminApiError(describeError(response.status, bare), response.status, bare);
       }
-
-      const text = await response.text();
-      if (!text.trim()) return null;
-      return JSON.parse(text) as T;
+      return response;
     }
     throw new GarminApiError(describeError(401, path.split('?')[0]), 401, path.split('?')[0]);
+  }
+
+  /** GET returning parsed JSON, or null for an empty body (a day with nothing recorded). */
+  private async get<T>(path: string): Promise<T | null> {
+    const text = await (await this.request(path)).text();
+    if (!text.trim()) return null;
+    return JSON.parse(text) as T;
+  }
+
+  /**
+   * Activities started between two dates (YYYY-MM-DD, inclusive), newest
+   * first. The endpoint caps a page at 20 whatever `limit` says (measured), so
+   * this pages until a short page.
+   */
+  async listActivities(from: string, to: string, maxPages = 5): Promise<GarminActivitySummary[]> {
+    const out: GarminActivitySummary[] = [];
+    for (let page = 0; page < maxPages; page++) {
+      const rows = await this.get<GarminActivitySummary[]>(
+        `/activitylist-service/activities/search/activities?startDate=${from}&endDate=${to}&start=${page * 20}&limit=20`,
+      );
+      if (!rows?.length) break;
+      out.push(...rows);
+      if (rows.length < 20) break;
+    }
+    return out;
+  }
+
+  /** The original file the watch uploaded, as Garmin stores it: a zip holding one .fit. */
+  async downloadActivityFile(activityId: number | string): Promise<Buffer> {
+    const response = await this.request(`/download-service/files/activity/${activityId}`);
+    return Buffer.from(await response.arrayBuffer());
   }
 
   /** HRV per night. Dates YYYY-MM-DD inclusive; 60 days per call measured fine. */

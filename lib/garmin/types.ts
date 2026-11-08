@@ -87,3 +87,27 @@ export interface GarminBodyBatteryReport {
     | { bodyBatteryValueDescriptorIndex?: number; bodyBatteryValueDescriptorKey?: string }[]
     | null;
 }
+
+/**
+ * One row of `GET /activitylist-service/activities/search/activities`.
+ * Distance in metres, durations in seconds, speeds in m/s. Only the fields
+ * the fallback import reads are typed.
+ */
+export interface GarminActivitySummary {
+  activityId: number;
+  activityName?: string | null;
+  /** "YYYY-MM-DD HH:MM:SS", no zone. */
+  startTimeLocal?: string | null;
+  startTimeGMT?: string | null;
+  activityType?: { typeKey?: string | null } | null;
+  distance?: number | null;
+  duration?: number | null;
+  movingDuration?: number | null;
+  averageHR?: number | null;
+  maxHR?: number | null;
+  calories?: number | null;
+  averageRunningCadenceInStepsPerMinute?: number | null;
+  elevationGain?: number | null;
+  elevationLoss?: number | null;
+  lapCount?: number | null;
+}

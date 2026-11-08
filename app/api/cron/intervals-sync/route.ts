@@ -11,6 +11,7 @@ import {
 } from '@/lib/intervals/sync';
 import { autoSyncPlanToWatch } from '@/lib/intervals/auto-sync';
 import { syncGarminWellnessForUser, type GarminSyncResult } from '@/lib/garmin/sync';
+import { syncGarminActivitiesForUser, type GarminActivitySyncResult } from '@/lib/garmin/activity-sync';
 import type { GarminToken, IntervalsToken } from '@/lib/db/types';
 
 /**
@@ -77,11 +78,13 @@ export async function GET(request: NextRequest) {
     // Garmin wellness rides on this cron rather than a cron of its own. Its own
     // loop over its own token rows, after intervals.icu, so a Garmin failure can
     // never cost the activity sync.
-    const garmin: (Partial<GarminSyncResult> & { userId: string; error?: string })[] = [];
+    const garmin: (Partial<GarminSyncResult> & { userId: string; error?: string; activities?: GarminActivitySyncResult })[] = [];
     const { data: garminTokens } = await supabase.from('garmin_tokens').select('user_id');
     for (const row of (garminTokens ?? []) as Pick<GarminToken, 'user_id'>[]) {
       try {
-        garmin.push(await syncGarminWellnessForUser(row.user_id));
+        const wellness = await syncGarminWellnessForUser(row.user_id);
+        // Runs Garmin has that intervals.icu has not delivered, plus the watch's climb.
+        garmin.push({ ...wellness, activities: await syncGarminActivitiesForUser(row.user_id, { daysBack }) });
       } catch (err) {
         garmin.push({ userId: row.user_id, error: err instanceof Error ? err.message : String(err) });
       }
