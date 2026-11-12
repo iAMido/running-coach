@@ -5,7 +5,8 @@ import { getRecentFeedback, getWeeklySummary } from '@/lib/db/feedback';
 import { getRecentWellness, getWellnessBaselines, type WellnessBaselines } from '@/lib/db/wellness';
 import { getGarminBaselines, getRecentGarminWellness, type GarminBaselines } from '@/lib/db/garmin-wellness';
 import { calculateCurrentWeek, sortWorkoutsByDay } from '@/lib/utils/week-calculator';
-import { daysBetweenDateStr, nowInUserTz, userDateStr } from '@/lib/utils/user-time';
+import { daysBetweenDateStr, nowInUserTz, userDateStr, USER_TIMEZONE } from '@/lib/utils/user-time';
+import { formatTodayBlock } from '@/lib/rag/today-block';
 import { formatPace } from '@/lib/utils/pace';
 import { percentileOf, medianOf } from '@/lib/utils/decoupling';
 import {
@@ -69,6 +70,12 @@ export async function formatUserContext(
   const sections: string[] = [];
   let totalChars = 0;
   const maxChars = maxTokens * CHARS_PER_TOKEN;
+
+  // 0. What day it is, and yesterday/today/tomorrow on the plan. Small and
+  // first: every relative day the athlete mentions resolves against it.
+  const todayText = formatTodayBlock(plan ?? null, runsWithLaps);
+  sections.push(todayText);
+  totalChars += todayText.length;
 
   // 1. Profile (essential, always include)
   if (profile) {
@@ -473,6 +480,13 @@ function formatRunBlock(
   const fbText = formatRunFeedback(fb);
   if (fbText) lines.push(fbText);
 
+  // The automatic post-run note the athlete saw on the dashboard. Shown so the
+  // coach can stand behind it or correct it — on 2026-11-10 it apologised for
+  // "the framing I apparently gave you" about a note it had never seen.
+  if (run.coach_notes) {
+    lines.push(`  App's automatic post-run note (shown to the athlete; written by a smaller model — correct it if the data disagrees): "${run.coach_notes}"`);
+  }
+
   return lines.join('\n');
 }
 
@@ -480,7 +494,9 @@ function formatRunBlock(
  * Format a single run summary line
  */
 function formatSingleRun(run: Run, decouplingHistory: number[] = []): string {
+  // Israel time: Vercel runs UTC, and a 22:30 run would otherwise show the next day.
   const date = new Date(run.date).toLocaleDateString('en-US', {
+    timeZone: USER_TIMEZONE,
     weekday: 'short',
     month: 'short',
     day: 'numeric',

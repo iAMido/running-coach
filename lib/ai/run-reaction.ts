@@ -118,6 +118,12 @@ export interface RunFacts {
   /** Zones the note may name: time spent ≥5%, the avg-HR zone, today's target zones. */
   allowedZones: Set<number>;
   tomorrow: 'unknown' | 'rest' | 'easy' | 'quality';
+  /**
+   * Today's effort against the plan's target HR, decided in code. The note
+   * must agree with it: on 2026-11-09 a run averaging 138 inside a 130-155
+   * target got "too conservative, you needed sharper Z4 work".
+   */
+  verdict: 'on_target' | 'above' | 'below' | 'unknown';
 }
 
 /** Every fact the note may state, resolved in code. Pure. */
@@ -154,6 +160,7 @@ export function buildRunFacts(input: RunReactionInput): RunFacts {
     lines.push('- Time in zones: not measured');
   }
 
+  let verdict: RunFacts['verdict'] = 'unknown';
   const p = input.plannedWorkout;
   if (p && !isRest(p)) {
     zonesNamed(p.target_hr).forEach((n) => allowed.add(n));
@@ -164,6 +171,7 @@ export function buildRunFacts(input: RunReactionInput): RunFacts {
         : input.avgHr < t.low ? `${t.low - input.avgHr} bpm below the bottom of the target`
           : 'inside the target';
       lines.push(`- Average HR vs today's target (${t.low}-${t.high}): ${d}.`);
+      verdict = input.avgHr > t.high ? 'above' : input.avgHr < t.low ? 'below' : 'on_target';
     }
   } else {
     lines.push(`- Planned today: ${p ? 'a rest day' : 'nothing on the plan (or no active plan)'}`);
@@ -184,8 +192,20 @@ export function buildRunFacts(input: RunReactionInput): RunFacts {
     lines.push('- Tomorrow: not known — do NOT mention tomorrow.');
   }
 
-  return { text: lines.join('\n'), allowedZones: allowed, tomorrow };
+  lines.push(
+    verdict === 'on_target' ? '- VERDICT: effort was ON TARGET for the plan. Say so. Do NOT ask for more or less intensity, and do not call it too conservative or too hard.'
+      : verdict === 'above' ? "- VERDICT: effort was ABOVE the plan's target. Do NOT ask for more intensity."
+        : verdict === 'below' ? "- VERDICT: effort was BELOW the plan's target. Do NOT call it too hard."
+          : '- VERDICT: no target to judge against — do not say the effort was too hard or too easy.',
+  );
+
+  return { text: lines.join('\n'), allowedZones: allowed, tomorrow, verdict };
 }
+
+/** "Go harder" language. */
+const PUSH = /\b(push|harder|sharper|more intensity|commit to the intensity|too (conservative|easy|soft|cautious)|not hard enough|step it up|needed (more|sharper|harder))\b/i;
+/** "Back off" language. */
+const EASE = /\b(too (hard|fast|high|hot)|ease (off|up|back)|dial (it )?back|back off|slow (it )?down|reel it in|went out too)\b/i;
 
 /** Problems with a note against its facts; [] when it is fine. Pure. */
 export function checkNote(note: string, facts: RunFacts): string[] {
@@ -200,8 +220,21 @@ export function checkNote(note: string, facts: RunFacts): string[] {
   if (facts.tomorrow === 'quality' && aboutTomorrow.some((s) => /\b(easy|rest|recovery|off)\b/i.test(s) && !/\b(hill|interval|tempo|threshold|quality|hard|long|repeat)/i.test(s))) {
     problems.push('it describes tomorrow as easy, but tomorrow is a quality session');
   }
-  if (facts.tomorrow === 'rest' && aboutTomorrow.some((s) => /\b(hill|interval|tempo|threshold|repeat|long run|session)\b/i.test(s))) {
+  if (facts.tomorrow === 'rest' && aboutTomorrow.some((s) =>
+    /\b(hill|interval|tempo|threshold|repeat|long run|session|push|harder|intensity|climbs?|pace|run)\b/i.test(s) && !/\b(rest|off|recover)/i.test(s))) {
     problems.push('it gives tomorrow a session, but tomorrow is a rest day');
+  }
+
+  // Today's sentences are judged against the verdict; tomorrow's advice is checked above.
+  const aboutToday = sentences.filter((s) => !/\btomorrow/i.test(s)).join(' ');
+  if ((facts.verdict === 'on_target' || facts.verdict === 'above') && PUSH.test(aboutToday)) {
+    problems.push(`it asks for more intensity, but today's effort was ${facts.verdict === 'above' ? 'above' : 'on'} the plan's target`);
+  }
+  if ((facts.verdict === 'on_target' || facts.verdict === 'below') && EASE.test(aboutToday)) {
+    problems.push(`it says the effort was too hard, but it was ${facts.verdict === 'below' ? 'below' : 'on'} the plan's target`);
+  }
+  if (facts.verdict === 'unknown' && (PUSH.test(note) || EASE.test(note))) {
+    problems.push('it judges the effort, but there was no target to judge against');
   }
   return problems;
 }
@@ -213,7 +246,7 @@ const REACTION_SYSTEM_PROMPT = `You are the athlete's running coach reacting to 
 Rules:
 - Use ONLY the facts given. Every zone you name must match the facts exactly: the zone of the average HR is stated — never re-derive it from the numbers.
 - Mention tomorrow only as the facts describe it; if tomorrow is not known, say nothing about it.
-- If the day's planned workout is given, judge the run against it (too hard / on target / mismatched type). A few bpm over a recovery target is a mild note, not a scolding.
+- The VERDICT line is decided for you — agree with it. On target means say it was on target, never 'push harder'. A few bpm over a recovery target is a mild note, not a scolding.
 - If zones show >35% in Z4+ on an easy/recovery day, call it out firmly but kindly.
 - No greetings, no emoji, no hashtags, no "great job" filler. Coach, not cheerleader.
 - Max 45 words total.`;

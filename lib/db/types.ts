@@ -213,6 +213,8 @@ export interface Workout {
    * one steady step from duration + target_hr, as before.
    */
   steps?: PlanStep[] | null;
+  /** Where the session came from (a book or reference plan), when the builder named one. */
+  source?: string | null;
 }
 
 /**
