@@ -21,6 +21,12 @@ import { MODEL_FOR } from '@/lib/ai/model-registry';
 import { getLatestRecoveryReading } from '@/lib/db/wellness';
 import { getGarminFeedStatus } from '@/lib/db/garmin-wellness';
 import { garminFeedProblem } from '@/lib/garmin/feed';
+import { mergeAdjustedWeek, weekChanged } from '@/lib/coach/plan-merge';
+import { autoSyncPlanToWatch } from '@/lib/intervals/auto-sync';
+import type { PlanWeek } from '@/lib/db/types';
+
+/** The model answered in edit mode but no session changed: write nothing, show no banner. */
+class NoPlanChange extends Error {}
 
 // Detect if user wants to modify their training plan
 function detectPlanModificationIntent(query: string): boolean {
@@ -35,6 +41,11 @@ function detectPlanModificationIntent(query: string): boolean {
     /\bmake\s+(it|my\s+(training|plan|week))\s+(easier|harder|lighter)/i,
     /\breduce\s+(volume|mileage|intensity|training)/i,
     /\badd\s+(more|extra|another)\s+(rest|recovery|easy)/i,
+    // Hebrew: move / shift / change / skip / cancel / swap / postpone / lighten / reduce / add.
+    // On 2026-11-12 "אתה יכול להעביר את האימון של אתמול, להיום?" never reached
+    // edit mode — the patterns were English only — so the coach agreed to the
+    // move and nothing moved.
+    /(להעביר|תעביר|אעביר|להזיז|תזיז|אזיז|לשנות|תשנה|לדלג|אדלג|לבטל|תבטל|להחליף|תחליף|לדחות|תדחה|להקל|תקל|להוריד|תוריד|להוסיף|תוסיף)/,
   ];
 
   return modificationPatterns.some(pattern => pattern.test(query));
@@ -90,7 +101,11 @@ Week ${currentWeek} of the plan
 
 IMPORTANT:
 - You MUST include the <plan_changes> JSON block after your conversational response
-- Generate the FULL week's workouts (Sunday through Saturday) for at least the current week
+- If the athlete is NOT actually asking to change the plan (a question, an analysis, a correction of an earlier answer), output "adjusted_weeks": [] — never restate an unchanged week. Do not tell the athlete the plan was updated.
+- Resolve "today", "yesterday", "tomorrow" from the "## Today" section of the athlete data, never from the most recent run.
+- To MOVE a session, put the same session (same type, distance, duration, targets) on the new day and remove it from the old day. Copy every day you are not changing exactly as it is.
+- Do not invent extra content (an added warm-up, extra drills) the plan did not have.
+- Generate the FULL week's workouts (Sunday through Saturday) for every week you change
 - If changes affect multiple weeks, include all affected weeks
 - The week starts on SUNDAY
 - Be specific about workout details (paces, HR zones, duration)
@@ -144,7 +159,11 @@ export async function POST(request: NextRequest) {
     // message only after the AI succeeds also kills the duplicate-turn bug
     // where a failed call + retry double-inserted the same user message.
     const queryType = detectQueryType(query);
-    const isPlanModification = detectPlanModificationIntent(query);
+    // A short follow-up ("yesterday (Wednesday) was a run I missed, I'll do it
+    // today") answers the athlete's own previous request — judge both together.
+    const previousUser = messages.filter(m => m.role === 'user').slice(-2, -1)[0]?.content ?? '';
+    const isPlanModification =
+      detectPlanModificationIntent(query) || (isShortFollowUp && detectPlanModificationIntent(previousUser));
 
     // One round of parallel fetches for everything independent: the chat
     // session (create if new), the active plan (used by plan-mod, preflight,
@@ -271,20 +290,30 @@ export async function POST(request: NextRequest) {
           const adjustmentResult = JSON.parse(changesJson);
 
           if (adjustmentResult.adjusted_weeks && Array.isArray(adjustmentResult.adjusted_weeks)) {
-            // Merge adjusted weeks into the existing plan
+            // Merge adjusted weeks into the existing plan. Only weeks whose
+            // sessions actually changed are written, and each keeps what the
+            // model left out (strength, watch steps, climb) — see plan-merge.ts.
+            // A "no changes" restatement on 2026-11-10 wiped week 1's strength
+            // and watch steps twice.
             const existingWeeks = activePlan.plan_json?.weeks || [];
             const updatedWeeks = [...existingWeeks];
+            let changedWeeks = 0;
 
-            for (const adjustedWeek of adjustmentResult.adjusted_weeks) {
+            for (const adjustedWeek of adjustmentResult.adjusted_weeks as PlanWeek[]) {
               const weekIndex = updatedWeeks.findIndex(
                 (w: { week_number: number }) => w.week_number === adjustedWeek.week_number
               );
+              const before = weekIndex !== -1 ? (updatedWeeks[weekIndex] as PlanWeek) : undefined;
+              if (!adjustedWeek?.workouts || !weekChanged(before, adjustedWeek)) continue;
+              const merged = mergeAdjustedWeek(before, adjustedWeek);
+              changedWeeks++;
               if (weekIndex !== -1) {
-                updatedWeeks[weekIndex] = adjustedWeek;
+                updatedWeeks[weekIndex] = merged;
               } else {
-                updatedWeeks.push(adjustedWeek);
+                updatedWeeks.push(merged);
               }
             }
+            if (changedWeeks === 0) throw new NoPlanChange();
 
             // Sort weeks by week number
             updatedWeeks.sort((a: { week_number: number }, b: { week_number: number }) =>
@@ -315,21 +344,20 @@ export async function POST(request: NextRequest) {
             if (!updateError) {
               planUpdated = true;
               adjustmentSummary = adjustmentResult.adjustment_summary;
+              // The watch shows this week and next: re-push the changed weeks.
+              after(() => autoSyncPlanToWatch(userId, 'chat_edit').then(() => undefined));
             }
           }
         } catch (parseError) {
-          console.error('Failed to parse plan changes:', parseError);
+          if (!(parseError instanceof NoPlanChange)) console.error('Failed to parse plan changes:', parseError);
           // Continue without applying changes - the conversational response is still valuable
         }
       }
     }
 
-    // Clean up the response content (remove the JSON block from display)
-    let displayContent = response.content;
+    // Never show the raw <plan_changes> block, whether or not anything was written.
+    let displayContent = response.content.replace(/<plan_changes>[\s\S]*?<\/plan_changes>/, '').trim();
     if (planUpdated) {
-      // Remove the <plan_changes> block from the displayed response
-      displayContent = displayContent.replace(/<plan_changes>[\s\S]*?<\/plan_changes>/, '').trim();
-
       // Add confirmation to the response
       displayContent += `\n\n✅ **Your training plan has been updated!** The changes are now reflected in your Plan page.`;
     }

@@ -62,3 +62,39 @@ test('a rest day tomorrow cannot be given a session', () => {
   expect(checkNote('Solid 3.1 km. Tomorrow\'s session is a tempo, so sleep well.', f).length).toBe(1);
   expect(checkNote('Solid 3.1 km at 129 bpm. Tomorrow is a rest day — use it.', f)).toEqual([]);
 });
+
+// The real 2026-11-09 hill session: 138 avg inside a 130-155 target, rest day next.
+const nov9: RunReactionInput = {
+  distanceKm: 4.98, durationMin: 37.3, avgHr: 138, runType: 'Intervals',
+  zonePercents: { z1: 8.4, z2: 57.6, z3: 23.4, z4: 10.3, z5: 0, z6: 0 },
+  zoneBands: BANDS,
+  plannedWorkout: { type: 'Hill Repeats + Strength', duration: '35 min', target_hr: 'Z2-Z3 (130-155)' },
+  tomorrow: { covered: true, dayName: 'Tuesday', workout: null },
+};
+const NOV9_NOTE = 'You ran 5km at 7:29/km with 138 avg HR, but stayed too conservative in Z2—you needed sharper Z4 work to hit those hill repeats. Tomorrow, commit to the intensity: trust the plan and push the climbs harder.';
+
+test('the verdict is decided in code and stated', () => {
+  const f = buildRunFacts(nov9);
+  expect(f.verdict).toBe('on_target');
+  expect(f.text).toContain('VERDICT: effort was ON TARGET');
+  expect(buildRunFacts(nov8).verdict).toBe('above');
+  expect(buildRunFacts({ ...nov9, plannedWorkout: null }).verdict).toBe('unknown');
+});
+
+test('the real 2026-11-09 note is rejected: push-harder on target, and a session on a rest day', () => {
+  const p = checkNote(NOV9_NOTE, buildRunFacts(nov9));
+  expect(p.some((x) => x.includes('asks for more intensity'))).toBe(true);
+  expect(p.some((x) => x.includes('rest day'))).toBe(true);
+});
+
+test('an on-target note passes; too-hard on target fails', () => {
+  const f = buildRunFacts(nov9);
+  expect(checkNote('Solid 5 km of hill reps at 138 bpm, right inside the 130-155 target. Tomorrow is a rest day — use it.', f)).toEqual([]);
+  expect(checkNote('5 km at 138 bpm, but that was too hard for the day.', f).length).toBe(1);
+});
+
+test('above target: easing off is fine, pushing is not', () => {
+  const f = buildRunFacts(nov8);
+  expect(checkNote('3.1 km at 129 bpm, five beats over the recovery ceiling — ease off on the next recovery run.', f)).toEqual([]);
+  expect(checkNote('3.1 km at 129 bpm. Push harder next time.', f).length).toBe(1);
+});
