@@ -20,8 +20,26 @@ function hoursSince(iso: string | null, now: Date): number | null {
   return Number.isFinite(t) ? (now.getTime() - t) / 3_600_000 : null;
 }
 
+/**
+ * intervals.icu has stalled when runs Garmin delivered a day ago are still
+ * missing from it. Independent of the wellness feed's own health.
+ */
+export function intervalsBehindMessage(status: GarminFeedStatus | null): string | null {
+  const n = status?.runsAwaitingIntervals ?? 0;
+  if (!n) return null;
+  const since = status?.oldestAwaitingRun ? ` since ${status.oldestAwaitingRun.slice(0, 10)}` : '';
+  return `intervals.icu has not delivered ${n} run${n === 1 ? '' : 's'} Garmin has${since} — ` +
+    'they were imported from Garmin, so grade-adjusted pace and decoupling are missing for them, ' +
+    'and intervals.icu may also have stopped receiving workouts for the watch. Check the intervals.icu account.';
+}
+
 export function garminFeedGaps(status: GarminFeedStatus | null, now: Date = new Date()): string[] {
   if (!status) return [];
+  const behind = intervalsBehindMessage(status);
+  return [...garminWellnessGaps(status, now), ...(behind ? [behind] : [])];
+}
+
+function garminWellnessGaps(status: GarminFeedStatus, now: Date): string[] {
   if (!status.connected) {
     return ['Garmin recovery feed not connected — body battery, stress, sleep stages and HRV status are unknown.'];
   }
@@ -39,6 +57,8 @@ export function garminFeedGaps(status: GarminFeedStatus | null, now: Date = new 
 
 export function garminFeedProblem(status: GarminFeedStatus | null, now: Date = new Date()): string | null {
   if (!status || !status.connected) return null;
+  const behind = intervalsBehindMessage(status);
+  if (behind) return behind;
   if (status.keyDaysLeft !== null && status.keyDaysLeft < 0) return `Garmin key expired on ${status.keyExpiresAt}.`;
   const age = hoursSince(status.lastSuccessAt, now);
   if (age === null || age > GARMIN_STALE_HOURS) {

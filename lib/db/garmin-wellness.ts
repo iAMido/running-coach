@@ -67,7 +67,17 @@ export interface GarminFeedStatus {
   /** Days in the last 7 with a sleep or body-battery reading. */
   daysWithReadings7d: number;
   latestReadingDay: string | null;
+  /**
+   * Runs imported from Garmin more than INTERVALS_BEHIND_HOURS ago that
+   * intervals.icu has still not delivered (filename still `garmin_`). Non-zero
+   * means intervals.icu has stalled: those runs lack grade-adjusted pace and
+   * decoupling, and the watch push may be stale too.
+   */
+  runsAwaitingIntervals?: number;
+  oldestAwaitingRun?: string | null;
 }
+
+export const INTERVALS_BEHIND_HOURS = 24;
 
 /** Warn this many days before the key expires. Garmin's own email comes at 7. */
 export const GARMIN_KEY_WARN_DAYS = 14;
@@ -92,6 +102,7 @@ export async function getGarminFeedStatus(userId: string): Promise<GarminFeedSta
     cooldownUntil: token.cooldown_until ?? null,
     daysWithReadings7d: withReadings.length,
     latestReadingDay: withReadings[0]?.day ?? null,
+    ...(await runsAwaitingIntervals(userId)),
   };
 }
 
@@ -164,4 +175,17 @@ export async function getGarminBaselines(userId: string, windowDays = 90): Promi
     .lt('day', userDateStr());
   if (error) throw new Error(`Failed to read garmin baselines: ${error.message}`);
   return garminBaselinesFrom((data ?? []) as GarminDailyWellness[], windowDays);
+}
+
+async function runsAwaitingIntervals(userId: string): Promise<{ runsAwaitingIntervals: number; oldestAwaitingRun: string | null }> {
+  const cutoff = new Date(Date.now() - INTERVALS_BEHIND_HOURS * 3_600_000).toISOString();
+  const { data } = await supabase
+    .from('runs')
+    .select('date')
+    .eq('user_id', userId)
+    .like('filename', 'garmin\_%')
+    .lt('date', cutoff)
+    .order('date', { ascending: true });
+  const rows = (data ?? []) as { date: string }[];
+  return { runsAwaitingIntervals: rows.length, oldestAwaitingRun: rows[0]?.date ?? null };
 }
