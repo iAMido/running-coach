@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Activity, Timer, TrendingUp, Calendar, Target, Zap, Play, ChevronRight, HeartPulse, Gauge, Mountain } from 'lucide-react';
+import { Activity, Timer, TrendingUp, Calendar, Target, Zap, Play, ChevronRight, HeartPulse, Gauge, Mountain, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { DashboardStats, Run, TrainingPlan, PlanWeek, Workout } from '@/lib/db/types';
@@ -49,6 +49,34 @@ export default function CoachDashboard() {
   // re-reads only if the sync actually imported something, so the page never
   // waits on a third party.
   useSyncOnOpen(fetchData);
+
+  // Manual pull: no debounce, so a run that just landed on Garmin or
+  // intervals.icu shows up now instead of after the next automatic sync.
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const syncNow = async () => {
+    setSyncing(true);
+    setSyncMessage(null);
+    try {
+      const res = await fetch('/api/intervals/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ daysBack: 3 }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSyncMessage(data?.error || 'Sync failed');
+        return;
+      }
+      const added = (data.newRunsCount || 0) + (data.garminActivities?.imported || 0);
+      setSyncMessage(added ? `${added} new run${added === 1 ? '' : 's'}` : 'Up to date');
+      await fetchData();
+    } catch {
+      setSyncMessage('Network error');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   // Get current week workouts from the plan
   const getCurrentWeekWorkouts = (): Record<string, Workout> | null => {
@@ -119,9 +147,27 @@ export default function CoachDashboard() {
     <div className="space-y-6 max-w-6xl">
       {/* Page Header */}
       <div>
-        <div className="rc-kicker flex items-center gap-2.5 mb-2">
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--rc-blue)' }} />
-          Welcome back, {session?.user?.name?.split(' ')[0] || 'Coach'}
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <div className="rc-kicker flex items-center gap-2.5">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--rc-blue)' }} />
+            Welcome back, {session?.user?.name?.split(' ')[0] || 'Coach'}
+          </div>
+          <div className="flex items-center gap-2">
+            {syncMessage && (
+              <span className="text-xs" style={{ color: 'var(--rc-ink-3)' }} role="status">{syncMessage}</span>
+            )}
+            <button
+              type="button"
+              onClick={syncNow}
+              disabled={syncing}
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-opacity disabled:opacity-60"
+              style={{ border: '1px solid var(--rc-line)', background: 'var(--rc-surface)', color: 'var(--rc-ink)' }}
+              aria-label="Sync runs now"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Syncing…' : 'Sync now'}
+            </button>
+          </div>
         </div>
         <h1
           className="text-[44px] font-bold leading-none"
