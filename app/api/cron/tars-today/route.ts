@@ -33,6 +33,7 @@ export const runtime = 'nodejs';
 import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
+import { planStartDate } from '@/lib/utils/plan-start';
 import { calculateCurrentWeek, formatWeekDateRange } from '@/lib/utils/week-calculator';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
@@ -91,9 +92,7 @@ export async function GET(request: NextRequest) {
     }
 
     // --- compute current week ---
-    const startDate =
-      plan.start_date ||
-      (plan.created_at ? plan.created_at.split('T')[0] : dateIso);
+    const startDate = planStartDate(plan, dateIso);
     const weekInfo = calculateCurrentWeek(startDate, plan.duration_weeks);
 
     // plan_json is the AI-generated structure. Best-effort extraction:

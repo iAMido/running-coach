@@ -36,6 +36,9 @@ export async function POST(request: NextRequest) {
     }
 
     const { messages, reviewPlan } = validation.data;
+    if (!reviewPlan && !(messages && messages.length > 0)) {
+      return NextResponse.json({ error: 'No messages provided' }, { status: 400 });
+    }
 
     // Get the user's query from the last message
     const lastUserMessage = messages?.filter((m: ChatMessage) => m.role === 'user').pop();

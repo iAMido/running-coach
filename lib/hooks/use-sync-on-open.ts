@@ -37,7 +37,9 @@ export function useSyncOnOpen(onSynced: () => void) {
   // compare-and-swap is the real guard; this just avoids the pointless request.
   const fired = useRef(false);
   const callback = useRef(onSynced);
-  callback.current = onSynced;
+  useEffect(() => {
+    callback.current = onSynced;
+  });
 
   useEffect(() => {
     if (fired.current) return;

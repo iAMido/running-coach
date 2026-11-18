@@ -201,6 +201,19 @@ export const chatRequestSchema = z.object({
   sessionId: z.string().uuid().nullable().optional(),
 });
 
+/**
+ * Ask Coach always answers a message: `messages` is required and must hold
+ * at least one from the athlete. It was optional (shared with Grocky's
+ * plan-review mode, which sends none), and a request without it crashed the
+ * route with a 500 on `messages.filter`.
+ */
+export const askCoachRequestSchema = chatRequestSchema.extend({
+  messages: z.array(chatMessageSchema).min(1).max(50),
+}).refine((b) => b.messages.some((m) => m.role === 'user' && m.content.trim().length > 0), {
+  message: 'messages must include a message from the athlete',
+  path: ['messages'],
+});
+
 // Feedback validation. The optional enums are wrapped in emptyToUndef so
 // the API gracefully accepts the empty-string payloads React forms emit
 // for unselected pills — the client also strips them, but defending here

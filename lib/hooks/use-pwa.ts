@@ -1,6 +1,27 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useSyncExternalStore } from 'react';
+
+// Browser state read through useSyncExternalStore rather than copied into
+// React state from an effect (which renders twice and trips react-hooks lint).
+const STANDALONE_QUERY = '(display-mode: standalone)';
+function subscribeStandalone(onChange: () => void) {
+  const mq = window.matchMedia(STANDALONE_QUERY);
+  mq.addEventListener('change', onChange);
+  return () => mq.removeEventListener('change', onChange);
+}
+function isStandalone(): boolean {
+  return window.matchMedia(STANDALONE_QUERY).matches
+    || (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+}
+function subscribeOnline(onChange: () => void) {
+  window.addEventListener('online', onChange);
+  window.addEventListener('offline', onChange);
+  return () => {
+    window.removeEventListener('online', onChange);
+    window.removeEventListener('offline', onChange);
+  };
+}
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -8,44 +29,22 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 interface PWAStatus {
-  isInstalled: boolean;
+  /** Set by the 'appinstalled' event; display-mode covers an app opened installed. */
+  installedNow: boolean;
   isInstallable: boolean;
-  isOnline: boolean;
   isUpdateAvailable: boolean;
 }
 
 export function usePWA() {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [status, setStatus] = useState<PWAStatus>({
-    isInstalled: false,
+    installedNow: false,
     isInstallable: false,
-    isOnline: true,
     isUpdateAvailable: false,
   });
-
-  // Check if running as installed PWA
-  useEffect(() => {
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-      || (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
-
-    setStatus(prev => ({ ...prev, isInstalled: isStandalone }));
-  }, []);
-
-  // Handle online/offline status
-  useEffect(() => {
-    const handleOnline = () => setStatus(prev => ({ ...prev, isOnline: true }));
-    const handleOffline = () => setStatus(prev => ({ ...prev, isOnline: false }));
-
-    setStatus(prev => ({ ...prev, isOnline: navigator.onLine }));
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
+  const standalone = useSyncExternalStore(subscribeStandalone, isStandalone, () => false);
+  const isOnline = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
+  const isInstalled = standalone || status.installedNow;
 
   // Capture install prompt
   useEffect(() => {
@@ -66,7 +65,7 @@ export function usePWA() {
   useEffect(() => {
     const handleAppInstalled = () => {
       setInstallPrompt(null);
-      setStatus(prev => ({ ...prev, isInstalled: true, isInstallable: false }));
+      setStatus(prev => ({ ...prev, installedNow: true, isInstallable: false }));
     };
 
     window.addEventListener('appinstalled', handleAppInstalled);
@@ -135,9 +134,12 @@ export function usePWA() {
   }, []);
 
   return {
-    ...status,
+    isInstalled,
+    isInstallable: status.isInstallable,
+    isOnline,
+    isUpdateAvailable: status.isUpdateAvailable,
     promptInstall,
     applyUpdate,
-    canInstall: status.isInstallable && !status.isInstalled,
+    canInstall: status.isInstallable && !isInstalled,
   };
 }

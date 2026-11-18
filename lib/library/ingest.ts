@@ -28,7 +28,8 @@ import { buildChunks, findDuplicateTitle, METADATA_PROMPT, metadataSample, parse
 export const BUCKET = 'coach-library';
 /** Books are 6-11 MB; this leaves room for large textbooks. */
 export const MAX_BOOK_BYTES = 50 * 1024 * 1024;
-const CLAIM_MS = 290_000;
+/** Outlasts the 300 s function limit, so a live request is never overtaken (see plan-builder/runner.ts). */
+const CLAIM_MS = 310_000;
 /** Stop embedding and hand back to a new request past this — well inside 300 s. */
 const EMBED_BUDGET_MS = 180_000;
 /** Below this, the PDF is almost certainly scanned images with no text layer. */
@@ -101,20 +102,23 @@ export async function latestOpenIngest(userId: string): Promise<IngestRow | null
   return (data as IngestRow) ?? null;
 }
 
-async function claim(row: IngestRow): Promise<boolean> {
+async function claim(row: IngestRow): Promise<string | null> {
   const now = new Date();
+  const until = new Date(now.getTime() + CLAIM_MS).toISOString();
   const { data } = await supabase.from('library_ingests')
-    .update({ running_until: new Date(now.getTime() + CLAIM_MS).toISOString() })
+    .update({ running_until: until })
     .eq('id', row.id).eq('stage', row.stage)
     .or(`running_until.is.null,running_until.lt.${now.toISOString()}`).select('id');
-  return !!data && data.length > 0;
+  return data && data.length > 0 ? until : null;
 }
 
-async function commit(row: IngestRow, patch: Partial<IngestRow>): Promise<IngestRow> {
+/** Saves only while this request still holds its claim; `null` = lost it, nothing written. */
+async function commit(row: IngestRow, claimed: string, patch: Partial<IngestRow>): Promise<IngestRow | null> {
   const { data, error } = await supabase.from('library_ingests')
-    .update({ ...patch, running_until: null, updated_at: new Date().toISOString() }).eq('id', row.id).select().single();
+    .update({ ...patch, running_until: null, updated_at: new Date().toISOString() })
+    .eq('id', row.id).eq('stage', row.stage).eq('running_until', claimed).select().maybeSingle();
   if (error) throw new Error(`could not save progress: ${error.message}`);
-  return data as IngestRow;
+  return (data as IngestRow) ?? null;
 }
 
 async function readText(path: string): Promise<string> {
@@ -297,13 +301,19 @@ export async function advanceIngest(userId: string, id: string): Promise<{ row: 
   const row = await getIngest(userId, id);
   if (!row) throw new Error('upload not found');
   if (row.stage === 'done' || row.stage === 'failed') return { row, busy: false };
-  if (!(await claim(row))) return { row, busy: true };
+  const claimed = await claim(row);
+  if (!claimed) return { row, busy: true };
+  let patch: Partial<IngestRow>;
   try {
-    return { row: await commit(row, await runStage(row)), busy: false };
+    patch = await runStage(row);
   } catch (e) {
     const message = e instanceof Error ? e.message : 'failed';
     if (row.book_id) await removeBook(row.book_id).catch(() => {});
     await removeFiles(row);
-    return { row: await commit(row, { stage: 'failed', error: `${INGEST_LABELS[row.stage]}: ${message}`, book_id: null }), busy: false };
+    patch = { stage: 'failed', error: `${INGEST_LABELS[row.stage]}: ${message}`, book_id: null };
   }
+  const saved = await commit(row, claimed, patch);
+  if (saved) return { row: saved, busy: false };
+  console.warn(`library ingest ${row.id}: lost the claim on ${row.stage}, result discarded`);
+  return { row: (await getIngest(userId, id)) ?? row, busy: true };
 }

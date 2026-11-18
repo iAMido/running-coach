@@ -111,13 +111,13 @@ export function AboutSection() {
               {/* Bio Text */}
               <div className="space-y-4 text-[#1C1C1E]/70 leading-relaxed">
                 <p>
-                  I'm a passionate AI builder and speaker dedicated to pushing the boundaries of what's possible with artificial intelligence. With deep expertise in machine learning, full-stack development, and cloud architecture, I build solutions that transform how people work and create.
+                  I&apos;m a passionate AI builder and speaker dedicated to pushing the boundaries of what&apos;s possible with artificial intelligence. With deep expertise in machine learning, full-stack development, and cloud architecture, I build solutions that transform how people work and create.
                 </p>
                 <p>
                   As the founder of YUV.AI, I lead a community of developers exploring the frontiers of AI technology. My work spans from building production ML systems to speaking at international conferences about the future of AI-assisted development.
                 </p>
                 <p>
-                  When I'm not coding or speaking, you'll find me mentoring the next generation of AI engineers and contributing to open-source projects that democratize access to AI tools.
+                  When I&apos;m not coding or speaking, you&apos;ll find me mentoring the next generation of AI engineers and contributing to open-source projects that democratize access to AI tools.
                 </p>
               </div>
 

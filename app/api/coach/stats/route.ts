@@ -6,6 +6,7 @@ import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { sumVert, vertPerKm } from '@/lib/utils/elevation';
 import { readinessForUser } from '@/lib/coach/readiness-service';
 import { getRecentGarminWellness } from '@/lib/db/garmin-wellness';
+import { planStartDate } from '@/lib/utils/plan-start';
 
 export async function GET() {
   const auth = await getAuthenticatedUser();
@@ -84,7 +85,7 @@ export async function GET() {
     let planWithWeekInfo = activePlan;
     if (activePlan) {
       // Use start_date if available, otherwise fallback to created_at
-      const startDate = activePlan.start_date || (activePlan.created_at ? activePlan.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
+      const startDate = planStartDate(activePlan);
       const weekInfo = calculateCurrentWeek(startDate, activePlan.duration_weeks);
       planWithWeekInfo = {
         ...activePlan,

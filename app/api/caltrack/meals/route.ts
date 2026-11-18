@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
     const meals = data || [];
     const mealIds = meals.map((m: { id: string }) => m.id);
 
-    let itemsByMeal: Record<string, string[]> = {};
+    const itemsByMeal: Record<string, string[]> = {};
     // #2 — also track minimum item confidence per meal so the UI can flag
     // low-confidence meals with a ⚠️ badge.
     const minConfidenceByMeal: Record<string, number> = {};
@@ -119,14 +119,14 @@ export async function GET(request: NextRequest) {
     }));
 
     // Generate signed URLs for meals that have photos (1 hour TTL)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const photoPaths: string[] = enrichedMeals
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .filter((m: any) => m.photo_path)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .map((m: any) => m.photo_path as string);
 
-    let signedUrlMap: Record<string, string> = {};
+    const signedUrlMap: Record<string, string> = {};
     if (photoPaths.length > 0) {
       const { data: signedUrls } = await caltrackDb.storage
         .from('meals')

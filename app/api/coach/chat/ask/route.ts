@@ -6,7 +6,7 @@ import { COACH_STATIC_BLOCK, buildCoachDynamicBlock } from '@/lib/ai/coach-promp
 import { buildContext, detectQueryType, getContextStats } from '@/lib/rag/context-builder';
 import type { ChatMessage } from '@/lib/db/types';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
-import { chatRequestSchema, validateInput } from '@/lib/validation/schemas';
+import { askCoachRequestSchema, validateInput } from '@/lib/validation/schemas';
 import { supabase } from '@/lib/db/supabase';
 import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
 import { getActivePlan } from '@/lib/db/plans';
@@ -114,6 +114,9 @@ IMPORTANT:
 `;
 }
 
+/** A sessionId that is not one of the signed-in athlete's chats. */
+class ChatSessionNotFound extends Error {}
+
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser();
   if (!auth.authenticated || !auth.userId) {
@@ -131,7 +134,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     // Validate input
-    const validation = validateInput(chatRequestSchema, body);
+    const validation = validateInput(askCoachRequestSchema, body);
     if (!validation.success) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
@@ -173,7 +176,18 @@ export async function POST(request: NextRequest) {
     // context itself.
     const [chatSessionId, activePlan] = await Promise.all([
       (async (): Promise<string | null> => {
-        if (incomingSessionId) return incomingSessionId;
+        if (incomingSessionId) {
+          // The id comes from the browser: it must be one of this athlete's
+          // sessions before anything is saved into it.
+          const { data: owned } = await supabase
+            .from('coach_chat_sessions')
+            .select('id')
+            .eq('id', incomingSessionId)
+            .eq('user_id', userId)
+            .maybeSingle();
+          if (owned) return owned.id as string;
+          throw new ChatSessionNotFound();
+        }
         if (!query) return null;
         const { data: newSession } = await supabase
           .from('coach_chat_sessions')
@@ -430,7 +444,8 @@ export async function POST(request: NextRequest) {
           await supabase
             .from('coach_chat_sessions')
             .update({ message_count: count || 0, updated_at: new Date().toISOString() })
-            .eq('id', chatSessionId);
+            .eq('id', chatSessionId)
+            .eq('user_id', userId);
         }
 
         if (!response.error && callId) {
@@ -473,6 +488,9 @@ export async function POST(request: NextRequest) {
       sessionId: chatSessionId,
     });
   } catch (error) {
+    if (error instanceof ChatSessionNotFound) {
+      return NextResponse.json({ error: 'Chat session not found' }, { status: 404 });
+    }
     console.error('Error in chat:', error);
     return NextResponse.json({ error: 'Failed to get response' }, { status: 500 });
   }

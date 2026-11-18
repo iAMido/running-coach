@@ -245,9 +245,9 @@ export default function CoachDashboard() {
                 <div className="text-[22px] font-bold mt-1" style={{ letterSpacing: '-0.02em' }}>
                   {activePlan.plan_type || '10K'} · Wk {activePlan.current_week_num} of {activePlan.duration_weeks}
                 </div>
-                {(activePlan as any).race_date && (
+                {(activePlan as TrainingPlan & { race_date?: string | null }).race_date && (
                   <div className="rc-mono text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.6)', letterSpacing: '0.08em' }}>
-                    RACE — {new Date((activePlan as any).race_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()}
+                    RACE — {new Date((activePlan as TrainingPlan & { race_date?: string | null }).race_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()}
                   </div>
                 )}
               </div>

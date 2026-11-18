@@ -3,6 +3,8 @@ import { supabase } from '@/lib/db/supabase';
 import { calculateCurrentWeek, formatWeekDateRange } from '@/lib/utils/week-calculator';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { planSaveSchema, validateInput } from '@/lib/validation/schemas';
+import { planStartDate } from '@/lib/utils/plan-start';
+import { userDateStr } from '@/lib/utils/user-time';
 
 export async function GET() {
   const auth = await getAuthenticatedUser();
@@ -27,7 +29,7 @@ export async function GET() {
     // If we have a plan, calculate the current week dynamically
     if (data) {
       // Use start_date if available, otherwise fallback to created_at
-      const startDate = data.start_date || (data.created_at ? data.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
+      const startDate = planStartDate(data);
       const weekInfo = calculateCurrentWeek(startDate, data.duration_weeks);
 
       // Return plan with calculated current week
@@ -91,7 +93,7 @@ export async function POST(request: NextRequest) {
         plan_type: validation.data.plan_type,
         plan_json: validation.data.plan_json,
         duration_weeks: validation.data.duration_weeks,
-        start_date: validation.data.start_date || new Date().toISOString().split('T')[0],
+        start_date: validation.data.start_date || userDateStr(),
         current_week_num: 1,
         status: 'active',
       })
