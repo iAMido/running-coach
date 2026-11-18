@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
+import { getRecentRuns } from '@/lib/coach/dashboard-data';
 import { runSchema, validateInput } from '@/lib/validation/schemas';
 
 export async function GET(request: NextRequest) {
@@ -15,20 +16,7 @@ export async function GET(request: NextRequest) {
   const limit = Math.max(1, Math.min(parseInt(searchParams.get('limit') || '100', 10) || 100, 200));
 
   try {
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-
-    const { data, error } = await supabase
-      .from('runs')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('date', startDate.toISOString())
-      .order('date', { ascending: false })
-      .limit(limit);
-
-    if (error) throw error;
-
-    return NextResponse.json({ runs: data || [] });
+    return NextResponse.json({ runs: await getRecentRuns(userId, days, limit) });
   } catch (error) {
     console.error('Error fetching runs:', error);
     return NextResponse.json({ error: 'Failed to fetch runs' }, { status: 500 });
