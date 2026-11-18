@@ -3,8 +3,6 @@ import { supabase } from '@/lib/db/supabase';
 import { calculateCurrentWeek, getSundayOfWeek } from '@/lib/utils/week-calculator';
 import { nowInUserTz, userDateStrDaysAgo } from '@/lib/utils/user-time';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
-import { getRecentFeedback, getWeeklySummary, getCurrentWeekStart } from '@/lib/db/feedback';
-import { calculateFatigueScore } from '@/lib/rag/user-formatter';
 import { sumVert, vertPerKm } from '@/lib/utils/elevation';
 import { readinessForUser } from '@/lib/coach/readiness-service';
 import { getRecentGarminWellness } from '@/lib/db/garmin-wellness';
@@ -26,8 +24,9 @@ export async function GET() {
     // come from a Postgres aggregate RPC (runcoach.run_totals): the route
     // previously pulled EVERY runs row to sum distance in JS, a payload
     // that grew forever with training history.
-    const yesterday36h = new Date(Date.now() - 36 * 60 * 60 * 1000);
-    const [totalsRes, weekRes, planRes, feedback, weeklySummary, lastRunRes] = await Promise.all([
+    // The dashboard tiles (fitness, load ramp, Garmin) depend on nothing here,
+    // so they ride in the same round trip instead of three more after it.
+    const [totalsRes, weekRes, planRes, fitness, loadRamp, garminLatest] = await Promise.all([
       supabase.rpc('run_totals', { p_user_id: userId }),
       supabase
         .from('runs')
@@ -42,15 +41,15 @@ export async function GET() {
         .order('created_at', { ascending: false })
         .limit(1)
         .single(),
-      getRecentFeedback(userId, 7),
-      getWeeklySummary(userId, getCurrentWeekStart()),
-      supabase
-        .from('runs')
-        .select('pct_z4, pct_z5, pct_z6, run_type, distance_km')
-        .eq('user_id', userId)
-        .gte('date', yesterday36h.toISOString())
-        .order('date', { ascending: false })
-        .limit(1),
+      // (Recent feedback, the weekly summary and the last run used to be
+      // fetched here and never read; readinessForUser loads its own.)
+      fitnessTrend(userId),
+      loadRampTrend(userId),
+      // Garmin-only signals for the Recovery tile. Best-effort; null when not connected.
+      getRecentGarminWellness(userId, 2)
+        // Newest completed night: before waking, today's peak is still the overnight low.
+        .then((rows) => rows.find((r) => r.sleep_secs != null) ?? null)
+        .catch(() => null),
     ]);
 
     const totalsRow = (totalsRes.data as { total_runs: number; total_km: number }[] | null)?.[0];
@@ -106,13 +105,6 @@ export async function GET() {
     // "--" on that tile rather than failing the whole dashboard.
 
     const plannedWeek = plannedVolumeForCurrentWeek(planWithWeekInfo);
-    const fitness = await fitnessTrend(userId);
-    const loadRamp = await loadRampTrend(userId);
-    // Garmin-only signals for the Recovery tile. Best-effort; null when not connected.
-    const garminLatest = await getRecentGarminWellness(userId, 2)
-      // Newest completed night: before waking, today's peak is still the overnight low.
-      .then((rows) => rows.find((r) => r.sleep_secs != null) ?? null)
-      .catch(() => null);
 
     return NextResponse.json({
       totalRuns: totalRuns || 0,

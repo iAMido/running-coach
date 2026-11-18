@@ -91,6 +91,13 @@ export interface OpenRouterConfig {
    * failure, so it falls back to NanoGPT when there is time left.
    */
   timeoutMs?: number;
+  /**
+   * Also cache the conversation: a second Anthropic breakpoint on the message
+   * just before the final user turn, so the history up to the coach's last
+   * reply is read from cache on the next turn. Only useful when nothing
+   * per-turn sits before the history (see lib/coach/chat-turn.ts).
+   */
+  cacheConversation?: boolean;
 }
 
 /**
@@ -222,6 +229,14 @@ function applySystemPrefix(
   prefix: string,
   isAnthropic: boolean,
 ): unknown[] {
+  // No dynamic system message (the chat now puts its per-turn context in the
+  // user turn): the prefix becomes the whole system message.
+  if (!messages.some(m => m.role === 'system' && typeof m.content === 'string')) {
+    const system = isAnthropic
+      ? { role: 'system', content: [{ type: 'text', text: prefix, cache_control: { type: 'ephemeral' } }] }
+      : { role: 'system', content: prefix };
+    return [system, ...messages];
+  }
   let merged = false;
   return messages.map(m => {
     if (!merged && m.role === 'system' && typeof m.content === 'string') {
@@ -242,6 +257,36 @@ function applySystemPrefix(
 }
 
 /**
+ * The messages as sent: the cacheable system prefix applied and, with
+ * `cacheConversation`, a second breakpoint on the last message before the
+ * final user turn, so the conversation so far is read from cache. Anthropic
+ * only; other models get the messages with just the prefix inlined.
+ */
+export function payloadFor(
+  messages: ChatMessage[],
+  model: string,
+  cacheableSystemPrefix?: string,
+  cacheConversation?: boolean,
+): unknown[] {
+  const isAnthropic = model.startsWith('anthropic/');
+  const withPrefix: unknown[] = cacheableSystemPrefix
+    ? applySystemPrefix(messages, cacheableSystemPrefix, isAnthropic)
+    : [...messages];
+  if (!cacheConversation || !isAnthropic) return withPrefix;
+  const roles = withPrefix.map((m) => (m as { role: string }).role);
+  const target = roles.lastIndexOf('user') - 1;
+  // Nothing before the final turn but the system message: breakpoint 1 covers it.
+  if (target < 0 || roles[target] === 'system') return withPrefix;
+  const m = withPrefix[target] as { role: string; content: unknown };
+  if (typeof m.content !== 'string') return withPrefix;
+  withPrefix[target] = {
+    role: m.role,
+    content: [{ type: 'text', text: m.content, cache_control: { type: 'ephemeral' } }],
+  };
+  return withPrefix;
+}
+
+/**
  * Call OpenRouter API with messages
  */
 export async function callOpenRouter(
@@ -254,9 +299,7 @@ export async function callOpenRouter(
     return { content: '', error: 'OpenRouter API key not configured.' };
   }
 
-  const payloadMessages = cacheableSystemPrefix
-    ? applySystemPrefix(messages, cacheableSystemPrefix, model.startsWith('anthropic/'))
-    : messages;
+  const payloadMessages = payloadFor(messages, model, cacheableSystemPrefix, config.cacheConversation);
   const base = {
     model,
     ...tokenFields(model, maxTokens, reasoningTokens),
@@ -342,9 +385,7 @@ export async function* streamOpenRouter(
     throw new Error('OpenRouter API key not configured.');
   }
 
-  const payloadMessages = cacheableSystemPrefix
-    ? applySystemPrefix(messages, cacheableSystemPrefix, model.startsWith('anthropic/'))
-    : messages;
+  const payloadMessages = payloadFor(messages, model, cacheableSystemPrefix, config.cacheConversation);
 
   const base = { model, ...tokenFields(model, maxTokens, reasoningTokens), messages: payloadMessages, stream: true };
   const timeoutMs = config.timeoutMs ?? defaultTimeoutMs(model, maxTokens, reasoningTokens);
