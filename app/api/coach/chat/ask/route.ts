@@ -198,14 +198,15 @@ export async function POST(request: NextRequest) {
         .catch(() => undefined),
     ]);
 
-    let context = await buildContext(userId, retrievalQuery, queryType, { plan: activePlan });
     // Safety net for longer conversational replies ("Can you take me from
-    // here?"): if the books matched nothing, search once more with the coach's
-    // previous message included. Costs a second search only when the first
-    // came back empty.
-    if (context.bookContext.sources.length === 0 && !isShortFollowUp && previousCoach) {
-      context = await buildContext(userId, `${previousCoach.slice(-600)}\n\nAthlete: ${query}`, queryType, { plan: activePlan });
-    }
+    // here?"): if the books matched nothing, search them once more with the
+    // coach's previous message included. Only the book search is repeated.
+    const context = await buildContext(userId, retrievalQuery, queryType, {
+      plan: activePlan,
+      bookFallbackQuery: !isShortFollowUp && previousCoach
+        ? `${previousCoach.slice(-600)}\n\nAthlete: ${query}`
+        : undefined,
+    });
 
     let currentWeek = 1;
     if (isPlanModification && activePlan) {
@@ -273,11 +274,12 @@ export async function POST(request: NextRequest) {
       maxTokens: isPlanModification ? 4000 : 1500,
       cacheableSystemPrefix: COACH_STATIC_BLOCK,
       cacheConversation: true,
+      spendUserId: userId,
     });
     const callLatencyMs = Date.now() - callStart;
 
     if (response.error) {
-      return NextResponse.json({ error: response.error }, { status: 500 });
+      return NextResponse.json({ error: response.error }, { status: response.budgetExceeded ? 429 : 500 });
     }
 
     // Get context stats for debugging/monitoring

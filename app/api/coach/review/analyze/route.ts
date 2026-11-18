@@ -167,12 +167,12 @@ ${kpiBlock}` : '');
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      { apiKey, model: MODEL_FOR.weekly_review, maxTokens: WEEKLY_REVIEW_MAX_TOKENS, reasoningTokens: REASONING_FOR.weekly_review, cacheableSystemPrefix: COACH_STATIC_BLOCK }
+      { apiKey, model: MODEL_FOR.weekly_review, maxTokens: WEEKLY_REVIEW_MAX_TOKENS, reasoningTokens: REASONING_FOR.weekly_review, cacheableSystemPrefix: COACH_STATIC_BLOCK, spendUserId: userId }
     );
     const callLatencyMs = Date.now() - callStart;
 
     if (response.error) {
-      return NextResponse.json({ error: response.error }, { status: 500 });
+      return NextResponse.json({ error: response.error }, { status: response.budgetExceeded ? 429 : 500 });
     }
 
     // Save the analysis (Sun-Sat week boundary)

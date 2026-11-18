@@ -67,11 +67,12 @@ export async function POST(request: NextRequest) {
     const response = await callOpenRouter(apiMessages, {
       apiKey,
       model: MODEL_FOR.grocky,
-      maxTokens: reviewPlan ? 2500 : 1500
+      maxTokens: reviewPlan ? 2500 : 1500,
+      spendUserId: userId,
     });
 
     if (response.error) {
-      return NextResponse.json({ error: response.error }, { status: 500 });
+      return NextResponse.json({ error: response.error }, { status: response.budgetExceeded ? 429 : 500 });
     }
 
     // Get context stats for debugging/monitoring

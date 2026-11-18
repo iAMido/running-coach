@@ -29,6 +29,13 @@ export interface BuildContextPreload {
   /** Athlete profile already fetched by the route. Same null/undefined
    *  semantics as plan. */
   profile?: AthleteProfile | null;
+  /**
+   * Searched in the books only when `query` finds nothing there. The other
+   * layers are built once, from `query`. (The chat used to call buildContext
+   * a second time for this, redoing the athlete data, training state,
+   * previous-coach search and the Haiku classifier just to retry the books.)
+   */
+  bookFallbackQuery?: string;
 }
 
 export async function buildContext(
@@ -59,7 +66,7 @@ export async function buildContext(
   const [plan, classification] = await Promise.all([
     preload.plan !== undefined ? Promise.resolve(preload.plan) : getActivePlan(userId),
     needsLlmClassification
-      ? classifyQuery(query)
+      ? classifyQuery(query, userId)
       : Promise.resolve({ queryType, workoutType: undefined, tags: [], source: 'fallback' as const }),
   ]);
 
@@ -85,6 +92,8 @@ export async function buildContext(
     ...(queryType === 'plan_review' ? ['review'] : []),
   ])).filter(Boolean);
 
+  const bookFilters = { phase: currentPhase, workoutType, userResourceTags };
+
   // Build all three contexts in parallel; thread the already-fetched plan
   // and profile into the user layer so it doesn't re-query them.
   const [userContext, coachContext, bookContext, trainingState] = await Promise.all([
@@ -95,11 +104,10 @@ export async function buildContext(
       { phase: currentPhase, workoutType, category },
       coachTokens
     ),
-    retrieveBookContext(
-      query,
-      { phase: currentPhase, workoutType, userResourceTags },
-      bookTokens,
-      userId,
+    retrieveBookContext(query, bookFilters, bookTokens, userId).then((books) =>
+      books.sources.length === 0 && preload.bookFallbackQuery
+        ? retrieveBookContext(preload.bookFallbackQuery, bookFilters, bookTokens, userId)
+        : books,
     ),
     // The shared signal object. Same assembly the weekly proposal and the
     // macro re-evaluation read, so the coach's answer and the plan's

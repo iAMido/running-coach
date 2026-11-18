@@ -398,6 +398,7 @@ async function writeLaps(runId: string, run: NormalizedRun): Promise<number> {
 // ------------------------------------------------------------- coach note
 
 async function attachCoachNote(
+  userId: string,
   runId: string,
   run: NormalizedRun,
   runType: string,
@@ -409,6 +410,7 @@ async function attachCoachNote(
     const plan = await resolve(ctx.activePlan);
     const { workout, phase } = plannedWorkoutForRunDate(plan, run.date);
     const note = await generateRunReaction({
+      spendUserId: userId,
       distanceKm: run.distanceKm,
       durationMin: run.durationMin,
       avgPaceStr: formatPace(avgPaceMinKm),
@@ -526,7 +528,7 @@ async function insertNew(userId: string, run: NormalizedRun, ctx: UpsertContext)
   await applyDecoupling(runId, runType, vertPerKm(run.elevationGainM, run.distanceKm));
 
   if (ctx.generateCoachNote !== false) {
-    await attachCoachNote(runId, run, runType, zones, avgPaceMinKm, ctx);
+    await attachCoachNote(userId, runId, run, runType, zones, avgPaceMinKm, ctx);
   }
 
   return { runId, created: true, lapsWritten, enriched: false, matchedBy: null, dateCorrected: false };

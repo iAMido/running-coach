@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
       ],
       // Sized to the plan: a fixed 16,000 cut a 12-week plan with strength off
       // at week 10. See planOutputTokenBudget.
-      { apiKey, model: MODEL_FOR.plan_generation, maxTokens: planOutputTokenBudget(durationWeeks), reasoningTokens: REASONING_FOR.plan_generation, cacheableSystemPrefix: COACH_STATIC_BLOCK }
+      { apiKey, model: MODEL_FOR.plan_generation, maxTokens: planOutputTokenBudget(durationWeeks), reasoningTokens: REASONING_FOR.plan_generation, cacheableSystemPrefix: COACH_STATIC_BLOCK, spendUserId: userId }
     );
     const callLatencyMs = Date.now() - callStart;
 

@@ -111,6 +111,8 @@ export interface RunReactionInput {
   planPhase?: string | null;
   /** Tomorrow, from `tomorrowFor`. Absent = unknown. */
   tomorrow?: { covered: boolean; workout: Workout | null; dayName: string } | null;
+  /** Whose AI budget the note is charged to (lib/ai/spend.ts). */
+  spendUserId?: string;
 }
 
 export interface RunFacts {
@@ -266,7 +268,7 @@ export async function generateRunReaction(input: RunReactionInput): Promise<stri
           { role: 'system', content: REACTION_SYSTEM_PROMPT },
           { role: 'user', content: userPrompt + feedback },
         ],
-        { apiKey, model: MODEL_FOR.chat_quick, maxTokens: 120 },
+        { apiKey, model: MODEL_FOR.chat_quick, maxTokens: 120, spendUserId: input.spendUserId },
       );
       if (resp.error || !resp.content) return null;
       const text = resp.content.trim();

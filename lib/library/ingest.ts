@@ -190,7 +190,7 @@ async function runStage(row: IngestRow): Promise<Partial<IngestRow>> {
       if (!apiKey) throw new Error('OpenRouter API key not configured');
       const r = await callOpenRouter(
         [{ role: 'system', content: METADATA_PROMPT }, { role: 'user', content: metadataSample(text) }],
-        { apiKey, model: MODEL_FOR.chat_default, maxTokens: 1500 },
+        { apiKey, model: MODEL_FOR.chat_default, maxTokens: 1500, spendUserId: row.user_id },
       );
       if (r.error) throw new Error(`the AI could not read the book (${r.error})`);
       const meta = parseBookMeta(extractJson(r.content), row.filename);

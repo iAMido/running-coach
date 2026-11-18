@@ -114,6 +114,7 @@ export async function POST(request: NextRequest) {
         model: MODEL_FOR.plan_adjust,
         maxTokens: 8000,
         cacheableSystemPrefix: COACH_STATIC_BLOCK,
+        spendUserId: userId,
       }
     );
 

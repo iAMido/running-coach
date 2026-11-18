@@ -2,6 +2,7 @@
  * OpenRouter API client for AI coach integration
  */
 
+import { checkSpend, overCapMessage, recordSpend } from './spend';
 import type { ChatMessage } from '@/lib/db/types';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -98,6 +99,12 @@ export interface OpenRouterConfig {
    * per-turn sits before the history (see lib/coach/chat-turn.ts).
    */
   cacheConversation?: boolean;
+  /**
+   * The athlete this call is made for. When set, the call is refused once the
+   * day's AI spend reaches the cap, and what it cost is added to the ledger
+   * (lib/ai/spend.ts). Every athlete-triggered call should pass it.
+   */
+  spendUserId?: string;
 }
 
 /**
@@ -215,6 +222,8 @@ export interface OpenRouterResponse {
   costUsd?: number | null;
   /** Which provider answered — 'nanogpt' means OpenRouter failed and the fallback served it. */
   provider?: 'openrouter' | 'nanogpt';
+  /** The call was not made: the athlete's daily AI budget is used up. */
+  budgetExceeded?: boolean;
 }
 
 /**
@@ -290,6 +299,20 @@ export function payloadFor(
  * Call OpenRouter API with messages
  */
 export async function callOpenRouter(
+  messages: ChatMessage[],
+  config: OpenRouterConfig
+): Promise<OpenRouterResponse> {
+  const userId = config.spendUserId;
+  if (userId && config.apiKey) {
+    const check = await checkSpend(userId);
+    if (!check.allowed) return { content: '', error: overCapMessage(check), budgetExceeded: true };
+  }
+  const result = await callProviders(messages, config);
+  if (userId && !result.error) await recordSpend(userId, result.costUsd);
+  return result;
+}
+
+async function callProviders(
   messages: ChatMessage[],
   config: OpenRouterConfig
 ): Promise<OpenRouterResponse> {
@@ -384,10 +407,14 @@ export async function* streamOpenRouter(
   if (!apiKey) {
     throw new Error('OpenRouter API key not configured.');
   }
+  if (config.spendUserId) {
+    const check = await checkSpend(config.spendUserId);
+    if (!check.allowed) throw new Error(overCapMessage(check));
+  }
 
   const payloadMessages = payloadFor(messages, model, cacheableSystemPrefix, config.cacheConversation);
 
-  const base = { model, ...tokenFields(model, maxTokens, reasoningTokens), messages: payloadMessages, stream: true };
+  const base = { model, ...tokenFields(model, maxTokens, reasoningTokens), messages: payloadMessages, stream: true, usage: { include: true } };
   const timeoutMs = config.timeoutMs ?? defaultTimeoutMs(model, maxTokens, reasoningTokens);
   const started = Date.now();
   type Opened = Response | { status: number | null; error: string };
@@ -426,38 +453,44 @@ export async function* streamOpenRouter(
 
   const decoder = new TextDecoder();
   let buffer = '';
+  // The final chunk carries usage (usage.include); recorded however the stream ends.
+  let costUsd: number | null = null;
+  try {
+    while (true) {
+      let chunk: ReadableStreamReadResult<Uint8Array>;
+      try {
+        chunk = await reader.read();
+      } catch (e) {
+        // Thrown, not swallowed: a stream cut short must not look like a finished answer.
+        if (isTimeout(e)) throw new Error(`Stream timed out after ${Math.round(timeoutMs / 1000)} s`);
+        throw e;
+      }
+      const { done, value } = chunk;
+      if (done) break;
 
-  while (true) {
-    let chunk: ReadableStreamReadResult<Uint8Array>;
-    try {
-      chunk = await reader.read();
-    } catch (e) {
-      // Thrown, not swallowed: a stream cut short must not look like a finished answer.
-      if (isTimeout(e)) throw new Error(`Stream timed out after ${Math.round(timeoutMs / 1000)} s`);
-      throw e;
-    }
-    const { done, value } = chunk;
-    if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6);
+          if (data === '[DONE]') return;
 
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        const data = line.slice(6);
-        if (data === '[DONE]') return;
-
-        try {
-          const parsed = JSON.parse(data);
-          const content = parsed.choices?.[0]?.delta?.content;
-          if (content) {
-            yield content;
+          try {
+            const parsed = JSON.parse(data);
+            if (typeof parsed.usage?.cost === 'number') costUsd = parsed.usage.cost;
+            const content = parsed.choices?.[0]?.delta?.content;
+            if (content) {
+              yield content;
+            }
+          } catch {
+            // Skip invalid JSON
           }
-        } catch {
-          // Skip invalid JSON
         }
       }
     }
+  } finally {
+    if (config.spendUserId) await recordSpend(config.spendUserId, costUsd);
   }
 }
