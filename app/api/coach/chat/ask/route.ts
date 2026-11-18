@@ -25,6 +25,7 @@ import { mergeAdjustedWeek, weekChanged } from '@/lib/coach/plan-merge';
 import { autoSyncPlanToWatch } from '@/lib/intervals/auto-sync';
 import type { PlanWeek } from '@/lib/db/types';
 import { turnTimestamps } from '@/lib/coach/chat-order';
+import { withTurnContext } from '@/lib/coach/chat-turn';
 
 /** The model answered in edit mode but no session changed: write nothing, show no banner. */
 class NoPlanChange extends Error {}
@@ -256,11 +257,10 @@ export async function POST(request: NextRequest) {
       systemPrompt = systemPrompt + preflight.augmentedSystemSuffix;
     }
 
-    // Build messages array
-    const apiMessages: ChatMessage[] = [
-      { role: 'system', content: systemPrompt },
-      ...messages,
-    ];
+    // This turn's context rides in the athlete's latest message, not in the
+    // system prompt, so the persona and the conversation so far are a stable
+    // prefix the prompt cache can serve (see lib/coach/chat-turn.ts).
+    const apiMessages: ChatMessage[] = withTurnContext(messages, systemPrompt);
 
     // Pick the model from the registry: plan modifications need structured
     // JSON output + accuracy, so they go through Sonnet; everything else
@@ -272,6 +272,7 @@ export async function POST(request: NextRequest) {
       model: chatModel,
       maxTokens: isPlanModification ? 4000 : 1500,
       cacheableSystemPrefix: COACH_STATIC_BLOCK,
+      cacheConversation: true,
     });
     const callLatencyMs = Date.now() - callStart;
 
