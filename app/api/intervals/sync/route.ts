@@ -13,6 +13,10 @@ import {
 import { IntervalsApiError } from '@/lib/intervals/client';
 import { GARMIN_ON_OPEN_DAYS_BACK, syncGarminWellnessForUser } from '@/lib/garmin/sync';
 import { syncGarminActivitiesForUser } from '@/lib/garmin/activity-sync';
+import { acquireSyncLock, releaseSyncLock } from '@/lib/intervals/sync-lock';
+
+/** How long "Sync now" waits for a sync already running before giving up. */
+const MANUAL_LOCK_WAIT_MS = 60_000;
 
 /**
  * Manual "Sync Now", and — when `ifStaleMinutes` is passed — the automatic
@@ -63,40 +67,54 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'intervals.icu not connected' }, { status: 400 });
     }
 
-    // Garmin wellness runs alongside, under the same claim, so opening the app
-    // in the morning also brings in last night's body battery and sleep. It
-    // never throws into this route: a Garmin failure is reported, not fatal.
-    const garminRun = syncGarminWellnessForUser(userId, {
-      daysBack: isAutomatic ? GARMIN_ON_OPEN_DAYS_BACK : daysBack,
-    }).catch((err) => ({ error: err instanceof Error ? err.message : String(err) }));
-
-    let result;
-    try {
-      result = await syncIntervalsForUser(userId, connection.client, { daysBack });
-    } catch (err) {
-      await garminRun;
-      // A failed sync must not leave a timestamp claiming it succeeded, which
-      // would also suppress the next automatic attempt for the whole window.
+    // One import at a time per athlete (see sync-lock.ts): "Sync now" tapped
+    // while sync-on-open runs could otherwise double a new run. The button
+    // waits for the running sync, then runs its own (finding the runs already
+    // there); the automatic path just steps aside.
+    const lock = await acquireSyncLock(userId, { waitMs: isAutomatic ? 0 : MANUAL_LOCK_WAIT_MS });
+    if (!lock.acquired) {
       if (claim) await releaseAutoSyncClaim(userId, claim);
-      throw err;
+      return NextResponse.json({ success: true, skipped: true, reason: 'busy' });
     }
 
-    // After intervals.icu, so a run it just delivered is matched, not imported
-    // twice. Picks up any run Garmin has that intervals.icu does not, and puts
-    // the watch's climb on recent runs. Never throws.
-    const garminActivities = await syncGarminActivitiesForUser(userId, { daysBack: isAutomatic ? 3 : daysBack });
+    try {
+      // Garmin wellness runs alongside, under the same claim, so opening the app
+      // in the morning also brings in last night's body battery and sleep. It
+      // never throws into this route: a Garmin failure is reported, not fatal.
+      const garminRun = syncGarminWellnessForUser(userId, {
+        daysBack: isAutomatic ? GARMIN_ON_OPEN_DAYS_BACK : daysBack,
+      }).catch((err) => ({ error: err instanceof Error ? err.message : String(err) }));
 
-    return NextResponse.json({
-      success: true,
-      skipped: false,
-      newRunsCount: result.newRunsCount,
-      lapsBackfilledCount: result.lapsBackfilledCount,
-      wellnessDaysUpserted: result.wellnessDaysUpserted,
-      dateCorrected: result.dateCorrected,
-      errors: result.errors,
-      garmin: await garminRun,
-      garminActivities,
-    });
+      let result;
+      try {
+        result = await syncIntervalsForUser(userId, connection.client, { daysBack });
+      } catch (err) {
+        await garminRun;
+        // A failed sync must not leave a timestamp claiming it succeeded, which
+        // would also suppress the next automatic attempt for the whole window.
+        if (claim) await releaseAutoSyncClaim(userId, claim);
+        throw err;
+      }
+
+      // After intervals.icu, so a run it just delivered is matched, not imported
+      // twice. Picks up any run Garmin has that intervals.icu does not, and puts
+      // the watch's climb on recent runs. Never throws.
+      const garminActivities = await syncGarminActivitiesForUser(userId, { daysBack: isAutomatic ? 3 : daysBack });
+
+      return NextResponse.json({
+        success: true,
+        skipped: false,
+        newRunsCount: result.newRunsCount,
+        lapsBackfilledCount: result.lapsBackfilledCount,
+        wellnessDaysUpserted: result.wellnessDaysUpserted,
+        dateCorrected: result.dateCorrected,
+        errors: result.errors,
+        garmin: await garminRun,
+        garminActivities,
+      });
+    } finally {
+      await releaseSyncLock(userId, lock);
+    }
   } catch (error) {
     // The client's messages already name the real cause (a 403 is the
     // User-Agent, not authorization), so surface them rather than flattening

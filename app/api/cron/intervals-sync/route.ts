@@ -2,6 +2,10 @@ export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { isCronAuthorized } from '@/lib/auth/cron';
+import { withSyncLock } from '@/lib/intervals/sync-lock';
+
+/** How long the cron waits for an athlete-started sync before skipping that step. */
+const CRON_LOCK_WAIT_MS = 60_000;
 import { supabase } from '@/lib/db/supabase';
 import {
   DEFAULT_DAYS_BACK,
@@ -56,7 +60,18 @@ export async function GET(request: NextRequest) {
           results.push({ userId: row.user_id, error: 'no credentials' });
           continue;
         }
-        results.push(await syncIntervalsForUser(row.user_id, connection.client, { daysBack }));
+        // Under the per-athlete sync lock, waiting briefly for a sync the
+        // athlete started: running alongside it could double a new run.
+        const synced = await withSyncLock(
+          row.user_id,
+          () => syncIntervalsForUser(row.user_id, connection.client, { daysBack }),
+          { waitMs: CRON_LOCK_WAIT_MS },
+        );
+        if (!synced) {
+          results.push({ userId: row.user_id, error: 'another sync was running; skipped' });
+          continue;
+        }
+        results.push(synced);
         // Keep this week and next on the watch: next week arrives as this one
         // ends, and a plan changed anywhere is re-pushed. Never fails the sync.
         const watch = await autoSyncPlanToWatch(row.user_id, 'cron');
@@ -75,7 +90,13 @@ export async function GET(request: NextRequest) {
       try {
         const wellness = await syncGarminWellnessForUser(row.user_id);
         // Runs Garmin has that intervals.icu has not delivered, plus the watch's climb.
-        garmin.push({ ...wellness, activities: await syncGarminActivitiesForUser(row.user_id, { daysBack }) });
+        // Wellness imports no runs; the activity step does, so it takes the lock.
+        const activities = await withSyncLock(
+          row.user_id,
+          () => syncGarminActivitiesForUser(row.user_id, { daysBack }),
+          { waitMs: CRON_LOCK_WAIT_MS },
+        );
+        garmin.push({ ...wellness, ...(activities ? { activities } : { error: 'another sync was running; activities skipped' }) });
       } catch (err) {
         garmin.push({ userId: row.user_id, error: err instanceof Error ? err.message : String(err) });
       }

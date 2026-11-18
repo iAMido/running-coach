@@ -68,6 +68,12 @@ export default function CoachDashboard() {
         setSyncMessage(data?.error || 'Sync failed');
         return;
       }
+      if (data.skipped && data.reason === 'busy') {
+        // Another sync held the lock for a full minute; show what it brought in.
+        setSyncMessage('Another sync is running. Try again in a minute.');
+        await fetchData();
+        return;
+      }
       const added = (data.newRunsCount || 0) + (data.garminActivities?.imported || 0);
       setSyncMessage(added ? `${added} new run${added === 1 ? '' : 's'}` : 'Up to date');
       await fetchData();

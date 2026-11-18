@@ -126,7 +126,12 @@ export default function IntervalsSyncPage() {
 
       const data = await response.json();
 
-      if (response.ok) {
+      if (response.ok && data.skipped && data.reason === 'busy') {
+        setSyncResult({
+          success: false, count: 0, lapsBackfilled: 0, wellnessDays: 0, dateCorrected: 0,
+          message: 'Another sync is running. Try again in a minute.',
+        });
+      } else if (response.ok) {
         setSyncResult({
           success: true,
           count: data.newRunsCount || 0,
