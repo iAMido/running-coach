@@ -9,7 +9,8 @@
 create table if not exists runcoach.ai_spend_daily (
   user_id    text        not null,
   day        date        not null,
-  usd        numeric(10, 4) not null default 0,
+  -- Unrounded: numeric(10,4) turned a $0.000036 Haiku call into $0.0000.
+  usd        numeric     not null default 0,
   calls      integer     not null default 0,
   updated_at timestamptz not null default now(),
   primary key (user_id, day)
