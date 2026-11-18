@@ -241,7 +241,7 @@ The strength extractor handles four encodings in precedence order (`strength_exe
 
 **Loader scripts must use the `runcoach` schema.** `load-book-pdf.ts`, `load-books.ts`, `load-norwegian-method-txt.ts`, `import-trainingpeaks.ts`, `load-book-pdf.cjs` all created clients without `db: { schema: 'runcoach' }` and had been broken since the May consolidation ("Could not find the table 'public.coaching_books'"). pdf-parse is v2: `new PDFParse({ data }).getText()`, not a function call.
 
-**Authentication:** NextAuth.js with Google OAuth. API routes use `getAuthenticatedUser()` from `lib/auth/get-user.ts`.
+**Authentication:** NextAuth.js with Google OAuth, restricted to `ALLOWED_EMAILS` (`lib/auth/allowlist.ts`, checked at sign-in AND in `getAuthenticatedUser()`, fail closed when unset — before 2026-11-18 any Google account could sign in). API routes use `getAuthenticatedUser()` from `lib/auth/get-user.ts`. Cron routes use `isCronAuthorized()` (`lib/auth/cron.ts`) — never an inline `!== `Bearer ${process.env.CRON_SECRET}``, which accepted `Bearer undefined` when the secret was missing.
 
 **AI Integration:** OpenRouter, with every task's model named in `lib/ai/model-registry.ts` (`MODEL_FOR`). 3-layer RAG provides context: athlete data + coach patterns + book methodology.
 
@@ -548,6 +548,7 @@ NEXTAUTH_SECRET=<generated>
 NEXTAUTH_URL=https://your-domain.com
 GOOGLE_CLIENT_ID=<from-google-console>
 GOOGLE_CLIENT_SECRET=<from-google-console>
+ALLOWED_EMAILS=<comma-separated Google emails>   # sign-in allowlist; unset = nobody can sign in (fail closed)
 
 # RunCoach Supabase
 NEXT_PUBLIC_SUPABASE_URL=https://tlnqkxwlrewbtufnqiwi.supabase.co   # same project as CalTrack; RunCoach client uses `runcoach` schema

@@ -1,7 +1,7 @@
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { timingSafeEqual } from 'crypto';
+import { isCronAuthorized } from '@/lib/auth/cron';
 import { supabase } from '@/lib/db/supabase';
 import {
   DEFAULT_DAYS_BACK,
@@ -27,16 +27,7 @@ import type { GarminToken, IntervalsToken } from '@/lib/db/types';
 const MAX_CRON_DAYS_BACK = 14;
 
 function authorized(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-
-  const provided = request.headers.get('authorization') ?? '';
-  const expected = `Bearer ${secret}`;
-
-  const a = Buffer.from(provided, 'utf8');
-  const b = Buffer.from(expected, 'utf8');
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
+  return isCronAuthorized(request.headers.get('authorization'));
 }
 
 export async function GET(request: NextRequest) {

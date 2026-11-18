@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { generateOAuthState } from '@/lib/utils/oauth-state';
 
 export async function GET() {
-  const session = await getServerSession();
+  const auth = await getAuthenticatedUser();
 
   // Require authentication - no dev bypass for OAuth initiation
-  if (!session?.user?.email) {
+  if (!auth.authenticated || !auth.userId) {
     return NextResponse.json({ error: 'Unauthorized - please sign in first' }, { status: 401 });
   }
 
-  const userEmail = session.user.email;
+  const userEmail = auth.userId;
 
   const clientId = process.env.STRAVA_CLIENT_ID;
   const redirectUri = process.env.NEXT_PUBLIC_STRAVA_REDIRECT_URI;

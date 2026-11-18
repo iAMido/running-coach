@@ -21,6 +21,7 @@ export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
+import { isCronAuthorized } from '@/lib/auth/cron';
 import { callOpenRouter } from '@/lib/ai/openrouter';
 import { COACH_STATIC_BLOCK } from '@/lib/ai/coach-prompts';
 import { MODEL_FOR, REASONING_FOR } from '@/lib/ai/model-registry';
@@ -45,7 +46,7 @@ function lastCompletedWeekStart(): string {
 }
 
 export async function GET(request: NextRequest) {
-  if (request.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isCronAuthorized(request.headers.get('authorization'))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
