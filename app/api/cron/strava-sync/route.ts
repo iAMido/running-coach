@@ -1,6 +1,7 @@
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { isCronAuthorized } from '@/lib/auth/cron';
 import { supabase } from '@/lib/db/supabase';
 import { getAthleteProfile } from '@/lib/db/profile';
 import { getActivePlan } from '@/lib/db/plans';
@@ -9,8 +10,7 @@ import { upsertRun, once } from '@/lib/ingest/upsert-run';
 import { filterRuns, toNormalizedRun } from '@/lib/ingest/strava';
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isCronAuthorized(request.headers.get('authorization'))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

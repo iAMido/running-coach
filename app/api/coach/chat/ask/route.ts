@@ -24,6 +24,7 @@ import { garminFeedProblem } from '@/lib/garmin/feed';
 import { mergeAdjustedWeek, weekChanged } from '@/lib/coach/plan-merge';
 import { autoSyncPlanToWatch } from '@/lib/intervals/auto-sync';
 import type { PlanWeek } from '@/lib/db/types';
+import { turnTimestamps } from '@/lib/coach/chat-order';
 
 /** The model answered in edit mode but no session changed: write nothing, show no banner. */
 class NoPlanChange extends Error {}
@@ -390,17 +391,22 @@ export async function POST(request: NextRequest) {
         });
 
         if (chatSessionId && lastUserMessage) {
+          // Explicit timestamps: one insert gives both rows the same now(),
+          // and a reloaded chat then showed replies above their questions.
+          const { user: userAt, assistant: assistantAt } = turnTimestamps();
           await supabase.from('coach_chat_messages').insert([
             {
               session_id: chatSessionId,
               user_id: userId,
               role: 'user',
               content: lastUserMessage.content,
+              created_at: userAt,
             },
             {
               session_id: chatSessionId,
               user_id: userId,
               role: 'assistant',
+              created_at: assistantAt,
               content: displayContent,
               supervisor: {
                 callId,

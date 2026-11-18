@@ -4,6 +4,7 @@
  */
 
 import { getServerSession } from 'next-auth';
+import { isEmailAllowed } from './allowlist';
 
 export interface AuthResult {
   authenticated: boolean;
@@ -24,6 +25,17 @@ export async function getAuthenticatedUser(): Promise<AuthResult> {
         authenticated: false,
         userId: null,
         error: 'Authentication required',
+      };
+    }
+
+    // Checked here too, not only at sign-in: a session issued before the
+    // allowlist existed (or after an address was removed) stays valid for
+    // up to 30 days otherwise.
+    if (!isEmailAllowed(session.user.email)) {
+      return {
+        authenticated: false,
+        userId: null,
+        error: 'This account is not allowed',
       };
     }
 

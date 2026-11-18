@@ -8,6 +8,7 @@ export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
+import { sortChatMessages } from '@/lib/coach/chat-order';
 
 export async function GET(
   _request: NextRequest,
@@ -35,7 +36,9 @@ export async function GET(
   ]);
 
   if (!session) return NextResponse.json({ error: 'not found' }, { status: 404 });
-  return NextResponse.json({ session, messages: messages || [] });
+  // Rows saved before 2026-11-18 share a timestamp within a turn; the sort
+  // puts each question before its reply.
+  return NextResponse.json({ session, messages: sortChatMessages(messages || []) });
 }
 
 export async function DELETE(
