@@ -22,3 +22,8 @@ test('the query window always contains the whole Israel day, summer or winter', 
     expect(Date.parse(to)).toBeGreaterThanOrEqual(Date.parse(`${date}T23:59:59+02:00`));
   }
 });
+
+test('totals do not depend on the order the rows arrive in', () => {
+  const ms = [0.15, 33.3, 68.5].map((p, i) => ({ ...meal(`2026-11-18T1${i}:00:00Z`, 100), total_protein_g: p }));
+  expect(sumDay(ms, '2026-11-18')).toEqual(sumDay([...ms].reverse(), '2026-11-18'));
+});

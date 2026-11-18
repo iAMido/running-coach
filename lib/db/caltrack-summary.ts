@@ -21,23 +21,27 @@ export interface MealTotals {
   eaten_at: string;
 }
 
-const round1 = (n: number) => Math.round(n * 10) / 10;
+// Summed in hundredths: float addition depends on row order, and the database
+// returns rows in no fixed order, so 101.95 could round to 101.9 or 102.0
+// depending on the query (measured on 2026-10-24's five meals).
+const hundredths = (n: number | null) => Math.round((n || 0) * 100);
+const round1 = (h: number) => Math.round(h / 10) / 10;
 
 /** The day's totals from any set of meals; meals on other Israel dates are ignored. Pure. */
 export function sumDay(meals: MealTotals[], date: string) {
   const sameDay = meals.filter((m) => israelDateFromIso(m.eaten_at) === date);
   const t = sameDay.reduce(
     (acc, m) => ({
-      cal: acc.cal + (m.total_calories || 0),
-      pro: acc.pro + (m.total_protein_g || 0),
-      carb: acc.carb + (m.total_carbs_g || 0),
-      fat: acc.fat + (m.total_fat_g || 0),
-      fib: acc.fib + (m.total_fiber_g || 0),
+      cal: acc.cal + hundredths(m.total_calories),
+      pro: acc.pro + hundredths(m.total_protein_g),
+      carb: acc.carb + hundredths(m.total_carbs_g),
+      fat: acc.fat + hundredths(m.total_fat_g),
+      fib: acc.fib + hundredths(m.total_fiber_g),
     }),
     { cal: 0, pro: 0, carb: 0, fat: 0, fib: 0 },
   );
   return {
-    total_calories_in: t.cal,
+    total_calories_in: t.cal / 100,
     total_protein_g: round1(t.pro),
     total_carbs_g: round1(t.carb),
     total_fat_g: round1(t.fat),
