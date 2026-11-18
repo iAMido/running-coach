@@ -9,6 +9,8 @@ import { MODEL_FOR, REASONING_FOR, type ModelTaskKey } from '@/lib/ai/model-regi
 import { logCoachCall } from '@/lib/supervisor';
 
 const ROUTE = '/api/coach/plans/build';
+/** Per model call. Under the 300 s function limit; leaves no room for a fallback, by design. */
+export const BUILDER_CALL_TIMEOUT_MS = 280_000;
 
 /** Accumulates what a stage's model calls actually cost (OpenRouter usage accounting). */
 export class Meter {
@@ -36,6 +38,11 @@ export async function ask(
     [{ role: 'system', content: system }, { role: 'user', content: user }],
     {
       apiKey, model: MODEL_FOR[task], maxTokens, reasoningTokens: REASONING_FOR[task],
+      // One call is the whole stage (one stage per request), and the outline
+      // has taken 272 s, so the builder's limit sits just under the function
+      // limit. A hung call now fails the stage cleanly instead of being killed
+      // with its claim still held.
+      timeoutMs: BUILDER_CALL_TIMEOUT_MS,
       // The cached prefix is the byte-stable part: the coach persona, plus —
       // for writers — everything every writer in this build shares.
       cacheableSystemPrefix: sharedPrefix ? `${COACH_STATIC_BLOCK}\n\n${sharedPrefix}` : COACH_STATIC_BLOCK,

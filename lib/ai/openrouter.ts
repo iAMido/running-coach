@@ -85,6 +85,48 @@ export interface OpenRouterConfig {
    * visible answer" whichever model a task is routed to.
    */
   reasoningTokens?: number;
+  /**
+   * Give up on one provider after this long. Default: `defaultTimeoutMs`,
+   * which scales with the call's token budget. A timeout counts as a provider
+   * failure, so it falls back to NanoGPT when there is time left.
+   */
+  timeoutMs?: number;
+}
+
+/**
+ * Before 2026-11-18 no AI fetch had a timeout: a hung connection waited until
+ * Vercel killed the function at 300 s, and the NanoGPT fallback never ran,
+ * because it only fires on an error.
+ */
+/** What one request may spend in total, primary + fallback, under Vercel's 300 s function limit. */
+export const FUNCTION_BUDGET_MS = 285_000;
+/** A fallback with less time than this left is not worth starting. */
+const MIN_FALLBACK_MS = 15_000;
+
+/**
+ * Generous by design — a timeout that cuts off a call which would have
+ * finished is worse than none: 20 s + the whole output budget (answer +
+ * thinking headroom) at 40 tok/s, between 30 s and 240 s. Measured maxima in
+ * coach_calls (2026-11-18) all fit: chat 32 s (limit 57 s), weekly review
+ * 73 s (196 s), plan writers 56 s. The plan outline has taken 272 s, so the
+ * builder passes its own limit.
+ */
+export function defaultTimeoutMs(model: string, maxTokens: number, reasoningTokens?: number): number {
+  const total = tokenFields(model, maxTokens, reasoningTokens).max_tokens;
+  return Math.min(240_000, Math.max(30_000, Math.round(20_000 + (total / 40) * 1000)));
+}
+
+/**
+ * The fallback's timeout: the same limit, but never past the function budget
+ * measured from when the call began. `null` = not enough time left to try.
+ */
+export function fallbackTimeoutMs(timeoutMs: number, elapsedMs: number): number | null {
+  const left = Math.min(timeoutMs, FUNCTION_BUDGET_MS - elapsedMs);
+  return left >= MIN_FALLBACK_MS ? left : null;
+}
+
+function isTimeout(e: unknown): boolean {
+  return e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
 }
 
 /**
@@ -224,11 +266,15 @@ export async function callOpenRouter(
     usage: { include: true },
   };
 
-  const primary = await postChat('openrouter', apiKey, model, base);
+  const timeoutMs = config.timeoutMs ?? defaultTimeoutMs(model, maxTokens, reasoningTokens);
+  const started = Date.now();
+  const primary = await postChat('openrouter', apiKey, model, base, timeoutMs);
   if (primary.ok || !shouldFallBack(primary.status) || !process.env.NANOGPT_API_KEY) return primary.result;
 
+  const fallbackMs = fallbackTimeoutMs(timeoutMs, Date.now() - started);
+  if (fallbackMs === null) return primary.result;
   console.warn(`OpenRouter failed (${primary.status ?? 'network'}: ${primary.result.error}); retrying ${model} on NanoGPT`);
-  const fallback = await postChat('nanogpt', apiKey, model, base);
+  const fallback = await postChat('nanogpt', apiKey, model, base, fallbackMs);
   if (fallback.ok) return fallback.result;
   return {
     content: '',
@@ -238,13 +284,17 @@ export async function callOpenRouter(
 
 /** One chat call to one provider. `status` is null when no HTTP response arrived. */
 async function postChat(
-  provider: Provider, openRouterKey: string, model: string, base: Record<string, unknown>,
+  provider: Provider, openRouterKey: string, model: string, base: Record<string, unknown>, timeoutMs: number,
 ): Promise<{ ok: boolean; status: number | null; result: OpenRouterResponse }> {
   const req = providerRequest(provider, openRouterKey);
   if (!req) return { ok: false, status: null, result: { content: '', error: `${provider} is not configured` } };
   const name = provider === 'nanogpt' ? 'NanoGPT' : 'OpenRouter';
   try {
-    const response = await fetch(req.url, { method: 'POST', headers: req.headers, body: JSON.stringify(requestBody(provider, model, base)) });
+    // The signal covers the body read too, so a response that stalls midway is cut as well.
+    const response = await fetch(req.url, {
+      method: 'POST', headers: req.headers, body: JSON.stringify(requestBody(provider, model, base)),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data: any = await response.json().catch(() => ({}));
     if (!response.ok || data.error) {
@@ -271,6 +321,9 @@ async function postChat(
       },
     };
   } catch (error) {
+    if (isTimeout(error)) {
+      return { ok: false, status: null, result: { content: '', error: `${name} timed out after ${Math.round(timeoutMs / 1000)} s` } };
+    }
     const message = error instanceof Error ? error.message : 'Unknown error';
     return { ok: false, status: null, result: { content: '', error: `Failed to call ${name}: ${message}` } };
   }
@@ -294,23 +347,31 @@ export async function* streamOpenRouter(
     : messages;
 
   const base = { model, ...tokenFields(model, maxTokens, reasoningTokens), messages: payloadMessages, stream: true };
+  const timeoutMs = config.timeoutMs ?? defaultTimeoutMs(model, maxTokens, reasoningTokens);
+  const started = Date.now();
   type Opened = Response | { status: number | null; error: string };
-  const open = async (provider: Provider): Promise<Opened> => {
+  // The signal stays on the response, so it also bounds the stream read below.
+  const open = async (provider: Provider, ms: number): Promise<Opened> => {
     const req = providerRequest(provider, apiKey);
     if (!req) return { status: null, error: `${provider} is not configured` };
     try {
-      return await fetch(req.url, { method: 'POST', headers: req.headers, body: JSON.stringify(requestBody(provider, model, base)) });
+      return await fetch(req.url, {
+        method: 'POST', headers: req.headers, body: JSON.stringify(requestBody(provider, model, base)),
+        signal: AbortSignal.timeout(ms),
+      });
     } catch (e) {
+      if (isTimeout(e)) return { status: null, error: `timed out after ${Math.round(ms / 1000)} s` };
       return { status: null, error: e instanceof Error ? e.message : 'network error' };
     }
   };
 
   // Fallback happens only BEFORE the first token: once text has streamed, a
   // switch would splice two different answers together.
-  let response: Opened = await open('openrouter');
-  if (!(response instanceof Response && response.ok) && process.env.NANOGPT_API_KEY && shouldFallBack(response.status)) {
+  let response: Opened = await open('openrouter', timeoutMs);
+  const fallbackMs = fallbackTimeoutMs(timeoutMs, Date.now() - started);
+  if (!(response instanceof Response && response.ok) && process.env.NANOGPT_API_KEY && shouldFallBack(response.status) && fallbackMs !== null) {
     console.warn(`OpenRouter stream failed (${response.status ?? 'network'}); retrying ${model} on NanoGPT`);
-    response = await open('nanogpt');
+    response = await open('nanogpt', fallbackMs);
   }
   if (!(response instanceof Response)) throw new Error(`API error: ${response.error}`);
   if (!response.ok) {
@@ -326,7 +387,15 @@ export async function* streamOpenRouter(
   let buffer = '';
 
   while (true) {
-    const { done, value } = await reader.read();
+    let chunk: ReadableStreamReadResult<Uint8Array>;
+    try {
+      chunk = await reader.read();
+    } catch (e) {
+      // Thrown, not swallowed: a stream cut short must not look like a finished answer.
+      if (isTimeout(e)) throw new Error(`Stream timed out after ${Math.round(timeoutMs / 1000)} s`);
+      throw e;
+    }
+    const { done, value } = chunk;
     if (done) break;
 
     buffer += decoder.decode(value, { stream: true });
