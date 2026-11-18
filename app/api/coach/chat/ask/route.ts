@@ -184,6 +184,19 @@ export async function POST(request: NextRequest) {
       getActivePlan(userId),
     ]);
 
+    // The supervisor's two feed-freshness lookups need nothing from the context,
+    // so they run while it builds instead of one after another afterwards.
+    // Each settles to `undefined` on error ("not checked" — no warning, which
+    // beats a false "stale" claim from a transient database error).
+    const feedChecks = Promise.all([
+      getLatestRecoveryReading(userId)
+        .then((r): string | null => r?.row.day ?? null)
+        .catch((): undefined => undefined),
+      getGarminFeedStatus(userId)
+        .then((status) => garminFeedProblem(status))
+        .catch(() => undefined),
+    ]);
+
     let context = await buildContext(userId, retrievalQuery, queryType, { plan: activePlan });
     // Safety net for longer conversational replies ("Can you take me from
     // here?"): if the books matched nothing, search once more with the coach's
@@ -229,16 +242,8 @@ export async function POST(request: NextRequest) {
     // the watch has uploaded anything — so asking for the newest row reported
     // the recovery feed as perfectly current every morning while every
     // watch-sourced field in it was null.
-    let latestWellnessDay: string | null | undefined;
-    try {
-      latestWellnessDay = (await getLatestRecoveryReading(userId))?.row.day ?? null;
-    } catch {
-      latestWellnessDay = undefined;
-    }
-
-    const garminProblem = await getGarminFeedStatus(userId)
-      .then((status) => garminFeedProblem(status))
-      .catch(() => undefined);
+    // Both lookups were started before the context build (see feedChecks).
+    const [latestWellnessDay, garminProblem] = await feedChecks;
 
     const preflight = supervisorValidate({
       context,
