@@ -12,6 +12,7 @@ import { MODEL_FOR } from '@/lib/ai/model-registry';
 import { calculateCurrentWeek } from '@/lib/utils/week-calculator';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
 import { planAdjustmentSchema, validateInput } from '@/lib/validation/schemas';
+import { planStartDate } from '@/lib/utils/plan-start';
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedUser();
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate current week
-    const startDate = plan.start_date || (plan.created_at ? plan.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
+    const startDate = planStartDate(plan);
     const weekInfo = calculateCurrentWeek(startDate, plan.duration_weeks);
     const currentWeek = weekInfo.currentWeek;
 
@@ -114,6 +115,7 @@ export async function POST(request: NextRequest) {
         model: MODEL_FOR.plan_adjust,
         maxTokens: 8000,
         cacheableSystemPrefix: COACH_STATIC_BLOCK,
+        spendUserId: userId,
       }
     );
 

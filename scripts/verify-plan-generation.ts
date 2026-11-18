@@ -104,6 +104,8 @@ async function main() {
     process.exit(1);
   }
   console.log(`strength refs expanded: ${parsed.strength.expanded} · dangling: ${parsed.strength.dangling.length}`);
+  // A debugging script that pokes at whatever fields the model produced.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const plan = parsed.plan as any;
 
   const fs = await import('fs');

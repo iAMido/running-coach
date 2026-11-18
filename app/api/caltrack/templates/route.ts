@@ -26,7 +26,7 @@ export async function GET() {
     if (error) throw error;
 
     const templateIds = (templates || []).map((t: { id: string }) => t.id);
-    let itemsByTemplate: Record<string, unknown[]> = {};
+    const itemsByTemplate: Record<string, unknown[]> = {};
 
     if (templateIds.length > 0) {
       const { data: items } = await caltrackDb

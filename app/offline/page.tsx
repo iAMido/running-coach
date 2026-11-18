@@ -16,9 +16,9 @@ export default function OfflinePage() {
           <div className="mx-auto w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
             <WifiOff className="w-8 h-8 text-muted-foreground" />
           </div>
-          <CardTitle className="text-2xl">You're Offline</CardTitle>
+          <CardTitle className="text-2xl">You&apos;re Offline</CardTitle>
           <CardDescription>
-            It looks like you've lost your internet connection. Don't worry - your training data is saved locally.
+            It looks like you&apos;ve lost your internet connection. Don&apos;t worry - your training data is saved locally.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

@@ -36,6 +36,9 @@ export async function POST(request: NextRequest) {
     }
 
     const { messages, reviewPlan } = validation.data;
+    if (!reviewPlan && !(messages && messages.length > 0)) {
+      return NextResponse.json({ error: 'No messages provided' }, { status: 400 });
+    }
 
     // Get the user's query from the last message
     const lastUserMessage = messages?.filter((m: ChatMessage) => m.role === 'user').pop();
@@ -67,11 +70,12 @@ export async function POST(request: NextRequest) {
     const response = await callOpenRouter(apiMessages, {
       apiKey,
       model: MODEL_FOR.grocky,
-      maxTokens: reviewPlan ? 2500 : 1500
+      maxTokens: reviewPlan ? 2500 : 1500,
+      spendUserId: userId,
     });
 
     if (response.error) {
-      return NextResponse.json({ error: response.error }, { status: 500 });
+      return NextResponse.json({ error: response.error }, { status: response.budgetExceeded ? 429 : 500 });
     }
 
     // Get context stats for debugging/monitoring

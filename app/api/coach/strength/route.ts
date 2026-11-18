@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { getWeeklyStrength, getPhaseForWeek } from '@/lib/db/strength';
 import { getAuthenticatedUser } from '@/lib/auth/get-user';
+import { planStartDate } from '@/lib/utils/plan-start';
 
 /**
  * GET /api/coach/strength
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
           totalWeeks = 8;
         } else {
           // Calculate actual current week from start date
-          const startDate = plan.start_date || (plan.created_at ? plan.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
+          const startDate = planStartDate(plan);
           const start = new Date(startDate);
           const now = new Date();
           const diffDays = Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));

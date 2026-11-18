@@ -49,7 +49,6 @@ app/
 │   │   ├── feedback/route.ts         # Run feedback CRUD (links to run_id)
 │   │   ├── plans/route.ts            # Training plans CRUD
 │   │   ├── plans/build/route.ts      # Staged plan builder (what the UI uses) — one stage per POST
-│   │   ├── plans/generate/route.ts   # Single-call plan generation (legacy, still callable)
 │   │   ├── plans/adjust/route.ts     # AI plan adjustment
 │   │   ├── profile/route.ts          # Athlete profile
 │   │   ├── reports/route.ts          # Coach reports list/detail
@@ -80,7 +79,6 @@ app/
 │   │   ├── templates/route.ts        # Meal templates
 │   │   └── coach-reports/route.ts    # CalTrack coach reports
 │   └── admin/
-│       └── regenerate-embeddings/route.ts  # RAG embedding regeneration
 ├── coach/                            # AI Running Coach (protected)
 │   ├── layout.tsx                    # Protected layout with sidebar
 │   ├── page.tsx                      # Dashboard (stats, recent runs, chart)
@@ -209,7 +207,7 @@ All tables have RLS enabled with policies for authenticated users.
 - **Strength: keep hard days hard (athlete's decision, 2026-09-27).** Loaded strength goes straight after the quality session on the same day — never the day before a quality session, the long run, or on the long-run day. The reference plans do place it the day before quality (Carmel-Kinneret 25/54), but the head coach's review objected in all three staged test builds and the fix loop kept moving it; the athlete chose the reviewer. Enforced in `PLAN_STRENGTH_RULES`, the writer rules, the plan-adjust rules and `checkPlan` (`strength_placement` error).
 - **Seasons are staged too (`kind='season'`, `plan-builder/season.ts`, 2026-09-27).** The Season panel posts `{ kind: 'season', ...macroPlanGenerationSchema }` to the same `plans/build` route. Stages: prepare (the block builder's `prepare`, unchanged — measured brief, race brief, per-need book research; the old route never searched the books) → head-coach design (Opus 5.5, `buildMacroPlanPrompt` + briefs + research + a `decisions` array) → `checkSeason` (`season-checks.ts`: covers the horizon, ends on race week with a taper when the race is inside it, phase 1 starts from measured km AND climbing, no phase-to-phase leaps, peak climbing reaches the race's own gain, measurable exit criteria, no absolute decoupling bands, explicit poles decision above 40 m/km) with up to 2 redesigns → head-coach review, ≤2 fix rounds → `saveMacroPlan` + `macro_plans.build_report`. No phase writers: a season IS an outline. Issue/violation numbers are PHASE numbers for a season.
 - Measured on the same 40-week request: staged season 6 min, **$1.15**; single-call $0.16. Both score 0 on the season rules — at season level the rules alone do not separate them; the review does. Reviewed identically, the single-call season had 3 must-fix problems (climbing started +52% above his measured 198 m/week; prescribed 55-65 m/km trail long runs no terrain he can reach delivers — Sorek is 47 m/km; descent had no numbers until phase 3, then 800+ m in one run). The staged season's reviews caught the same classes (plus decoupling exits on hiked sessions, which cannot compute; altitude; three consecutive climbing days) and fixed them before saving. The +52% start became a rule (`START_VERT` tightened).
-- Legacy `/api/coach/macro-plan` POST still works but the UI no longer calls it; its GET still serves the active season.
+- `/api/coach/macro-plan` is GET only (the active season); its single-call POST generator was removed 2026-11-18.
 
 **Season → phases → plans (athlete's design, 2026-09-27).** The season head coach writes a **brief per phase** (`MacroPhase.goal / why_this_length / must_haves / avoid / watch_for / handoff / kpis`). Each phase is then built as **ONE training plan by the block builder, when the phase is due** — never all at once, because a September plan for March is fiction. Phase 1 is built straight after the season.
 - **KPIs are typed** (`PhaseKpi`: metric ∈ weekly_km, weekly_vert_m, long_run_km, session_vert_m, adherence_pct, decoupling_pctile, form, ctl; target; comparator; consecutive_weeks) so the app evaluates them (`lib/coach/phase-kpis.ts`, pure). Complete weeks only; unmeasured is `null`, never a pass. `checkSeason` refuses a phase with <2 KPIs or a KPI its own ranges / session cap / length cannot reach — the reviewer found that trap in every season before it was a rule.
@@ -217,7 +215,7 @@ All tables have RLS enabled with policies for authenticated users.
 - **Progress is tracked, not assumed**: `macro_plans.start_date` + `phase_progress` (status, real start, extension weeks, plan ids), written by `recordPhaseBuilt` when a phase plan saves. `currentPhase` / `timelineOf` read actual dates first. The weekly proposal cron and the scorecard now use `currentPhase` — they used to assume 12-week blocks (`blockNumber`), which put block 2 in the wrong phase for any real season.
 - `POST plans/build { kind: 'phase', macroPlanId, phaseNumber, extensionWeeks? }` composes the request from the season (race, length) and profile (days). `prepare` renders the brief as the builder's contract (`formatPhaseBrief`) with a MEASURED hand-over (the previous phase's KPIs as they ended; an extension targets its own lagging KPIs). `checkPlan` holds weeks inside the phase bands (`phase_range`).
 - The weekly review and the Saturday proposal append `kpiBlockFor(userId)` — the phase KPI table — and are told to steer toward the lagging KPIs and name which KPI each change serves. `GET /api/coach/season/status` feeds the Season panel (KPI table, recommendation with Build / Extend / Advance buttons, phase dates and status chips).
-- Legacy `plans/generate` (+`/stream`) routes still work and share the rule text (`PLAN_STRENGTH_RULES`, `PLAN_TARGET_HR_RULES`, `PLAN_DAY_ANCHOR_RULES` in `coach-prompts.ts`). The Saturday weekly-proposal cron is unaffected.
+- The legacy `plans/generate` (+`/stream`) routes were REMOVED 2026-11-18 (nothing called them); `scripts/verify-plan-generation.ts` still mirrors that single-call path. The rule text they shared stays (`PLAN_STRENGTH_RULES`, `PLAN_TARGET_HR_RULES`, `PLAN_DAY_ANCHOR_RULES` in `coach-prompts.ts`). The Saturday weekly-proposal cron is unaffected.
 
 **Season tab, season intake, revisions (2026-11-06).** `/coach/plan` has three tabs: **Season** (the season at a glance, current phase + KPIs, phases, "What you told the coach", Adjust / Design new), **Current plan**, **New plan** (block form only). The season form takes the same intake as a block (target time, recent result, weekly km, focus, limitations, notes); `formatSeasonIntake` (`plan-builder/season-intake.ts`, pure) puts it in the head coach's and reviewer's prompts, it is saved to `macro_plans.intake`, and `phaseBuildRequest` passes target time / limitations / recent result / focus / notes into every phase plan. **Adjust** = a new staged season build with `adjustsSeasonId` + `changeRequest`; the route renders the ACTIVE season server-side (`describeSeasonForRevision`) — never client text. The revised season starts next Sunday with fresh phase progress; the athlete chooses whether phase 1 is rebuilt.
 
@@ -246,6 +244,12 @@ The strength extractor handles four encodings in precedence order (`strength_exe
 **AI Integration:** OpenRouter, with every task's model named in `lib/ai/model-registry.ts` (`MODEL_FOR`). 3-layer RAG provides context: athlete data + coach patterns + book methodology.
 
 **AI call timeouts (2026-11-18).** Every `callOpenRouter` / `streamOpenRouter` fetch carries `AbortSignal.timeout`. Default `defaultTimeoutMs` = 20 s + the whole output budget (answer + thinking headroom) at 40 tok/s, clamped 30-240 s — sized against measured coach_calls maxima (chat 32 s, weekly review 73 s, writers 56 s). The plan builder passes `BUILDER_CALL_TIMEOUT_MS = 280_000` because the outline has taken 272 s. A timeout is a provider failure, so it falls back to NanoGPT, but only with time left under `FUNCTION_BUDGET_MS` (285 s from the call start, ≥15 s). Before this, a hung connection waited for Vercel to kill the function and the fallback never ran.
+
+**Review fixes, 2026-11-18 (PR #33).** (1) Plan-builder and library-ingest claims last `CLAIM_MS = 310_000` — longer than the 300 s function limit, so a live request is never overtaken (it was 290 s) — and a stage commits only while it still holds its claim (`.eq(stage).eq(running_until, claim)`); a lost claim discards the result. (2) Ask Coach validates with `askCoachRequestSchema` (messages required, one from the athlete) and refuses a `sessionId` that is not the signed-in user's (404). (3) Without `SUPABASE_SERVICE_ROLE_KEY` at runtime every RunCoach query errors with the reason (`MISSING_SERVICE_KEY`); only the build keeps the placeholder client — it used to fall back to the anon key, which RLS turns into silently empty results. (4) CalTrack add/edit/delete share `refreshDailySummary` (`lib/db/caltrack-summary.ts`: a 48 h query window, sums in hundredths so totals do not depend on row order); `planStartDate` (`lib/utils/plan-start.ts`, Israel date) replaces five copies. (5) Removed: `plans/generate` (+stream), `admin/regenerate-embeddings`, `cron/strava-sync`, the macro-plan POST, `middleware.ts`. (6) `bun run lint` has 0 errors. (7) `/coach` is a server page that starts the stats / runs / plan loads (`lib/coach/dashboard-data.ts`, shared with the three API routes) and hands the client dashboard a promise. Note: a local build in this worktree also picks up the MAIN checkout's `middleware.ts` three folders up (workspace-root inference) — that is local only.
+
+**Daily AI spend cap (2026-11-18) — `lib/ai/spend.ts`, `runcoach.ai_spend_daily`, migration `20261118_ai_spend.sql`.** Replaced the per-IP in-memory rate limiter in `middleware.ts` (deleted: each instance counted on its own, deploys reset it, and the plan builder fell under its 100/min default). Every AI call passes `spendUserId`; `callOpenRouter` / `streamOpenRouter` refuse once the athlete's Israel-date total reaches `AI_DAILY_CAP_USD` (default $25 — the heaviest real day, 2026-11-06, was $9.65 of plan building) and add each call's `usage.cost` afterwards (`add_ai_spend` RPC). Chat, Grocky and the weekly review answer 429 with the reason. **Fails OPEN** when the ledger is unreadable. A new AI call site must pass `spendUserId` or it is neither capped nor counted.
+
+**Chat book retry rebuilds only the books (2026-11-18).** `buildContext(…, { bookFallbackQuery })` searches the books a second time when the first query finds nothing; the chat used to call `buildContext` twice for this, repeating the athlete data, training state, previous-coach search and the Haiku classifier. The book retriever already passes its embedding to the user-resource search, so each query text is embedded once.
 
 **One activity sync per athlete at a time (2026-11-18) — `lib/intervals/sync-lock.ts`, `runcoach.sync_locks`, migration `20261118_sync_locks.sql`.** A 300 s lease taken by `try_sync_lock` (one atomic upsert) around every run import: manual sync (waits up to 60 s, then answers `skipped: busy`), sync-on-open (does not wait) and the cron (waits 60 s per step). Without it, "Sync now" during sync-on-open could double a new run: one request in its Garmin step writes `garmin_<id>`, the other in its intervals.icu step writes `icu_<id>` — different filenames, so the unique index cannot stop it. **Fails OPEN** when the RPC errors (e.g. the migration is not applied): syncs run unlocked, as before, with a console warning.
 
@@ -524,7 +528,7 @@ Two unit conventions that are load-bearing. `gap_pace_min_km` is **min/km**, mat
 
 **Chat history persistence:** `/coach/ask` posts `sessionId` along with messages. `/api/coach/chat/ask` resolves or creates a `runcoach.coach_chat_sessions` row (title seeded from the first user message) and persists each user + assistant turn into `runcoach.coach_chat_messages` with the supervisor envelope snapshot. The page has a History dropdown listing past sessions; click loads a session via `GET /api/coach/chat/sessions/[id]`. Soft-archive via `DELETE` (sets `status='archived'`).
 
-**Streaming plan generation:** `/api/coach/plans/generate/stream` is an SSE variant of plan-gen. It emits `meta`, `token` (many), and `done` events. The page consumes the stream, shows a live preview window, and sets the final plan from the `done` payload. Final JSON parse + DB write + supervisor logging + Haiku critic all happen server-side after the stream completes.
+**Streaming plan generation:** removed 2026-11-18 with the legacy `plans/generate` routes; `streamOpenRouter` remains in `lib/ai/openrouter.ts` (capped and metered) with no caller.
 
 **Tag-aware user-resource retrieval:** `runcoach.match_user_resources(...)` takes an optional `match_tags text[]` parameter; when supplied, only resources whose `methodology_tags` overlap with the query tags are returned (with a no-tag-filter fallback if zero match). `context-builder.ts` derives tags from query + current phase + workout type and threads them through `book-retriever.ts` → `user-resource-retriever.ts`.
 
@@ -534,7 +538,7 @@ Two unit conventions that are load-bearing. `gap_pace_min_km` is **min/km**, mat
 - **Post-flight critic (`critic.ts`)** — fire-and-forget call to `anthropic/claude-haiku-4-5` that grades the response on 5 axes (addresses_question / references_plan_day / references_runs_feedback / specific_pace_hr / no_contradiction), persists to `runcoach.coach_response_audits`. Auto-back-links the audit_id onto the coach_calls row.
 - **Weekly health audit (`/api/cron/weekly-health-audit`)** — Sunday 22:30 UTC Vercel cron. Reads coverage / plan drift / RAG embedding completeness / AI quality stats from `coach_calls` + `coach_response_audits` and writes a markdown report into `coach_reports` with `report_type='system_health'`.
 
-Wired into `chat/ask`, `review/analyze`, `plans/generate`. Each route returns a `supervisor: { callId, preflightOk, warnings }` envelope so the UI can surface the warnings inline.
+Wired into `chat/ask`, `review/analyze`, and the plan builder. Each route returns a `supervisor: { callId, preflightOk, warnings }` envelope so the UI can surface the warnings inline.
 
 **Strava Sync:** OAuth flow → token storage → manual sync button + automated Vercel Cron (daily at 15:00 and 21:40 UTC). For each new activity: stores summary row, fetches `/activities/{id}/laps` for lap rows, fetches `/activities/{id}/streams?keys=heartrate,time` and buckets the HR stream into the athlete's zones (`pct_z1..pct_z6` via `lib/utils/zones.ts`). Run type classified via `classifyRun` with `workoutName` + `profile` + `zonePercents`. Token refresh on expiry, auto-disconnect on permanent auth failure.
 
@@ -579,6 +583,9 @@ INTERVALS_ATHLETE_ID=<i-prefixed-athlete-id>
 # Encrypts intervals_tokens.api_key at rest. 32 bytes: openssl rand -base64 32
 INTERVALS_TOKEN_KEY=<32-byte-base64-or-hex-key>
 
+# Daily AI spend cap per athlete, USD (default 25)
+AI_DAILY_CAP_USD=25
+
 # Cron
 CRON_SECRET=<random-secret-for-vercel-cron>
 ```
@@ -589,8 +596,10 @@ Defined in `vercel.json`:
 ```json
 {
   "crons": [
-    { "path": "/api/cron/strava-sync", "schedule": "0 15 * * *" },
-    { "path": "/api/cron/strava-sync", "schedule": "40 21 * * *" }
+    { "path": "/api/cron/intervals-sync", "schedule": "0 15 * * *" },
+    { "path": "/api/cron/intervals-sync", "schedule": "40 21 * * *" },
+    { "path": "/api/cron/weekly-health-audit", "schedule": "30 22 * * 0" },
+    { "path": "/api/cron/weekly-proposal", "schedule": "0 18 * * 6" }
   ]
 }
 ```

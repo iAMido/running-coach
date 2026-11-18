@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useSyncExternalStore } from 'react';
 import { Download, X, Share, Plus, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,6 +12,32 @@ function isIOS(): boolean {
   return /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as Window & { MSStream?: unknown }).MSStream;
 }
 
+// "Maybe later" lasts 7 days. Kept in localStorage and read through
+// useSyncExternalStore, so no effect has to copy it into state.
+const DISMISS_KEY = 'pwa-install-dismissed';
+const DISMISS_MS = 7 * 24 * 60 * 60 * 1000;
+const dismissListeners = new Set<() => void>();
+function subscribeDismissed(onChange: () => void) {
+  dismissListeners.add(onChange);
+  window.addEventListener('storage', onChange);
+  return () => {
+    dismissListeners.delete(onChange);
+    window.removeEventListener('storage', onChange);
+  };
+}
+function recentlyDismissed(): boolean {
+  try {
+    const at = parseInt(localStorage.getItem(DISMISS_KEY) ?? '', 10);
+    return Number.isFinite(at) && Date.now() - at < DISMISS_MS;
+  } catch {
+    return false;
+  }
+}
+function rememberDismissal() {
+  try { localStorage.setItem(DISMISS_KEY, Date.now().toString()); } catch { /* private mode */ }
+  dismissListeners.forEach((l) => l());
+}
+
 // Check if Safari
 function isSafari(): boolean {
   if (typeof window === 'undefined') return false;
@@ -21,19 +47,12 @@ function isSafari(): boolean {
 export function InstallPrompt() {
   const { canInstall, isInstalled, promptInstall } = usePWA();
   const [showIOSPrompt, setShowIOSPrompt] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const dismissedRecently = useSyncExternalStore(subscribeDismissed, recentlyDismissed, () => false);
+  const [installedHere, setInstalledHere] = useState(false);
+  const dismissed = dismissedRecently || installedHere;
 
   useEffect(() => {
-    // Check if already dismissed
-    const wasDismissed = localStorage.getItem('pwa-install-dismissed');
-    if (wasDismissed) {
-      const dismissedTime = parseInt(wasDismissed, 10);
-      // Show again after 7 days
-      if (Date.now() - dismissedTime < 7 * 24 * 60 * 60 * 1000) {
-        setDismissed(true);
-        return;
-      }
-    }
+    if (recentlyDismissed()) return;
 
     // Show iOS prompt for Safari users
     if (isIOS() && isSafari() && !isInstalled) {
@@ -44,15 +63,14 @@ export function InstallPrompt() {
   }, [isInstalled]);
 
   const handleDismiss = () => {
-    setDismissed(true);
     setShowIOSPrompt(false);
-    localStorage.setItem('pwa-install-dismissed', Date.now().toString());
+    rememberDismissal();
   };
 
   const handleInstall = async () => {
     const success = await promptInstall();
     if (success) {
-      setDismissed(true);
+      setInstalledHere(true);
     }
   };
 
@@ -97,7 +115,7 @@ export function InstallPrompt() {
                   <Plus className="h-4 w-4 text-primary" />
                 </div>
                 <div>
-                  <p className="font-medium text-sm">2. Tap "Add to Home Screen"</p>
+                  <p className="font-medium text-sm">2. Tap &ldquo;Add to Home Screen&rdquo;</p>
                   <p className="text-xs text-muted-foreground">Scroll down in the share menu</p>
                 </div>
               </div>
@@ -106,7 +124,7 @@ export function InstallPrompt() {
                   <Download className="h-4 w-4 text-primary" />
                 </div>
                 <div>
-                  <p className="font-medium text-sm">3. Tap "Add"</p>
+                  <p className="font-medium text-sm">3. Tap &ldquo;Add&rdquo;</p>
                   <p className="text-xs text-muted-foreground">The app will appear on your home screen</p>
                 </div>
               </div>
@@ -194,7 +212,7 @@ export function OfflineIndicator() {
 
   return (
     <div className="fixed top-0 left-0 right-0 bg-amber-500 text-amber-950 text-center py-1 text-sm font-medium z-50">
-      You're offline. Some features may be limited.
+      You&apos;re offline. Some features may be limited.
     </div>
   );
 }

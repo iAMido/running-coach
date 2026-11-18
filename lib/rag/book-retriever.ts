@@ -300,12 +300,11 @@ export async function getMatchingSchedules(
     return { schedules: [] };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return {
-    schedules: (data || []).map((row: any) => ({
+    schedules: ((data || []) as ScheduleRow[]).map((row) => ({
       id: row.id,
-      bookTitle: row.coaching_books?.title || row.coaching_books?.[0]?.title || 'Unknown',
-      methodology: row.coaching_books?.methodology || row.coaching_books?.[0]?.methodology || 'Unknown',
+      bookTitle: bookOf(row.coaching_books)?.title || 'Unknown',
+      methodology: bookOf(row.coaching_books)?.methodology || 'Unknown',
       planName: row.plan_name,
       targetRace: row.target_race,
       level: row.level,
@@ -314,6 +313,19 @@ export async function getMatchingSchedules(
     })),
   };
 }
+
+/** A book_schedules row as selected above; the joined book can arrive as an object or a one-element array. */
+type BookRef = { title?: string; methodology?: string };
+interface ScheduleRow {
+  id: string;
+  plan_name: string;
+  target_race?: string;
+  level?: string;
+  duration_weeks?: number;
+  weekly_structure: unknown;
+  coaching_books?: BookRef | BookRef[] | null;
+}
+const bookOf = (b: ScheduleRow['coaching_books']): BookRef | undefined => (Array.isArray(b) ? b[0] : b ?? undefined);
 
 /**
  * Get all available methodologies from books

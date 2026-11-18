@@ -43,6 +43,7 @@ export async function ask(
       // limit. A hung call now fails the stage cleanly instead of being killed
       // with its claim still held.
       timeoutMs: BUILDER_CALL_TIMEOUT_MS,
+      spendUserId: userId,
       // The cached prefix is the byte-stable part: the coach persona, plus —
       // for writers — everything every writer in this build shares.
       cacheableSystemPrefix: sharedPrefix ? `${COACH_STATIC_BLOCK}\n\n${sharedPrefix}` : COACH_STATIC_BLOCK,

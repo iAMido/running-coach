@@ -167,7 +167,7 @@ export async function proposeForUser(userId: string, weekStart: string): Promise
       { role: 'system', content: systemPrompt },
       { role: 'user', content: 'Propose the adjustment. Return ONLY the raw JSON object.' },
     ],
-    { apiKey, model: MODEL_FOR.plan_generation, maxTokens: 8000, reasoningTokens: REASONING_FOR.plan_generation, cacheableSystemPrefix: COACH_STATIC_BLOCK },
+    { apiKey, model: MODEL_FOR.plan_generation, maxTokens: 8000, reasoningTokens: REASONING_FOR.plan_generation, cacheableSystemPrefix: COACH_STATIC_BLOCK, spendUserId: userId },
   );
 
   if (response.error) {

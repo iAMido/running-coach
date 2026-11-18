@@ -82,7 +82,7 @@ export async function runCritic(input: CriticInput): Promise<CriticResult> {
 
   const response = await callOpenRouter(
     [{ role: 'user', content: prompt }],
-    { apiKey, model: CRITIC_MODEL, maxTokens: 600 },
+    { apiKey, model: CRITIC_MODEL, maxTokens: 600, spendUserId: input.userId },
   );
 
   const latencyMs = Date.now() - start;

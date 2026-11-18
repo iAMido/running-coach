@@ -33,8 +33,13 @@ import type {
   BuildKind, BuildReport, BuildRequest, BuildStage, CheckReport, CoherenceIssue, CoherenceReview, PlanBuildRow, PlanOutline, SeasonRequest,
 } from './types';
 
-/** A claimed stage is abandoned after this — longer than any stage can run. */
-const CLAIM_MS = 290_000;
+/**
+ * A claimed stage is abandoned after this. It must outlast the 300 s function
+ * limit: it was 290 s, so a stage still running at 290 s (the outline has taken
+ * 272 s of model time alone) could be claimed and paid for a second time while
+ * the first was finishing. Past 300 s the original request is certainly dead.
+ */
+export const CLAIM_MS = 310_000;
 /** Review → fix rounds. "At most twice" so a disagreement cannot loop. */
 export const MAX_REVIEW_ROUNDS = 2;
 /** Rule-check repair rounds inside one check stage. */
@@ -94,22 +99,32 @@ export async function openPhaseBuild(
   return rows.find((r) => ((r.request as { extensionWeeks?: number }).extensionWeeks ?? null) === ext) ?? null;
 }
 
-async function claim(row: PlanBuildRow): Promise<boolean> {
+/** Claims the row's current stage. Returns the claim (its expiry) or null when another request holds it. */
+async function claim(row: PlanBuildRow): Promise<string | null> {
   const now = new Date();
+  const until = new Date(now.getTime() + CLAIM_MS).toISOString();
   const { data } = await supabase.from('plan_builds')
-    .update({ running_until: new Date(now.getTime() + CLAIM_MS).toISOString() })
+    .update({ running_until: until })
     .eq('id', row.id).eq('stage', row.stage)
     .or(`running_until.is.null,running_until.lt.${now.toISOString()}`)
     .select('id');
-  return !!data && data.length > 0;
+  return data && data.length > 0 ? until : null;
 }
 
-async function commit(row: PlanBuildRow, patch: Partial<PlanBuildRow>): Promise<PlanBuildRow> {
+/**
+ * Saves a stage's result only while this request still holds its claim
+ * (same stage, same `running_until`). Before 2026-11-18 it saved
+ * unconditionally, so a request whose claim had been taken over would
+ * overwrite the newer request's result. `null` = the claim was lost and
+ * nothing was written.
+ */
+async function commit(row: PlanBuildRow, claimed: string, patch: Partial<PlanBuildRow>): Promise<PlanBuildRow | null> {
   const { data, error } = await supabase.from('plan_builds')
     .update({ ...patch, running_until: null, updated_at: new Date().toISOString() })
-    .eq('id', row.id).select().single();
+    .eq('id', row.id).eq('stage', row.stage).eq('running_until', claimed)
+    .select().maybeSingle();
   if (error) throw new Error(`could not save build stage: ${error.message}`);
-  return data as PlanBuildRow;
+  return (data as PlanBuildRow) ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -459,12 +474,18 @@ export async function advance(userId: string, buildId: string): Promise<{ row: P
   const row = await getBuild(userId, buildId);
   if (!row) throw new Error('build not found');
   if (row.stage === 'done' || row.stage === 'failed') return { row, busy: false };
-  if (!(await claim(row))) return { row, busy: true };
+  const claimed = await claim(row);
+  if (!claimed) return { row, busy: true };
+  let patch: Partial<PlanBuildRow>;
   try {
-    const patch = await runStage(row);
-    return { row: await commit(row, patch), busy: false };
+    patch = await runStage(row);
   } catch (e) {
     const message = e instanceof Error ? e.message : 'stage failed';
-    return { row: await commit(row, { stage: 'failed', error: `${STAGE_LABELS[row.stage]}: ${message}` }), busy: false };
+    patch = { stage: 'failed', error: `${STAGE_LABELS[row.stage]}: ${message}` };
   }
+  const saved = await commit(row, claimed, patch);
+  if (saved) return { row: saved, busy: false };
+  // Another request took the stage over; its result stands, not ours.
+  console.warn(`plan build ${row.id}: lost the claim on ${row.stage}, result discarded`);
+  return { row: (await getBuild(userId, buildId)) ?? row, busy: true };
 }

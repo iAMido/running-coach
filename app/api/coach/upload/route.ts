@@ -61,9 +61,9 @@ export async function POST(request: NextRequest) {
           elapsedRecordField: true,
         });
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const parsedData = await new Promise<FitData>((resolve, reject) => {
-          fitParser.parse(buffer, (error: any, data: any) => {
+          fitParser.parse(buffer, (error: unknown, data: unknown) => {
             if (error) reject(new Error(String(error)));
             else resolve(data as FitData);
           });
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
         const trimp = avgHr ? calculateTrimp({ durationMin, avgHr }) : null;
 
         // Extract HR zone percentages from laps if available
-        let pctZ1 = null, pctZ2 = null, pctZ3 = null, pctZ4 = null, pctZ5 = null, pctZ6 = null;
+        const pctZ1 = null, pctZ2 = null, pctZ3 = null, pctZ4 = null, pctZ5 = null, pctZ6 = null;
 
         if (parsedData.hrv && Array.isArray(parsedData.hrv)) {
           // HR zone data might be in different places depending on device

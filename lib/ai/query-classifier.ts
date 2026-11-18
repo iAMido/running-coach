@@ -65,7 +65,7 @@ Rules:
 Return ONLY this JSON shape, nothing else:
 {"queryType":"...","workoutType":"...optional...","tags":["..."]}`;
 
-export async function classifyQuery(query: string): Promise<QueryClassification> {
+export async function classifyQuery(query: string, userId?: string): Promise<QueryClassification> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey || !query.trim()) {
     return fallbackClassify(query);
@@ -77,7 +77,7 @@ export async function classifyQuery(query: string): Promise<QueryClassification>
         { role: 'system', content: CLASSIFIER_PROMPT },
         { role: 'user', content: query.slice(0, 1500) },
       ],
-      { apiKey, model: MODEL_FOR.classification, maxTokens: 200 },
+      { apiKey, model: MODEL_FOR.classification, maxTokens: 200, spendUserId: userId },
     );
 
     if (resp.error || !resp.content) {
