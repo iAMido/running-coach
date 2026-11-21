@@ -34,9 +34,19 @@ export interface AutoSyncResult {
   weeks: { week: number; status: 'pushed' | 'unchanged' | 'error'; created?: number; errors?: string[] }[];
 }
 
-/** Stable hash of what a week pushes. Max HR is in it: a change re-pushes. */
+/**
+ * Version of what a push WRITES for the same plan content. Bump it when the
+ * watch format changes, so weeks already on the calendar are re-pushed once in
+ * the new format. 2 = strength as its own workout (2026-11-21).
+ */
+export const WATCH_FORMAT_VERSION = 2;
+
+/** Stable hash of what a week pushes. Max HR and the format version are in it: a change re-pushes. */
 export function weekHash(week: PlanWeek, maxHr: number): string {
-  return createHash('sha256').update(JSON.stringify({ w: week.workouts ?? {}, maxHr })).digest('hex').slice(0, 32);
+  return createHash('sha256')
+    .update(JSON.stringify({ w: week.workouts ?? {}, maxHr, v: WATCH_FORMAT_VERSION }))
+    .digest('hex')
+    .slice(0, 32);
 }
 
 export async function autoSyncPlanToWatch(userId: string, trigger: string): Promise<AutoSyncResult> {

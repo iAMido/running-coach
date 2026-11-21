@@ -156,7 +156,9 @@ test('the coach description and strength travel as notes, never as steps', () =>
   }, BANDS, MAX_HR)!;
   const coach = t.notes.find((n) => n.startsWith('Coach:'))!;
   expect(coach).toBe('Coach: - WU rolling | 6x.');
-  expect(t.notes.some((n) => n.includes('Step-downs 3×10 each side'))).toBe(true);
+  // The exercises go out as their own workout (strength-format.ts); the run only points at it.
+  expect(t.notes.some((n) => n.startsWith('Strength after the run — Hill strength A, ~20 min'))).toBe(true);
+  expect(t.notes.some((n) => n.includes('Step-downs'))).toBe(false);
   expect(t.notes.every((n) => !n.startsWith('-') && !/\d+x$/i.test(n))).toBe(true);
 });
 

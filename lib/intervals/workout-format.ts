@@ -325,14 +325,15 @@ function safeNote(text: string): string {
     .trim();
 }
 
+/**
+ * The strength session goes to the watch as its OWN workout (see
+ * `strength-format.ts`, 2026-11-21); the run only points at it. It used to
+ * carry every exercise here as one note line, which Garmin never shows.
+ */
 function strengthNote(w: Workout): string | null {
   const st = w.strength;
-  if (!st?.name) return null;
-  const ex = (st.exercises ?? []).slice(0, 10).map((e) => {
-    const amount = e.seconds ? `${e.sets}×${e.seconds}s` : `${e.sets}×${e.reps ?? ''}`;
-    return `${e.exercise} ${amount}${e.each_side ? ' each side' : ''}${e.load ? ` (${e.load})` : ''}`;
-  });
-  return `Strength after the run — ${st.name}${st.duration_minutes ? `, ~${st.duration_minutes} min` : ''}${ex.length ? `: ${ex.join('; ')}` : ''}.`;
+  if (!st?.name || !Array.isArray(st.exercises) || st.exercises.length === 0) return null;
+  return `Strength after the run — ${st.name}${st.duration_minutes ? `, ~${st.duration_minutes} min` : ''}: its own workout on the watch, exercise by exercise.`;
 }
 
 /**
@@ -364,7 +365,8 @@ function strengthNote(w: Workout): string | null {
  * is never parsed here, because a mis-parsed interval session on the wrist is
  * worse than a correct steady one.
  *
- * The plan's description and the strength session travel as notes.
+ * The plan's description travels as notes. The strength session is pushed as
+ * a separate workout (`strength-format.ts`); the run carries a pointer to it.
  *
  * Returns null only when the workout is not a session at all (rest days carry
  * "—" for every field) or has no usable duration or target.

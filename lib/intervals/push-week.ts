@@ -33,6 +33,7 @@ import type { PlanWeek, TrainingPlan, Workout } from '@/lib/db/types';
 import type { ZoneBands } from '@/lib/utils/zones';
 import type { IntervalsClient } from '@/lib/intervals/client';
 import { planWorkoutToDescription } from '@/lib/intervals/workout-format';
+import { STRENGTH_EVENT_TYPE, strengthToWorkout } from '@/lib/intervals/strength-format';
 
 /** Prefix identifying an event this app created. Never change it casually — older events carry it. */
 export const PUSH_MARKER = 'RunCoach';
@@ -96,6 +97,8 @@ export interface PushRow {
   skipReason?: string;
   /** True when the date sits beyond the watch sync horizon. */
   beyondWatchHorizon: boolean;
+  /** intervals.icu sport type. Absent = 'Run'. A strength session is its own row and event. */
+  eventType?: 'Run' | typeof STRENGTH_EVENT_TYPE;
 }
 
 /**
@@ -130,6 +133,22 @@ export function previewWeek(
     }
 
     const translated = planWorkoutToDescription(workout, bands, maxHr);
+    // The day's strength session, as its own workout (2026-11-21). It follows
+    // the run row so it lands after the run on the calendar.
+    const strength = strengthToWorkout(workout.strength);
+    const strengthRow: PushRow | null = strength
+      ? {
+          day, date, workoutName: strength.name,
+          description: strength.description,
+          minutes: strength.minutes,
+          bpmLow: null, bpmHigh: null,
+          pctLabel: strength.summary,
+          notes: strength.notes,
+          beyondWatchHorizon,
+          eventType: STRENGTH_EVENT_TYPE,
+        }
+      : null;
+
     if (!translated) {
       rows.push({
         day, date, workoutName: workout.type,
@@ -138,6 +157,7 @@ export function previewWeek(
         skipReason: 'no usable HR target or duration in the plan',
         beyondWatchHorizon,
       });
+      if (strengthRow) rows.push(strengthRow);
       continue;
     }
 
@@ -159,6 +179,7 @@ export function previewWeek(
       notes: translated.notes,
       beyondWatchHorizon,
     });
+    if (strengthRow) rows.push(strengthRow);
   }
 
   return rows;
@@ -238,6 +259,7 @@ export async function pushWeek(
         name: row.workoutName,
         description: `${row.description}${notes}\n\n${marker}`,
         movingTimeSec: row.minutes ? Math.round(row.minutes * 60) : undefined,
+        ...(row.eventType ? { type: row.eventType } : {}),
       });
       result.created++;
     } catch (err) {

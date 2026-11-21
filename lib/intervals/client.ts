@@ -164,12 +164,14 @@ export class IntervalsClient {
     name: string;
     description: string;
     movingTimeSec?: number;
+    /** intervals.icu sport type. 'WeightTraining' carries a strength session (probed 2026-11-21). */
+    type?: 'Run' | 'WeightTraining';
   }): Promise<{ id: number | string }> {
     return this.request(`/athlete/${this.athleteId}/events`, {
       method: 'POST',
       body: {
         category: 'WORKOUT',
-        type: 'Run',
+        type: event.type ?? 'Run',
         start_date_local: event.startDateLocal,
         name: event.name,
         description: event.description,
