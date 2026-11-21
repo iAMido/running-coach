@@ -106,6 +106,40 @@ export interface EfficiencySummary {
   pctVsBaseline: number | null;
   /** Recent rolling values, oldest first, for direction. */
   trend: EfWindow[];
+  /** Why the current window holds the runs it does — rendered when it is too thin. */
+  currentCounts: EfWindowCounts;
+}
+
+/** How a window's runs fell through the gates. Each run is counted once, at its first failed gate. */
+export interface EfWindowCounts {
+  from: string;
+  to: string;
+  eligible: number;
+  structured: number;
+  short: number;
+  noGap: number;
+  /** Pace outside the running band, or no heart rate. */
+  other: number;
+}
+
+/** Which gate a run fails first, or null when it is eligible. */
+function efExclusion(run: EfRun): keyof Omit<EfWindowCounts, 'from' | 'to' | 'eligible'> | null {
+  if (run.runType && EXCLUDED_TYPES.test(run.runType)) return 'structured';
+  if (typeof run.durationMin !== 'number' || run.durationMin < MIN_EF_DURATION_MIN) return 'short';
+  if (typeof run.gapPaceMinKm !== 'number') return 'noGap';
+  return isEfEligible(run) ? null : 'other';
+}
+
+export function efWindowCounts(runs: EfRun[], from: string, to: string): EfWindowCounts {
+  const counts: EfWindowCounts = { from, to, eligible: 0, structured: 0, short: 0, noGap: 0, other: 0 };
+  for (const run of runs) {
+    const day = dayOf(run.date);
+    if (day < from || day > to) continue;
+    const reason = efExclusion(run);
+    if (reason) counts[reason]++;
+    else counts.eligible++;
+  }
+  return counts;
 }
 
 /** Metres per minute per bpm, or null when the inputs cannot support it. */
@@ -172,6 +206,7 @@ export function efWindow(runs: EfRun[], from: string, to: string, minSamples = M
  */
 export function buildEfficiencySummary(runs: EfRun[], today: string): EfficiencySummary {
   const current = efWindow(runs, shiftDays(today, -EF_WINDOW_DAYS + 1), today);
+  const currentCounts = efWindowCounts(runs, shiftDays(today, -EF_WINDOW_DAYS + 1), today);
 
   // One year back, widened to ±42 days. The same 42-day window one year earlier
   // holds a single run for today's date; see the header.
@@ -196,7 +231,47 @@ export function buildEfficiencySummary(runs: EfRun[], today: string): Efficiency
     if (w) trend.push(w);
   }
 
-  return { current, seasonBaseline, pctVsBaseline, trend };
+  return { current, seasonBaseline, pctVsBaseline, trend, currentCounts };
+}
+
+/**
+ * The block for a current window too thin to measure. It used to be '' — and
+ * the weekly review, told to answer "is the training working" only when the
+ * block is present, then reported that no block was supplied, which reads as
+ * a broken app rather than as "you ran four steady runs in six weeks".
+ *
+ * No number is produced for now. The last window that DID have enough runs is
+ * shown with its dates, so it reads as history, not as the current value.
+ */
+function formatThinWindow(summary: EfficiencySummary): string {
+  const c = summary.currentCounts;
+  const reasons: string[] = [];
+  if (c.short) reasons.push(`${c.short} under ${MIN_EF_DURATION_MIN} min`);
+  if (c.structured) reasons.push(`${c.structured} interval/fartlek sessions (no meaningful average)`);
+  if (c.noGap) reasons.push(`${c.noGap} without grade-adjusted pace`);
+  if (c.other) reasons.push(`${c.other} outside the running pace band or without HR`);
+
+  const lines = ['## Aerobic efficiency (grade-adjusted speed per heartbeat)'];
+  lines.push(
+    `- Not measurable now: ${c.eligible} steady run${c.eligible === 1 ? '' : 's'} of ${MIN_EF_DURATION_MIN}+ min in ${c.from} to ${c.to}; ` +
+      `the median needs at least ${MIN_EF_SAMPLES}.` +
+      (reasons.length ? ` Excluded: ${reasons.join('; ')}.` : ''),
+  );
+
+  const last = summary.trend[summary.trend.length - 1];
+  if (last) {
+    lines.push(
+      `- Last measurable window: ${last.median.toFixed(3)} m/min per bpm (n=${last.n}, ${last.from} to ${last.to}). ` +
+        'That is history, not the current value — do not present it as how the athlete is now.',
+    );
+  } else {
+    lines.push('- No recent window had enough steady runs either.');
+  }
+  lines.push(
+    '  Say plainly that whether the aerobic system is adapting cannot be measured this week and why, ' +
+      'and that steady runs of 30+ minutes are what make it measurable. Do not infer it from CTL.',
+  );
+  return lines.join('\n');
 }
 
 /**
@@ -208,7 +283,10 @@ export function buildEfficiencySummary(runs: EfRun[], today: string): Efficiency
 export function formatEfficiency(summary: EfficiencySummary): string {
   const { current, seasonBaseline, pctVsBaseline, trend } = summary;
   if (!current) {
-    return '';
+    // Nothing at all in the window (e.g. a new account): stay silent.
+    const c = summary.currentCounts;
+    const total = c ? c.eligible + c.structured + c.short + c.noGap + c.other : 0;
+    return total > 0 ? formatThinWindow(summary) : '';
   }
 
   const lines: string[] = ['## Aerobic efficiency (grade-adjusted speed per heartbeat)'];

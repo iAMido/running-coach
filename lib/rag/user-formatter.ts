@@ -612,6 +612,21 @@ export function formatGapAgainst(
   return `[GAP ${formatPace(gapPaceMinKm)}/km, ${deltaSec > 0 ? '+' : ''}${Math.round(deltaSec)}s — ${harder}]`;
 }
 
+/** Shortest lap that is a real segment rather than a lap-button fragment. */
+export const MIN_LAP_SEC = 20;
+export const MIN_LAP_KM = 0.05;
+
+/**
+ * A lap is real when it lasted long enough and covered enough ground. A lap
+ * missing one of the two is judged on the other; missing both, it is kept
+ * (absent is not short).
+ */
+export function isRealLap(l: Pick<Lap, 'distance_km' | 'duration_sec'>): boolean {
+  if (l.duration_sec != null && l.duration_sec < MIN_LAP_SEC) return false;
+  if (l.distance_km != null && l.distance_km < MIN_LAP_KM) return false;
+  return true;
+}
+
 /**
  * Compact per-lap summary so the AI can reason about intervals
  * (Norwegian-style "did pace hold across reps", HR drift, etc.).
@@ -620,19 +635,28 @@ export function formatGapAgainst(
 export function formatRunLaps(laps: Lap[] | undefined): string {
   if (!laps || laps.length < 2) return '';
 
-  // Skip noise: very short laps from auto-laps (<200m) are usually transitions
-  const meaningful = laps.filter(l => (l.distance_km ?? 0) >= 0.2);
+  // Skip only true fragments (a 1-second, 2-metre lap from a button press).
+  // This used to drop every lap under 200 m, which is EVERY rep of a hill
+  // session: 45 s uphill reps cover 130-150 m and their recoveries 180-198 m,
+  // so the 2026-11-16 session reached the coach as warm-up and cool-down only
+  // and the review said it could not judge the reps.
+  const meaningful = laps.filter(isRealLap);
   if (meaningful.length < 2) return '';
 
-  // Cap how many lap lines to emit to stay token-cheap
-  const MAX_LAPS = 16;
+  // Cap how many lap lines to emit to stay token-cheap. 30 covers a warm-up,
+  // 12 reps with recoveries and a cool-down (~25 tokens a line).
+  const MAX_LAPS = 30;
   const slice = meaningful.slice(0, MAX_LAPS);
   const firstHr = slice[0]?.avg_hr ?? null;
 
   const lapLines = slice.map(l => {
     const dist = l.distance_km?.toFixed(2) ?? '?';
     const dur = l.duration_sec != null ? formatSeconds(l.duration_sec) : '?';
-    const pace = l.avg_pace_str ? `${l.avg_pace_str}/km` : '';
+    // Computed from the lap itself when possible: stored strings written before
+    // the formatPace fix can read "5:60".
+    const pace = l.duration_sec && l.distance_km
+      ? `${formatPace(l.duration_sec / 60 / l.distance_km)}/km`
+      : l.avg_pace_str ? `${l.avg_pace_str}/km` : '';
     // Per-rep GAP is where grade adjustment matters most — it separates "that
     // rep was genuinely faster" from "that rep was downhill".
     const gap = l.gap_pace_min_km != null && l.duration_sec && l.distance_km

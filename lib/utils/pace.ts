@@ -9,8 +9,11 @@
 export function formatPace(paceMinKm: number): string {
   if (!paceMinKm || paceMinKm <= 0) return '--:--';
 
-  const minutes = Math.floor(paceMinKm);
-  const seconds = Math.round((paceMinKm - minutes) * 60);
+  // Round the whole pace to seconds first: rounding only the seconds part
+  // turned 5.9997 into "5:60" instead of "6:00".
+  const totalSec = Math.round(paceMinKm * 60);
+  const minutes = Math.floor(totalSec / 60);
+  const seconds = totalSec % 60;
 
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
